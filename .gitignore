@@ -1,0 +1,6 @@
+bin/
+coverage.out
+node_modules/
+frontend/dist/
+internal/static/dist/*
+!internal/static/dist/.gitkeep

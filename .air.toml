@@ -1,0 +1,26 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -tags dev -o ./tmp/air-server ."
+  bin = "./tmp/air-server"
+  full_bin = "./tmp/air-server web -p 8080"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "frontend", "internal/static/dist"]
+  delay = 1000
+  kill_delay = "0s"
+  rerun = false
+  stop_on_root_change = true
+
+[log]
+  time = false
+  main_only = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  clean_on_exit = true
