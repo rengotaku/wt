@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { treesApi, reposApi, type AddTreeRequest, type TreeItem, type MergedPRInfo, type IssueDetail } from "@/api";
+import { filterTrees } from "./treesFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -172,17 +173,7 @@ export function TreesPage() {
     return issueData[t.repo]?.find((d) => d.number === num);
   };
 
-  const filteredTrees = trees.filter((t) => {
-    if (!showMain && t.is_main) return false;
-    if (repoFilter && t.repo !== repoFilter) return false;
-    if (
-      filterText &&
-      !t.wt_name.toLowerCase().includes(filterText.toLowerCase()) &&
-      !t.repo.toLowerCase().includes(filterText.toLowerCase())
-    )
-      return false;
-    return true;
-  });
+  const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter);
 
   return (
     <div className="space-y-6">
