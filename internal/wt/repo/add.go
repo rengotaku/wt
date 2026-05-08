@@ -13,12 +13,27 @@ import (
 	"wt/internal/wt/core"
 )
 
+// httpsToSSH converts a GitHub HTTPS URL to SSH format so that clone works in
+// non-TTY environments where interactive credential prompts are unavailable.
+// Non-GitHub URLs and already-SSH URLs are returned unchanged.
+func httpsToSSH(url string) string {
+	// Match https://github.com/<owner>/<repo>[.git]
+	const prefix = "https://github.com/"
+	if !strings.HasPrefix(url, prefix) {
+		return url
+	}
+	path := strings.TrimPrefix(url, prefix)
+	path = strings.TrimSuffix(path, ".git")
+	return "git@github.com:" + path + ".git"
+}
+
 // Add clones a remote repository into the wt container layout.
 // url is the GitHub URL; targetBase is the optional override (default ~/Workspace).
 func Add(out io.Writer, url, targetBase string) error {
 	if url == "" {
 		return errors.New("Usage: wt add <url> [container_base]") //nolint:staticcheck // user-facing usage string
 	}
+	url = httpsToSSH(url)
 	if targetBase == "" {
 		targetBase = filepath.Join(os.Getenv("HOME"), "Workspace")
 	}
