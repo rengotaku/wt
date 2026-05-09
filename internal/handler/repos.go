@@ -16,14 +16,15 @@ import (
 )
 
 type repoItem struct {
-	Name       string `json:"name"`
-	Container  string `json:"container"`
-	Count      int    `json:"count"`
-	GitHubURL  string `json:"github_url,omitempty"`
-	MainBranch string `json:"main_branch,omitempty"`
-	MainDirty  bool   `json:"main_dirty"`
-	MainAhead  int    `json:"main_ahead"`
-	MainBehind int    `json:"main_behind"`
+	Name        string `json:"name"`
+	Container   string `json:"container"`
+	Count       int    `json:"count"`
+	GitHubURL   string `json:"github_url,omitempty"`
+	Description string `json:"description,omitempty"`
+	MainBranch  string `json:"main_branch,omitempty"`
+	MainDirty   bool   `json:"main_dirty"`
+	MainAhead   int    `json:"main_ahead"`
+	MainBehind  int    `json:"main_behind"`
 }
 
 func (h *Handler) ListRepos(w http.ResponseWriter, _ *http.Request) {
@@ -46,6 +47,7 @@ func (h *Handler) ListRepos(w http.ResponseWriter, _ *http.Request) {
 
 		if mainDir != "" {
 			item.GitHubURL = h.getGitHubURL(mainDir)
+			item.Description = h.getGitHubDescription(mainDir)
 			item.MainDirty = h.getMainDirty(mainDir)
 			item.MainAhead, item.MainBehind = h.getAheadBehind(mainDir)
 		}
@@ -75,6 +77,27 @@ func (h *Handler) getGitHubURL(mainDir string) string {
 	}
 	h.cache.set(key, url, 5*time.Minute)
 	return url
+}
+
+func (h *Handler) getGitHubDescription(mainDir string) string {
+	key := "github_desc:" + mainDir
+	if v, ok := h.cache.get(key); ok {
+		return v.(string)
+	}
+	ghURL := h.getGitHubURL(mainDir)
+	desc := ""
+	if strings.HasPrefix(ghURL, "https://github.com/") {
+		slug := strings.TrimPrefix(ghURL, "https://github.com/")
+		out, err := exec.Command("gh", "api", "repos/"+slug, "--jq", ".description").Output()
+		if err == nil {
+			v := strings.TrimSpace(string(out))
+			if v != "null" {
+				desc = v
+			}
+		}
+	}
+	h.cache.set(key, desc, time.Hour)
+	return desc
 }
 
 func (h *Handler) getMainDirty(mainDir string) bool {

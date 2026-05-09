@@ -5,6 +5,7 @@ export interface Repo {
   container: string;
   count: number;
   github_url?: string;
+  description?: string;
   main_branch?: string;
   main_dirty: boolean;
   main_ahead: number;
