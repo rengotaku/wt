@@ -201,7 +201,12 @@ export function ReposPage() {
               <TableBody>
                 {repos.map((r) => (
                   <TableRow key={r.name}>
-                    <TableCell className="font-medium">{r.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span>{r.name}</span>
+                      {r.description && (
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">{r.description}</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">
                       {r.main_branch ?? "—"}
                     </TableCell>
