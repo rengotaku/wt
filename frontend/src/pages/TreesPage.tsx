@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
@@ -51,7 +51,12 @@ export function TreesPage() {
   const [showMain, setShowMain] = useState(initialRepoFilter !== "");
   const [repoFilter, setRepoFilter] = useState(initialRepoFilter);
 
-  const [deleteTarget, setDeleteTarget] = useState<TreeItem | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState("delete");
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copyTemplate, setCopyTemplate] = useState<string>(
     () => localStorage.getItem("wt-copy-template") ?? "$path"
@@ -125,15 +130,6 @@ export function TreesPage() {
     onError: (e: Error) => setAddError(e.message),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: treesApi.delete,
-    onSuccess: () => {
-      refetch();
-      setDeleteTarget(null);
-    },
-    onError: (e: Error) => alert(e.message),
-  });
-
   const handleAdd = () => {
     if (issueMode) {
       addMutation.mutate({ issue_url: form.issue_url });
@@ -183,6 +179,58 @@ export function TreesPage() {
   };
 
   const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter, issueData);
+
+  const selectableTrees = filteredTrees.filter((t) => !t.is_main);
+  const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
+  const allSelected = selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
+  const someSelected = selectedInView.length > 0;
+
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = someSelected && !allSelected;
+    }
+  }, [allSelected, someSelected]);
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedPaths(new Set());
+    } else {
+      setSelectedPaths(new Set(selectableTrees.map((t) => t.path)));
+    }
+  };
+
+  const togglePath = (path: string) => {
+    setSelectedPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  const handleBulkExecute = () => {
+    if (!someSelected) return;
+    setBulkConfirming(true);
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const targets = selectedInView;
+    for (const t of targets) {
+      try {
+        await treesApi.delete({ repo: t.repo, branch: t.branch || t.wt_name });
+      } catch (e: unknown) {
+        alert((e as Error).message);
+      }
+    }
+    setBulkDeleting(false);
+    setBulkConfirming(false);
+    setSelectedPaths(new Set());
+    refetch();
+  };
 
   return (
     <div className="space-y-6">
@@ -349,6 +397,16 @@ export function TreesPage() {
               <Table className="whitespace-nowrap">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8">
+                      <input
+                        ref={headerCheckboxRef}
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        disabled={selectableTrees.length === 0}
+                        aria-label="全選択"
+                      />
+                    </TableHead>
                     <TableHead>Repo</TableHead>
                     <TableHead>フォルダ名</TableHead>
                     <TableHead>Branch</TableHead>
@@ -358,7 +416,6 @@ export function TreesPage() {
                     <TableHead title="同名の tmux セッションが存在するか">tmux</TableHead>
                     <TableHead title="git status の変更ファイル数（未追跡除く）">変更</TableHead>
                     <TableHead>作成日</TableHead>
-                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -369,6 +426,16 @@ export function TreesPage() {
                     const isPRLoading = loadingPRRepos.has(t.repo);
                     return (
                       <TableRow key={t.path} className={t.is_main ? "opacity-60" : ""}>
+                        <TableCell>
+                          {!t.is_main && (
+                            <input
+                              type="checkbox"
+                              checked={selectedPaths.has(t.path)}
+                              onChange={() => togglePath(t.path)}
+                              aria-label={`${t.repo}/${t.wt_name} を選択`}
+                            />
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs">
                           <button
                             className="text-blue-600 hover:underline"
@@ -472,17 +539,6 @@ export function TreesPage() {
                         <TableCell className="text-xs text-muted-foreground">
                           {t.created_at || "—"}
                         </TableCell>
-                        <TableCell>
-                          {!t.is_main && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => setDeleteTarget(t)}
-                            >
-                              削除
-                            </Button>
-                          )}
-                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -490,38 +546,53 @@ export function TreesPage() {
               </Table>
             </div>
           )}
+          {someSelected && (
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+              <span className="text-sm text-muted-foreground">{selectedInView.length} 件選択中</span>
+              <select
+                className="border rounded px-2 py-1 text-sm"
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+                aria-label="アクション選択"
+              >
+                <option value="delete">削除</option>
+              </select>
+              <Button variant="destructive" size="sm" onClick={handleBulkExecute}>
+                実行
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* 削除確認モーダル */}
-      {deleteTarget && (
+      {/* バルク削除確認モーダル */}
+      {bulkConfirming && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <Card className="w-96">
+          <Card className="w-[32rem]">
             <CardHeader>
               <CardTitle>削除確認</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <p className="text-sm">
-                <span className="font-mono">
-                  {deleteTarget.repo} / {deleteTarget.wt_name}
-                </span>{" "}
-                を削除しますか？
-              </p>
+              <p className="text-sm">以下の Worktree を削除しますか？</p>
+              <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto border rounded p-2">
+                {selectedInView.map((t) => (
+                  <li key={t.path}>{t.repo} / {t.wt_name}</li>
+                ))}
+              </ul>
               <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setBulkConfirming(false)}
+                  disabled={bulkDeleting}
+                >
                   キャンセル
                 </Button>
                 <Button
                   variant="destructive"
-                  disabled={deleteMutation.isPending}
-                  onClick={() =>
-                    deleteMutation.mutate({
-                      repo: deleteTarget.repo,
-                      branch: deleteTarget.branch || deleteTarget.wt_name,
-                    })
-                  }
+                  onClick={handleBulkDelete}
+                  disabled={bulkDeleting}
                 >
-                  {deleteMutation.isPending ? "削除中..." : "削除"}
+                  {bulkDeleting ? "削除中..." : "削除"}
                 </Button>
               </div>
             </CardContent>
