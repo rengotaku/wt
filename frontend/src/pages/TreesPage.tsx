@@ -173,7 +173,7 @@ export function TreesPage() {
     return issueData[t.repo]?.find((d) => d.number === num);
   };
 
-  const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter);
+  const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter, issueData);
 
   return (
     <div className="space-y-6">
@@ -334,6 +334,7 @@ export function TreesPage() {
                     <TableHead>フォルダ名</TableHead>
                     <TableHead>Branch</TableHead>
                     <TableHead>Issue</TableHead>
+                    <TableHead>親 issue</TableHead>
                     <TableHead>PR</TableHead>
                     <TableHead title="同名の tmux セッションが存在するか">tmux</TableHead>
                     <TableHead title="git status の変更ファイル数（未追跡除く）">変更</TableHead>
@@ -380,30 +381,34 @@ export function TreesPage() {
                         </TableCell>
                         <TableCell className="text-xs">
                           {issueURL ? (
-                            <div className="flex flex-col gap-0.5">
-                              <div className="flex items-center gap-1">
-                                <a href={issueURL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                                  {t.issue}
-                                </a>
-                                {issueDetail ? (
-                                  <span className={issueDetail.state === "OPEN" ? "text-green-600" : "text-muted-foreground"}>
-                                    {issueDetail.state === "OPEN" ? "open" : "closed"}
-                                  </span>
-                                ) : loadingIssueRepos.has(t.repo) ? (
-                                  <span className="text-muted-foreground">…</span>
-                                ) : null}
-                              </div>
-                              {issueDetail?.parent_number ? (
-                                <a
-                                  href={issueDetail.parent_url || "#"}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-muted-foreground hover:underline"
-                                >
-                                  ↑ #{issueDetail.parent_number}
-                                </a>
+                            <div className="flex items-center gap-1">
+                              <a href={issueURL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                {t.issue}
+                              </a>
+                              {issueDetail ? (
+                                <span className={issueDetail.state === "OPEN" ? "text-green-600" : "text-muted-foreground"}>
+                                  {issueDetail.state === "OPEN" ? "open" : "closed"}
+                                </span>
+                              ) : loadingIssueRepos.has(t.repo) ? (
+                                <span className="text-muted-foreground">…</span>
                               ) : null}
                             </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {issueDetail?.parent_number ? (
+                            <a
+                              href={issueDetail.parent_url || "#"}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              #{issueDetail.parent_number}
+                            </a>
+                          ) : loadingIssueRepos.has(t.repo) && t.issue ? (
+                            <span className="text-muted-foreground">…</span>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
