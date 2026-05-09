@@ -53,6 +53,9 @@ export function TreesPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<TreeItem | null>(null);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const [copyTemplate, setCopyTemplate] = useState<string>(
+    () => localStorage.getItem("wt-copy-template") ?? "$path"
+  );
 
   // キャッシュから初期化 → マウント後に未取得分を順次フェッチ
   const [prData, setPrData] = useState<Record<string, MergedPRInfo[]>>(
@@ -139,8 +142,14 @@ export function TreesPage() {
     }
   };
 
+  const handleCopyTemplate = (value: string) => {
+    setCopyTemplate(value);
+    localStorage.setItem("wt-copy-template", value);
+  };
+
   const handleCopyPath = async (path: string) => {
-    await navigator.clipboard.writeText(path);
+    const text = (copyTemplate || "$path").replace(/\$path/g, path);
+    await navigator.clipboard.writeText(text);
     setCopiedPath(path);
     setTimeout(() => setCopiedPath(null), 2000);
   };
@@ -296,6 +305,16 @@ export function TreesPage() {
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
             />
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">コピー形式:</span>
+              <Input
+                className="w-56 font-mono text-xs h-7"
+                placeholder="$path"
+                value={copyTemplate}
+                onChange={(e) => handleCopyTemplate(e.target.value)}
+                title="$path がパスに置換されます（例: cd $path && tmc）"
+              />
+            </div>
             {repoFilter && (
               <div className="flex items-center gap-1 text-sm">
                 <span className="text-muted-foreground">リポ:</span>
