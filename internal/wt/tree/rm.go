@@ -122,8 +122,7 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 	}
 
 	if core.IsDirty(t.WtPath) && !opts.Force {
-		_, _ = fmt.Fprintf(out, "⚠️  未コミット変更のためスキップ: %s（--force で強行）\n", t.WtPath)
-		return nil
+		return fmt.Errorf("未コミット変更のためスキップ: %s（--force で強行）", t.WtPath)
 	}
 
 	if opts.DryRun {
