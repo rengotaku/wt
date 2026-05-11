@@ -30,14 +30,14 @@ func setupDirtyRepo(t *testing.T) string {
 	run("git", "config", "user.name", "Test")
 
 	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("init\n"), 0644); err != nil {
+	if err := os.WriteFile(readme, []byte("init\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run("git", "add", ".")
 	run("git", "commit", "-m", "init")
 
 	// Modify the file to make the worktree dirty.
-	if err := os.WriteFile(readme, []byte("changed\n"), 0644); err != nil {
+	if err := os.WriteFile(readme, []byte("changed\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -107,7 +107,7 @@ func TestPerformDelete_CleanWorktree_NoError(t *testing.T) {
 	run("git", "config", "user.name", "Test")
 
 	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("init\n"), 0644); err != nil {
+	if err := os.WriteFile(readme, []byte("init\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	run("git", "add", ".")
