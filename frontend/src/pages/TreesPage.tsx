@@ -57,6 +57,9 @@ export function TreesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
+  const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copyTemplate, setCopyTemplate] = useState<string>(
     () => localStorage.getItem("wt-copy-template") ?? "$path"
@@ -120,9 +123,19 @@ export function TreesPage() {
     setRefreshKey((k) => k + 1);
   };
 
+  useEffect(() => {
+    if (!newlyAddedPath) return;
+    const el = rowRefs.current.get(newlyAddedPath);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const timer = setTimeout(() => setNewlyAddedPath(null), 3000);
+    return () => clearTimeout(timer);
+  }, [trees, newlyAddedPath]);
+
   const addMutation = useMutation({
     mutationFn: treesApi.add,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setNewlyAddedPath(data.path);
       refetch();
       setForm({ repo: "", branch: "", type: "feature" });
       setAddError("");
@@ -425,7 +438,17 @@ export function TreesPage() {
                     const issueDetail = getIssueDetail(t);
                     const isPRLoading = loadingPRRepos.has(t.repo);
                     return (
-                      <TableRow key={t.path} className={t.is_main ? "opacity-60" : ""}>
+                      <TableRow
+                        key={t.path}
+                        ref={(el) => {
+                          if (el) rowRefs.current.set(t.path, el);
+                          else rowRefs.current.delete(t.path);
+                        }}
+                        className={[
+                          t.is_main ? "opacity-60" : "",
+                          t.path === newlyAddedPath ? "row-highlight" : "",
+                        ].filter(Boolean).join(" ")}
+                      >
                         <TableCell>
                           {!t.is_main && (
                             <input

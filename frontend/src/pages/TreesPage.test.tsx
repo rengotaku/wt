@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@/test/test-utils";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor, act } from "@/test/test-utils";
 import { TreesPage } from "./TreesPage";
 
 const mockTrees = [
@@ -45,6 +45,7 @@ vi.mock("@/api", async (importOriginal) => {
     treesApi: {
       ...actual.treesApi,
       list: vi.fn(),
+      add: vi.fn(),
       mergedPRs: vi.fn().mockResolvedValue([]),
       issueDetails: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue({ output: "" }),
@@ -142,5 +143,125 @@ describe("TreesPage - checkbox and bulk action", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
     expect(screen.queryByText("削除確認")).not.toBeInTheDocument();
+  });
+});
+
+const newTree = {
+  wt_name: "myrepo--feat-issue-3-new",
+  repo: "myrepo",
+  label: "[feat] feat/issue-3-new",
+  path: "/home/user/Workspace/myrepo/myrepo--feat-issue-3-new",
+  created_at: "2024-01-03",
+  diff_count: 0,
+  has_tmux: false,
+  is_main: false,
+  branch: "feat/issue-3-new",
+};
+
+describe("TreesPage - new row highlight and auto-scroll", () => {
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    let callCount = 0;
+    vi.mocked(treesApi.list).mockImplementation(async () => {
+      callCount++;
+      if (callCount >= 2) return [...mockTrees, newTree] as never;
+      return mockTrees as never;
+    });
+    vi.mocked(treesApi.add).mockResolvedValue({
+      path: newTree.path,
+      output: "created",
+    } as never);
+  });
+
+  it("applies row-highlight class to newly added row after add", async () => {
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    render(<TreesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    // フォームを開く
+    fireEvent.click(screen.getByText("Worktree を追加"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
+      target: { value: "https://github.com/myrepo/repo/issues/3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "作成" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+    });
+
+    const newRow = screen.getByText("myrepo--feat-issue-3-new").closest("tr");
+    expect(newRow).toHaveClass("row-highlight");
+  });
+
+  it("calls scrollIntoView on the newly added row", async () => {
+    const scrollIntoViewMock = vi.fn();
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock;
+
+    render(<TreesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Worktree を追加"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
+      target: { value: "https://github.com/myrepo/repo/issues/3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "作成" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+    });
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest" });
+  });
+
+  it("removes row-highlight class after 3 seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
+    render(<TreesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Worktree を追加"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
+      target: { value: "https://github.com/myrepo/repo/issues/3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "作成" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+    });
+
+    const newRow = screen.getByText("myrepo--feat-issue-3-new").closest("tr");
+    expect(newRow).toHaveClass("row-highlight");
+
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+
+    expect(newRow).not.toHaveClass("row-highlight");
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 });
