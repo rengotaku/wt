@@ -69,6 +69,10 @@ func Add(out io.Writer, url, targetBase string) error {
 		return errors.New("clone に失敗しました")
 	}
 
+	if err := initEmptyRepo(out, cloneDir, repoName, defaultB); err != nil {
+		return err
+	}
+
 	if err := core.PutEntry(container, defaultB, &core.Entry{
 		Type:        "main",
 		Created:     time.Now().Format("2006-01-02"),
@@ -113,6 +117,48 @@ func lsRemoteDefault(url string) string {
 		return s
 	}
 	return ""
+}
+
+// initEmptyRepo detects whether cloneDir has no commits and, if so, creates a
+// README.md with the repository name, makes an initial commit, and pushes to
+// the remote. Returns an error if push fails; the caller should surface this to
+// the user directly.
+func initEmptyRepo(out io.Writer, cloneDir, repoName, branch string) error {
+	if err := exec.Command("git", "-C", cloneDir, "rev-parse", "HEAD").Run(); err == nil {
+		return nil // repo has commits; nothing to do
+	}
+
+	_, _ = fmt.Fprintln(out, "ℹ️  空リポを検出: 初期コミットを作成中...")
+
+	readmePath := filepath.Join(cloneDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte("# "+repoName+"\n"), 0o644); err != nil {
+		return fmt.Errorf("README.md の作成に失敗しました: %w", err)
+	}
+
+	add := exec.Command("git", "-C", cloneDir, "add", "README.md")
+	add.Stdout = out
+	add.Stderr = out
+	if err := add.Run(); err != nil {
+		return errors.New("git add に失敗しました")
+	}
+
+	commit := exec.Command("git", "-C", cloneDir, "commit", "-m", "first commit")
+	commit.Stdout = out
+	commit.Stderr = out
+	if err := commit.Run(); err != nil {
+		return errors.New("初期コミットに失敗しました")
+	}
+
+	_, _ = fmt.Fprintf(out, "📤 push: origin/%s\n", branch)
+	push := exec.Command("git", "-C", cloneDir, "push", "-u", "origin", branch)
+	push.Stdout = out
+	push.Stderr = out
+	if err := push.Run(); err != nil {
+		return errors.New("push に失敗しました。リモートへの書き込み権限を確認してください")
+	}
+
+	_, _ = fmt.Fprintln(out, "✅ 初期コミットを push しました")
+	return nil
 }
 
 func expandHome(p string) string {
