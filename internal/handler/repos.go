@@ -146,7 +146,7 @@ func (h *Handler) AddRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := repo.Add(&buf, req.URL, ""); err != nil {
+	if err := repo.Add(&buf, repo.AddOptions{URL: req.URL}); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

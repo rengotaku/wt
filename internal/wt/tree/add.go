@@ -163,8 +163,8 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 	if v, err := core.GitOutput(mainDir, "symbolic-ref", "refs/remotes/origin/HEAD"); err == nil && v != "" {
 		defaultBranch = strings.TrimPrefix(v, "refs/remotes/")
 	}
-	if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", branchName, defaultBranch); err != nil {
-		return nil, fmt.Errorf("worktree作成に失敗しました: %w", err)
+	if err := addWorktreeNewBranch(out, mainDir, worktreePath, branchName, defaultBranch, containerDir); err != nil {
+		return nil, err
 	}
 
 	// ── シンボリックリンク作成 ──
@@ -248,20 +248,20 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 
 	switch {
 	case core.GitCheck(mainDir, "rev-parse", "--verify", "--quiet", opts.Branch):
-		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, opts.Branch); err != nil {
-			return nil, fmt.Errorf("既存ローカルブランチからの worktree 作成に失敗: %w", err)
+		if err := addWorktreeExistingBranch(out, mainDir, worktreePath, opts.Branch, containerDir); err != nil {
+			return nil, err
 		}
 	case core.GitCheck(mainDir, "rev-parse", "--verify", "--quiet", "origin/"+opts.Branch):
-		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", opts.Branch, "origin/"+opts.Branch); err != nil {
-			return nil, fmt.Errorf("リモートブランチからの worktree 作成に失敗: %w", err)
+		if err := addWorktreeNewBranch(out, mainDir, worktreePath, opts.Branch, "origin/"+opts.Branch, containerDir); err != nil {
+			return nil, err
 		}
 	default:
 		defaultBranch := mainName
 		if v, err := core.GitOutput(mainDir, "symbolic-ref", "refs/remotes/origin/HEAD"); err == nil && v != "" {
 			defaultBranch = strings.TrimPrefix(v, "refs/remotes/")
 		}
-		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", opts.Branch, defaultBranch); err != nil {
-			return nil, fmt.Errorf("デフォルトブランチからの worktree 作成に失敗: %w", err)
+		if err := addWorktreeNewBranch(out, mainDir, worktreePath, opts.Branch, defaultBranch, containerDir); err != nil {
+			return nil, err
 		}
 	}
 

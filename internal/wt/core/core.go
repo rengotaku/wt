@@ -106,6 +106,7 @@ func SaveMeta(container string, meta map[string]json.RawMessage) error {
 // EntryConfig holds the _config sub-object of .worktrees.json.
 type EntryConfig struct {
 	SymlinkCandidates []string `json:"symlink_candidates"`
+	GitCryptKey       string   `json:"git_crypt_key,omitempty"`
 }
 
 // LoadConfig returns the _config block, defaulting to empty when missing.

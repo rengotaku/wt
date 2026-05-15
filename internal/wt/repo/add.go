@@ -27,13 +27,20 @@ func httpsToSSH(url string) string {
 	return "git@github.com:" + path + ".git"
 }
 
+// AddOptions holds CLI inputs for `wt repo add`.
+type AddOptions struct {
+	URL         string
+	Base        string
+	GitCryptKey string // path to git-crypt key; stored in container _config
+}
+
 // Add clones a remote repository into the wt container layout.
-// url is the GitHub URL; targetBase is the optional override (default ~/Workspace).
-func Add(out io.Writer, url, targetBase string) error {
-	if url == "" {
+func Add(out io.Writer, opts AddOptions) error {
+	if opts.URL == "" {
 		return errors.New("Usage: wt add <url> [container_base]") //nolint:staticcheck // user-facing usage string
 	}
-	url = httpsToSSH(url)
+	url := httpsToSSH(opts.URL)
+	targetBase := opts.Base
 	if targetBase == "" {
 		targetBase = filepath.Join(os.Getenv("HOME"), "Workspace")
 	}
@@ -81,8 +88,12 @@ func Add(out io.Writer, url, targetBase string) error {
 	}); err != nil {
 		return err
 	}
-	if err := core.SaveConfig(container, core.EntryConfig{SymlinkCandidates: []string{}}); err != nil {
+	cfg := core.EntryConfig{SymlinkCandidates: []string{}, GitCryptKey: opts.GitCryptKey}
+	if err := core.SaveConfig(container, cfg); err != nil {
 		return err
+	}
+	if opts.GitCryptKey != "" {
+		_, _ = fmt.Fprintf(out, "🔐 git-crypt key: %s\n", opts.GitCryptKey)
 	}
 	_, _ = fmt.Fprintf(out, "✅ metadata: %s\n", core.MetaFile(container))
 
