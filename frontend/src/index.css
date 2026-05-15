@@ -89,3 +89,12 @@
     line-height: 1.6;
   }
 }
+
+@keyframes row-highlight-fade {
+  0%   { background-color: oklch(0.97 0.12 103); }
+  100% { background-color: transparent; }
+}
+
+.row-highlight {
+  animation: row-highlight-fade 3s ease-out forwards;
+}
