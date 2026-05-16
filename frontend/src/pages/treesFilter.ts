@@ -5,7 +5,7 @@ export function filterTrees(
   filterText: string,
   showMain: boolean,
   repoFilter: string,
-  issueDataMap?: Record<string, IssueDetail[]>,
+  issueDataMap?: Record<string, IssueDetail[]>
 ): TreeItem[] {
   return trees.filter((t) => {
     if (!showMain && t.is_main) return false;

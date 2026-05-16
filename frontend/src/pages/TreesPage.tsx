@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
-import { treesApi, reposApi, type AddTreeRequest, type TreeItem, type MergedPRInfo, type IssueDetail } from "@/api";
+import { toast } from "sonner";
+import { RefreshCw, Copy, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  treesApi,
+  reposApi,
+  type AddTreeRequest,
+  type TreeItem,
+  type MergedPRInfo,
+  type IssueDetail,
+} from "@/api";
 import { filterTrees } from "./treesFilter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +51,11 @@ export function TreesPage() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
-  const [form, setForm] = useState<AddTreeRequest>({ repo: "", branch: "", type: "feature" });
+  const [form, setForm] = useState<AddTreeRequest>({
+    repo: "",
+    branch: "",
+    type: "feature",
+  });
   const [addError, setAddError] = useState("");
 
   const [filterText, setFilterText] = useState("");
@@ -60,19 +72,18 @@ export function TreesPage() {
   const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copyTemplate, setCopyTemplate] = useState<string>(
     () => localStorage.getItem("wt-copy-template") ?? "$path"
   );
 
   // キャッシュから初期化 → マウント後に未取得分を順次フェッチ
-  const [prData, setPrData] = useState<Record<string, MergedPRInfo[]>>(
-    () => Object.fromEntries(prCache.entries())
+  const [prData, setPrData] = useState<Record<string, MergedPRInfo[]>>(() =>
+    Object.fromEntries(prCache.entries())
   );
   const [loadingPRRepos, setLoadingPRRepos] = useState<Set<string>>(new Set());
 
-  const [issueData, setIssueData] = useState<Record<string, IssueDetail[]>>(
-    () => Object.fromEntries(issueCache.entries())
+  const [issueData, setIssueData] = useState<Record<string, IssueDetail[]>>(() =>
+    Object.fromEntries(issueCache.entries())
   );
   const [loadingIssueRepos, setLoadingIssueRepos] = useState<Set<string>>(new Set());
 
@@ -93,7 +104,11 @@ export function TreesPage() {
           prCache.set(repo, []);
           setPrData((prev) => ({ ...prev, [repo]: [] }));
         } finally {
-          setLoadingPRRepos((prev) => { const n = new Set(prev); n.delete(repo); return n; });
+          setLoadingPRRepos((prev) => {
+            const n = new Set(prev);
+            n.delete(repo);
+            return n;
+          });
         }
       }
       // Issue detail fetch
@@ -107,7 +122,11 @@ export function TreesPage() {
           issueCache.set(repo, []);
           setIssueData((prev) => ({ ...prev, [repo]: [] }));
         } finally {
-          setLoadingIssueRepos((prev) => { const n = new Set(prev); n.delete(repo); return n; });
+          setLoadingIssueRepos((prev) => {
+            const n = new Set(prev);
+            n.delete(repo);
+            return n;
+          });
         }
       }
     });
@@ -157,10 +176,13 @@ export function TreesPage() {
   };
 
   const handleCopyPath = async (path: string) => {
-    const text = (copyTemplate || "$path").replace(/\$path/g, path);
-    await navigator.clipboard.writeText(text);
-    setCopiedPath(path);
-    setTimeout(() => setCopiedPath(null), 2000);
+    try {
+      const text = (copyTemplate || "$path").replace(/\$path/g, path);
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied:", { description: text });
+    } catch {
+      toast.error("コピーに失敗しました");
+    }
   };
 
   const repoURLMap = Object.fromEntries(repos.map((r) => [r.name, r.github_url ?? ""]));
@@ -195,7 +217,8 @@ export function TreesPage() {
 
   const selectableTrees = filteredTrees.filter((t) => !t.is_main);
   const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
-  const allSelected = selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
+  const allSelected =
+    selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
   const someSelected = selectedInView.length > 0;
 
   useEffect(() => {
@@ -311,11 +334,13 @@ export function TreesPage() {
                   value={form.type ?? "feature"}
                   onChange={(e) => setForm({ ...form, type: e.target.value })}
                 >
-                  {["feature", "fix", "chore", "docs", "refactor", "test", "ci"].map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
+                  {["feature", "fix", "chore", "docs", "refactor", "test", "ci"].map(
+                    (t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    )
+                  )}
                 </select>
               </div>
             )}
@@ -345,7 +370,9 @@ export function TreesPage() {
                 disabled={anyLoading}
                 title="Issue / PR 状態をリフレッシュ"
               >
-                <RefreshCw className={`h-3 w-3 mr-1 ${anyLoading ? "animate-spin" : ""}`} />
+                <RefreshCw
+                  className={`h-3 w-3 mr-1 ${anyLoading ? "animate-spin" : ""}`}
+                />
                 更新
               </Button>
               <Button
@@ -367,7 +394,9 @@ export function TreesPage() {
               onChange={(e) => setFilterText(e.target.value)}
             />
             <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">コピー形式:</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                コピー形式:
+              </span>
               <Input
                 className="w-56 font-mono text-xs h-7"
                 placeholder="$path"
@@ -427,7 +456,9 @@ export function TreesPage() {
                     <TableHead>親 issue</TableHead>
                     <TableHead>PR</TableHead>
                     <TableHead title="同名の tmux セッションが存在するか">tmux</TableHead>
-                    <TableHead title="git status の変更ファイル数（未追跡除く）">変更</TableHead>
+                    <TableHead title="git status の変更ファイル数（未追跡除く）">
+                      変更
+                    </TableHead>
                     <TableHead>作成日</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -447,7 +478,9 @@ export function TreesPage() {
                         className={[
                           t.is_main ? "opacity-60" : "",
                           t.path === newlyAddedPath ? "row-highlight" : "",
-                        ].filter(Boolean).join(" ")}
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                       >
                         <TableCell>
                           {!t.is_main && (
@@ -462,7 +495,10 @@ export function TreesPage() {
                         <TableCell className="text-xs">
                           <button
                             className="text-blue-600 hover:underline"
-                            onClick={() => { setRepoFilter(t.repo); setShowMain(true); }}
+                            onClick={() => {
+                              setRepoFilter(t.repo);
+                              setShowMain(true);
+                            }}
                           >
                             {t.repo}
                           </button>
@@ -477,11 +513,7 @@ export function TreesPage() {
                               onClick={() => handleCopyPath(t.path)}
                               title={t.path}
                             >
-                              {copiedPath === t.path ? (
-                                <Check className="h-3 w-3 text-green-600" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
-                              )}
+                              <Copy className="h-3 w-3" />
                             </Button>
                           </div>
                         </TableCell>
@@ -491,11 +523,22 @@ export function TreesPage() {
                         <TableCell className="text-xs">
                           {issueURL ? (
                             <div className="flex items-center gap-1">
-                              <a href={issueURL} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                              <a
+                                href={issueURL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline"
+                              >
                                 {t.issue}
                               </a>
                               {issueDetail ? (
-                                <span className={issueDetail.state === "OPEN" ? "text-green-600" : "text-muted-foreground"}>
+                                <span
+                                  className={
+                                    issueDetail.state === "OPEN"
+                                      ? "text-green-600"
+                                      : "text-muted-foreground"
+                                  }
+                                >
                                   {issueDetail.state === "OPEN" ? "open" : "closed"}
                                 </span>
                               ) : loadingIssueRepos.has(t.repo) ? (
@@ -535,7 +578,9 @@ export function TreesPage() {
                                   className={`hover:underline ${cls}`}
                                 >
                                   #{pr.number}
-                                  <span className="text-muted-foreground ml-1">({text})</span>
+                                  <span className="text-muted-foreground ml-1">
+                                    ({text})
+                                  </span>
                                 </a>
                               );
                             })()
@@ -554,7 +599,9 @@ export function TreesPage() {
                         </TableCell>
                         <TableCell className="text-xs">
                           {t.diff_count > 0 ? (
-                            <span className="text-amber-600 font-medium">{t.diff_count}</span>
+                            <span className="text-amber-600 font-medium">
+                              {t.diff_count}
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">0</span>
                           )}
@@ -571,7 +618,9 @@ export function TreesPage() {
           )}
           {someSelected && (
             <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-              <span className="text-sm text-muted-foreground">{selectedInView.length} 件選択中</span>
+              <span className="text-sm text-muted-foreground">
+                {selectedInView.length} 件選択中
+              </span>
               <select
                 className="border rounded px-2 py-1 text-sm"
                 value={bulkAction}
@@ -599,7 +648,9 @@ export function TreesPage() {
               <p className="text-sm">以下の Worktree を削除しますか？</p>
               <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto border rounded p-2">
                 {selectedInView.map((t) => (
-                  <li key={t.path}>{t.repo} / {t.wt_name}</li>
+                  <li key={t.path}>
+                    {t.repo} / {t.wt_name}
+                  </li>
                 ))}
               </ul>
               <div className="flex gap-2 justify-end">

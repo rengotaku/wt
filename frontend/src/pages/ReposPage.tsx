@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChevronDown, ChevronRight, ExternalLink, RefreshCw, Settings } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
 import { reposApi, type Repo } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +48,9 @@ export function ReposPage() {
 
   const [refreshingRepo, setRefreshingRepo] = useState<string | null>(null);
   const [syncingRepo, setSyncingRepo] = useState<string | null>(null);
-  const [syncRepoMsg, setSyncRepoMsg] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [syncRepoMsg, setSyncRepoMsg] = useState<
+    Record<string, { ok: boolean; msg: string }>
+  >({});
 
   const [configRepo, setConfigRepo] = useState<string | null>(null);
 
@@ -101,7 +110,9 @@ export function ReposPage() {
     setSyncMessage("");
     try {
       await reposApi.syncAll();
-      setSyncMessage("同期を開始しました。しばらくしてからリロードして状態を確認してください。");
+      setSyncMessage(
+        "同期を開始しました。しばらくしてからリロードして状態を確認してください。"
+      );
     } catch (e) {
       setSyncMessage(`エラー: ${(e as Error).message}`);
     } finally {
@@ -126,32 +137,34 @@ export function ReposPage() {
             リポジトリを追加
           </CardTitle>
         </CardHeader>
-        {addFormOpen && <CardContent className="space-y-3">
-          <div className="flex gap-2">
-            <Input
-              placeholder="https://github.com/owner/repo"
-              value={addURL}
-              onChange={(e) => setAddURL(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              onClick={() => addMutation.mutate(addURL)}
-              disabled={addMutation.isPending || !addURL}
-            >
-              {addMutation.isPending ? "追加中..." : "追加"}
-            </Button>
-          </div>
-          {addError && (
-            <Alert variant="destructive">
-              <AlertDescription>{addError}</AlertDescription>
-            </Alert>
-          )}
-          {addOutput && (
-            <pre className="text-xs font-mono bg-muted p-2 rounded whitespace-pre-wrap">
-              {addOutput}
-            </pre>
-          )}
-        </CardContent>}
+        {addFormOpen && (
+          <CardContent className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                placeholder="https://github.com/owner/repo"
+                value={addURL}
+                onChange={(e) => setAddURL(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                onClick={() => addMutation.mutate(addURL)}
+                disabled={addMutation.isPending || !addURL}
+              >
+                {addMutation.isPending ? "追加中..." : "追加"}
+              </Button>
+            </div>
+            {addError && (
+              <Alert variant="destructive">
+                <AlertDescription>{addError}</AlertDescription>
+              </Alert>
+            )}
+            {addOutput && (
+              <pre className="text-xs font-mono bg-muted p-2 rounded whitespace-pre-wrap">
+                {addOutput}
+              </pre>
+            )}
+          </CardContent>
+        )}
       </Card>
 
       {/* リポジトリ一覧 */}
@@ -204,7 +217,9 @@ export function ReposPage() {
                     <TableCell className="font-medium">
                       <span>{r.name}</span>
                       {r.description && (
-                        <span className="ml-2 text-xs text-muted-foreground font-normal">{r.description}</span>
+                        <span className="ml-2 text-xs text-muted-foreground font-normal">
+                          {r.description}
+                        </span>
                       )}
                     </TableCell>
                     <TableCell className="text-xs font-mono text-muted-foreground">
@@ -307,7 +322,8 @@ export function ReposPage() {
                           <p
                             className={`text-xs ${syncRepoMsg[r.name].ok ? "text-green-600" : "text-red-600"}`}
                           >
-                            {syncRepoMsg[r.name].msg || (syncRepoMsg[r.name].ok ? "Already up to date" : "error")}
+                            {syncRepoMsg[r.name].msg ||
+                              (syncRepoMsg[r.name].ok ? "Already up to date" : "error")}
                           </p>
                         )}
                       </div>
@@ -320,15 +336,10 @@ export function ReposPage() {
         </CardContent>
       </Card>
 
-      {syncMessage && (
-        <p className="text-sm text-muted-foreground">{syncMessage}</p>
-      )}
+      {syncMessage && <p className="text-sm text-muted-foreground">{syncMessage}</p>}
 
       {/* 設定サイドパネル */}
-      <RepoConfigPanel
-        repoName={configRepo}
-        onClose={() => setConfigRepo(null)}
-      />
+      <RepoConfigPanel repoName={configRepo} onClose={() => setConfigRepo(null)} />
 
       {/* 削除確認モーダル */}
       {deleteTarget && (
@@ -339,10 +350,12 @@ export function ReposPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm">
-                <span className="font-mono font-medium">{deleteTarget.name}</span> を削除しますか？
+                <span className="font-mono font-medium">{deleteTarget.name}</span>{" "}
+                を削除しますか？
               </p>
               <p className="text-xs text-muted-foreground">
-                worktree が main のみの場合に限り削除できます。追加 worktree が残存している場合はエラーになります。
+                worktree が main のみの場合に限り削除できます。追加 worktree
+                が残存している場合はエラーになります。
               </p>
               <div className="flex gap-2 justify-end">
                 <Button variant="outline" onClick={() => setDeleteTarget(null)}>

@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@/test/test-utils";
+import { toast } from "sonner";
 import { TreesPage } from "./TreesPage";
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+  Toaster: () => null,
+}));
 
 const mockTrees = [
   {
@@ -68,15 +77,21 @@ describe("TreesPage - checkbox and bulk action", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("全選択")).toBeInTheDocument();
     });
-    expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
-    expect(screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
+    ).toBeInTheDocument();
     // main row is hidden by default (showMain = false), so no checkbox for it
   });
 
   it("shows bulk action bar when a row is checked", async () => {
     render(<TreesPage />);
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
     expect(screen.queryByLabelText("アクション選択")).not.toBeInTheDocument();
 
@@ -116,7 +131,9 @@ describe("TreesPage - checkbox and bulk action", () => {
   it("shows confirmation modal with selected items when execute is clicked", async () => {
     render(<TreesPage />);
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
@@ -126,13 +143,17 @@ describe("TreesPage - checkbox and bulk action", () => {
       expect(screen.getByText("削除確認")).toBeInTheDocument();
     });
     expect(screen.getByText(/myrepo \/ myrepo--feat-issue-1-abc/)).toBeInTheDocument();
-    expect(screen.queryByText(/myrepo \/ myrepo--feat-issue-2-xyz/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/myrepo \/ myrepo--feat-issue-2-xyz/)
+    ).not.toBeInTheDocument();
   });
 
   it("closes confirmation modal on cancel", async () => {
     render(<TreesPage />);
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
@@ -178,18 +199,25 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     render(<TreesPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
     // フォームを開く
     fireEvent.click(screen.getByText("Worktree を追加"));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
+      ).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
-      target: { value: "https://github.com/myrepo/repo/issues/3" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"),
+      {
+        target: { value: "https://github.com/myrepo/repo/issues/3" },
+      }
+    );
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
@@ -207,24 +235,34 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     render(<TreesPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("Worktree を追加"));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
+      ).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
-      target: { value: "https://github.com/myrepo/repo/issues/3" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"),
+      {
+        target: { value: "https://github.com/myrepo/repo/issues/3" },
+      }
+    );
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
       expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
     });
 
-    expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "nearest" });
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "nearest",
+    });
   });
 
   it("removes row-highlight class after 3 seconds", async () => {
@@ -234,17 +272,24 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     render(<TreesPage />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("Worktree を追加"));
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
+      ).toBeInTheDocument();
     });
 
-    fireEvent.change(screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"), {
-      target: { value: "https://github.com/myrepo/repo/issues/3" },
-    });
+    fireEvent.change(
+      screen.getByPlaceholderText("https://github.com/owner/repo/issues/123"),
+      {
+        target: { value: "https://github.com/myrepo/repo/issues/3" },
+      }
+    );
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
@@ -263,5 +308,107 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+});
+
+describe("TreesPage - copy path toast", () => {
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+      writable: true,
+    });
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
+  });
+
+  it("calls toast.success with expanded path when copy button is clicked", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+        description: "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc",
+      });
+    });
+  });
+
+  it("does not toggle icon after copy (no Check icon rendered)", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.success)).toHaveBeenCalled();
+    });
+
+    // Check icon should never appear — the document should have no element with aria-label containing "check"
+    // We verify by ensuring clipboard was called but no state-based UI change occurred
+    expect(document.querySelector('[data-testid="check-icon"]')).not.toBeInTheDocument();
+  });
+
+  it("calls toast.error when clipboard write fails", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith("コピーに失敗しました");
+    });
+  });
+
+  it("expands copy template before writing to clipboard", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("$path")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("$path"), {
+      target: { value: "cd $path && tmc" },
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc"
+      );
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+        description: "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc",
+      });
+    });
   });
 });
