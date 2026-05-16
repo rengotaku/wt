@@ -40,12 +40,12 @@ func makeGitRepo(t *testing.T) string {
 }
 
 // makeContainer creates a wt container with main worktree and returns (containerDir, mainDir).
-func makeContainer(t *testing.T) (string, string) {
+func makeContainer(t *testing.T) (containerDir, mainDir string) {
 	t.Helper()
 	tmp := t.TempDir()
 	repoName := "testrepo"
 	container := filepath.Join(tmp, repoName)
-	mainDir := makeGitRepo(t)
+	mainDir = makeGitRepo(t)
 	// Move into container layout
 	newMain := filepath.Join(container, "main")
 	if err := os.MkdirAll(container, 0o755); err != nil {
