@@ -2,9 +2,11 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -214,13 +216,32 @@ func GitOutput(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// GitRun runs git -C <dir> <args...> with combined stdout+stderr forwarded.
+// gitError wraps an exec.ExitError with the captured stderr so callers can
+// surface git's diagnostic messages (e.g. "fatal: ...") when wrapping the error.
+type gitError struct {
+	stderr string
+	cause  error
+}
+
+func (e *gitError) Error() string { return e.stderr }
+func (e *gitError) Unwrap() error { return e.cause }
+
+// GitRun runs git -C <dir> <args...> forwarding stdout/stderr to the terminal.
+// Stderr is also captured so that on failure the returned error contains the
+// git diagnostic text rather than just "exit status N".
 func GitRun(dir string, args ...string) error {
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.Command("git", full...)
+	var stderrBuf bytes.Buffer
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderrBuf.String()); msg != "" {
+			return &gitError{stderr: msg, cause: err}
+		}
+		return err
+	}
+	return nil
 }
 
 // GitCheck runs git -C <dir> <args...> silently and returns true when exit==0.
