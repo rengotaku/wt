@@ -18,7 +18,10 @@ const makeTree = (overrides: Partial<TreeItem>): TreeItem => ({
 describe("filterTrees", () => {
   describe("showMain", () => {
     it("hides main worktrees when showMain is false", () => {
-      const trees = [makeTree({ is_main: true }), makeTree({ is_main: false, wt_name: "repo--feat" })];
+      const trees = [
+        makeTree({ is_main: true }),
+        makeTree({ is_main: false, wt_name: "repo--feat" }),
+      ];
       expect(filterTrees(trees, "", false, "")).toHaveLength(1);
     });
 
@@ -43,7 +46,10 @@ describe("filterTrees", () => {
   describe("filterText – wt_name", () => {
     it("matches by wt_name substring", () => {
       const trees = [
-        makeTree({ wt_name: "myrepo--feat-issue-28-d591e886", branch: "feat/issue-28-d591e886" }),
+        makeTree({
+          wt_name: "myrepo--feat-issue-28-d591e886",
+          branch: "feat/issue-28-d591e886",
+        }),
         makeTree({ wt_name: "myrepo--fix-bug", branch: "fix/bug" }),
       ];
       expect(filterTrees(trees, "feat-issue-28", true, "")).toHaveLength(1);
@@ -65,7 +71,10 @@ describe("filterTrees", () => {
   describe("filterText – branch (new feature)", () => {
     it("matches when filterText equals the branch name with slash", () => {
       const trees = [
-        makeTree({ wt_name: "myrepo--feat-issue-28-d591e886", branch: "feat/issue-28-d591e886" }),
+        makeTree({
+          wt_name: "myrepo--feat-issue-28-d591e886",
+          branch: "feat/issue-28-d591e886",
+        }),
         makeTree({ wt_name: "myrepo--fix-bug", branch: "fix/bug" }),
       ];
       expect(filterTrees(trees, "feat/issue-28-d591e886", true, "")).toHaveLength(1);
@@ -73,7 +82,10 @@ describe("filterTrees", () => {
 
     it("matches partial branch name with slash", () => {
       const trees = [
-        makeTree({ wt_name: "myrepo--feat-issue-28-d591e886", branch: "feat/issue-28-d591e886" }),
+        makeTree({
+          wt_name: "myrepo--feat-issue-28-d591e886",
+          branch: "feat/issue-28-d591e886",
+        }),
         makeTree({ wt_name: "myrepo--fix-bug", branch: "fix/bug" }),
       ];
       expect(filterTrees(trees, "feat/issue-28", true, "")).toHaveLength(1);
@@ -86,7 +98,10 @@ describe("filterTrees", () => {
 
     it("does not match other worktrees when branch name is given", () => {
       const trees = [
-        makeTree({ wt_name: "myrepo--feat-issue-28-d591e886", branch: "feat/issue-28-d591e886" }),
+        makeTree({
+          wt_name: "myrepo--feat-issue-28-d591e886",
+          branch: "feat/issue-28-d591e886",
+        }),
         makeTree({ wt_name: "myrepo--feat-issue-99-zzz", branch: "feat/issue-99-zzz" }),
       ];
       expect(filterTrees(trees, "feat/issue-28-d591e886", true, "")).toHaveLength(1);
@@ -94,18 +109,34 @@ describe("filterTrees", () => {
   });
 
   describe("filterText – parent issue", () => {
-    const makeIssueDataMap = (overrides: IssueDetail[]): Record<string, IssueDetail[]> => ({
+    const makeIssueDataMap = (
+      overrides: IssueDetail[]
+    ): Record<string, IssueDetail[]> => ({
       repo: overrides,
     });
 
     it("matches by parent issue number with # prefix", () => {
       const trees = [
         makeTree({ issue: "#84" }),
-        makeTree({ issue: "#85", wt_name: "repo--feat-issue-85-xxx", branch: "feat/issue-85-xxx" }),
+        makeTree({
+          issue: "#85",
+          wt_name: "repo--feat-issue-85-xxx",
+          branch: "feat/issue-85-xxx",
+        }),
       ];
       const issueDataMap = makeIssueDataMap([
-        { number: 84, state: "OPEN", parent_number: 70, parent_url: "https://github.com/owner/repo/issues/70" },
-        { number: 85, state: "OPEN", parent_number: 70, parent_url: "https://github.com/owner/repo/issues/70" },
+        {
+          number: 84,
+          state: "OPEN",
+          parent_number: 70,
+          parent_url: "https://github.com/owner/repo/issues/70",
+        },
+        {
+          number: 85,
+          state: "OPEN",
+          parent_number: 70,
+          parent_url: "https://github.com/owner/repo/issues/70",
+        },
       ]);
       expect(filterTrees(trees, "#70", true, "", issueDataMap)).toHaveLength(2);
     });
@@ -113,7 +144,11 @@ describe("filterTrees", () => {
     it("does not match when parent issue differs", () => {
       const trees = [
         makeTree({ issue: "#84" }),
-        makeTree({ issue: "#85", wt_name: "repo--feat-issue-85-xxx", branch: "feat/issue-85-xxx" }),
+        makeTree({
+          issue: "#85",
+          wt_name: "repo--feat-issue-85-xxx",
+          branch: "feat/issue-85-xxx",
+        }),
       ];
       const issueDataMap = makeIssueDataMap([
         { number: 84, state: "OPEN", parent_number: 70, parent_url: "" },

@@ -58,10 +58,8 @@ function PanelBody({ repoName, onClose }: { repoName: string; onClose: () => voi
   const handleAdd = () => update([...effective, ""]);
   const handleChange = (idx: number, value: string) =>
     update(effective.map((c, i) => (i === idx ? value : c)));
-  const handleRemove = (idx: number) =>
-    update(effective.filter((_, i) => i !== idx));
-  const handleSave = () =>
-    updateMutation.mutate({ symlink_candidates: effective });
+  const handleRemove = (idx: number) => update(effective.filter((_, i) => i !== idx));
+  const handleSave = () => updateMutation.mutate({ symlink_candidates: effective });
 
   return (
     <aside className="w-full max-w-md bg-background border-l border-border h-full flex flex-col shadow-xl">
@@ -85,12 +83,11 @@ function PanelBody({ repoName, onClose }: { repoName: string; onClose: () => voi
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            新しい worktree を作成したとき、main 側からシンボリックリンクで持ち込む候補パス（コンテナ相対）。
+            新しい worktree を作成したとき、main
+            側からシンボリックリンクで持ち込む候補パス（コンテナ相対）。
           </p>
 
-          {isLoading && (
-            <p className="text-sm text-muted-foreground">読み込み中...</p>
-          )}
+          {isLoading && <p className="text-sm text-muted-foreground">読み込み中...</p>}
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{(error as Error).message}</AlertDescription>
@@ -130,19 +127,14 @@ function PanelBody({ repoName, onClose }: { repoName: string; onClose: () => voi
             <AlertDescription>{saveError}</AlertDescription>
           </Alert>
         )}
-        {saved && (
-          <p className="text-xs text-green-600">保存しました。</p>
-        )}
+        {saved && <p className="text-xs text-green-600">保存しました。</p>}
       </div>
 
       <footer className="p-4 border-t flex justify-end gap-2">
         <Button variant="outline" onClick={onClose}>
           閉じる
         </Button>
-        <Button
-          onClick={handleSave}
-          disabled={updateMutation.isPending || isLoading}
-        >
+        <Button onClick={handleSave} disabled={updateMutation.isPending || isLoading}>
           {updateMutation.isPending ? "保存中..." : "保存"}
         </Button>
       </footer>

@@ -7,11 +7,19 @@ const localStorageStore: Record<string, string> = {};
 Object.defineProperty(window, "localStorage", {
   value: {
     getItem: (key: string): string | null => localStorageStore[key] ?? null,
-    setItem: (key: string, value: string): void => { localStorageStore[key] = value; },
-    removeItem: (key: string): void => { delete localStorageStore[key]; },
-    clear: (): void => { Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]); },
+    setItem: (key: string, value: string): void => {
+      localStorageStore[key] = value;
+    },
+    removeItem: (key: string): void => {
+      delete localStorageStore[key];
+    },
+    clear: (): void => {
+      Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]);
+    },
     key: (index: number): string | null => Object.keys(localStorageStore)[index] ?? null,
-    get length() { return Object.keys(localStorageStore).length; },
+    get length() {
+      return Object.keys(localStorageStore).length;
+    },
   },
   writable: true,
 });

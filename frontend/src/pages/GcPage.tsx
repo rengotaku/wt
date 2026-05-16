@@ -36,7 +36,8 @@ export function GcPage() {
         <CardHeader>
           <CardTitle>GC オプション</CardTitle>
           <p className="text-sm text-muted-foreground">
-            不要になった worktree を一括削除する機能です。オプションで絞り込み条件を指定し、
+            不要になった worktree
+            を一括削除する機能です。オプションで絞り込み条件を指定し、
             まず「プレビュー」で削除対象を確認してから「GC 実行」で削除します。
             <br />
             <span className="text-xs">
@@ -53,7 +54,9 @@ export function GcPage() {
             />
             マージ済み PR のみ対象
           </label>
-          <p className="text-xs text-muted-foreground ml-5">マージ済みブランチを持つ worktree のみを GC 対象にします。</p>
+          <p className="text-xs text-muted-foreground ml-5">
+            マージ済みブランチを持つ worktree のみを GC 対象にします。
+          </p>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -62,7 +65,9 @@ export function GcPage() {
             />
             tmux セッションなしのみ対象
           </label>
-          <p className="text-xs text-muted-foreground ml-5">アクティブな tmux セッションが存在しない worktree のみを対象にします。</p>
+          <p className="text-xs text-muted-foreground ml-5">
+            アクティブな tmux セッションが存在しない worktree のみを対象にします。
+          </p>
           <div className="flex items-center gap-2">
             <label className="text-sm whitespace-nowrap">最終コミット</label>
             <Input
@@ -73,7 +78,10 @@ export function GcPage() {
             />
             <span className="text-sm text-muted-foreground">以上前</span>
           </div>
-          <p className="text-xs text-muted-foreground">指定期間より古い最終コミットを持つ worktree を対象にします（例: 30d = 30日前、24h = 24時間前）。</p>
+          <p className="text-xs text-muted-foreground">
+            指定期間より古い最終コミットを持つ worktree を対象にします（例: 30d =
+            30日前、24h = 24時間前）。
+          </p>
 
           <div className="flex gap-2">
             <Button
