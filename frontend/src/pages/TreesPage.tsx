@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { toast } from "sonner";
+import { RefreshCw, Copy, ChevronDown, ChevronRight } from "lucide-react";
 import { treesApi, reposApi, type AddTreeRequest, type TreeItem, type MergedPRInfo, type IssueDetail } from "@/api";
 import { filterTrees } from "./treesFilter";
 import { Button } from "@/components/ui/button";
@@ -60,7 +61,6 @@ export function TreesPage() {
   const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
 
-  const [copiedPath, setCopiedPath] = useState<string | null>(null);
   const [copyTemplate, setCopyTemplate] = useState<string>(
     () => localStorage.getItem("wt-copy-template") ?? "$path"
   );
@@ -157,10 +157,13 @@ export function TreesPage() {
   };
 
   const handleCopyPath = async (path: string) => {
-    const text = (copyTemplate || "$path").replace(/\$path/g, path);
-    await navigator.clipboard.writeText(text);
-    setCopiedPath(path);
-    setTimeout(() => setCopiedPath(null), 2000);
+    try {
+      const text = (copyTemplate || "$path").replace(/\$path/g, path);
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied:", { description: text });
+    } catch {
+      toast.error("コピーに失敗しました");
+    }
   };
 
   const repoURLMap = Object.fromEntries(repos.map((r) => [r.name, r.github_url ?? ""]));
@@ -477,11 +480,7 @@ export function TreesPage() {
                               onClick={() => handleCopyPath(t.path)}
                               title={t.path}
                             >
-                              {copiedPath === t.path ? (
-                                <Check className="h-3 w-3 text-green-600" />
-                              ) : (
-                                <Copy className="h-3 w-3" />
-                              )}
+                              <Copy className="h-3 w-3" />
                             </Button>
                           </div>
                         </TableCell>

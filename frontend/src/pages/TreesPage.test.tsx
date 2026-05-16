@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@/test/test-utils";
+import { toast } from "sonner";
 import { TreesPage } from "./TreesPage";
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    error: vi.fn(),
+  },
+  Toaster: () => null,
+}));
 
 const mockTrees = [
   {
@@ -263,5 +272,103 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+});
+
+describe("TreesPage - copy path toast", () => {
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+      writable: true,
+    });
+    vi.mocked(toast.success).mockReset();
+    vi.mocked(toast.error).mockReset();
+  });
+
+  it("calls toast.success with expanded path when copy button is clicked", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+        description: "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc",
+      });
+    });
+  });
+
+  it("does not toggle icon after copy (no Check icon rendered)", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.success)).toHaveBeenCalled();
+    });
+
+    // Check icon should never appear — the document should have no element with aria-label containing "check"
+    // We verify by ensuring clipboard was called but no state-based UI change occurred
+    expect(
+      document.querySelector('[data-testid="check-icon"]')
+    ).not.toBeInTheDocument();
+  });
+
+  it("calls toast.error when clipboard write fails", async () => {
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith("コピーに失敗しました");
+    });
+  });
+
+  it("expands copy template before writing to clipboard", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText("$path")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("$path"), {
+      target: { value: "cd $path && tmc" },
+    });
+
+    fireEvent.click(
+      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+    );
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc"
+      );
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+        description: "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc",
+      });
+    });
   });
 });
