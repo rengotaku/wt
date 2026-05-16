@@ -164,7 +164,7 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 		defaultBranch = strings.TrimPrefix(v, "refs/remotes/")
 	}
 	if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", branchName, defaultBranch); err != nil {
-		return nil, errors.New("worktree作成に失敗しました")
+		return nil, fmt.Errorf("worktree作成に失敗しました: %w", err)
 	}
 
 	// ── シンボリックリンク作成 ──
@@ -249,11 +249,11 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 	switch {
 	case core.GitCheck(mainDir, "rev-parse", "--verify", "--quiet", opts.Branch):
 		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, opts.Branch); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("既存ローカルブランチからの worktree 作成に失敗: %w", err)
 		}
 	case core.GitCheck(mainDir, "rev-parse", "--verify", "--quiet", "origin/"+opts.Branch):
 		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", opts.Branch, "origin/"+opts.Branch); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("リモートブランチからの worktree 作成に失敗: %w", err)
 		}
 	default:
 		defaultBranch := mainName
@@ -261,7 +261,7 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 			defaultBranch = strings.TrimPrefix(v, "refs/remotes/")
 		}
 		if err := core.GitRun(mainDir, "worktree", "add", worktreePath, "-b", opts.Branch, defaultBranch); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("デフォルトブランチからの worktree 作成に失敗: %w", err)
 		}
 	}
 
