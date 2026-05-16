@@ -35,20 +35,23 @@ func repoSyncCmd() *cobra.Command {
 }
 
 func repoAddCmd() *cobra.Command {
-	return &cobra.Command{
+	var gitCryptKey string
+	c := &cobra.Command{
 		Use:   "add <url> [container_base]",
 		Short: "GitHub URL から clone してコンテナ化",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return errors.New("Usage: wt repo add <url> [container_base]") //nolint:staticcheck // user-facing usage string
 			}
-			base := ""
+			opts := repo.AddOptions{URL: args[0], GitCryptKey: gitCryptKey}
 			if len(args) >= 2 {
-				base = args[1]
+				opts.Base = args[1]
 			}
-			return repo.Add(cmd.OutOrStdout(), args[0], base)
+			return repo.Add(cmd.OutOrStdout(), opts)
 		},
 	}
+	c.Flags().StringVar(&gitCryptKey, "git-crypt-key", "", "git-crypt 対称鍵ファイルのパス（~/.git-crypt-key 等）")
+	return c
 }
 
 func repoRmCmd() *cobra.Command {
