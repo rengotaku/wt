@@ -161,5 +161,5 @@ func addWorktreeExistingBranch(out io.Writer, mainDir, worktreePath, branchName,
 	if isSmudgeError(errBuf.String()) {
 		return recoverSmudge(out, mainDir, worktreePath, branchName, "", containerDir)
 	}
-	return fmt.Errorf("worktree作成に失敗しました")
+	return fmt.Errorf("既存ローカルブランチからの worktree 作成に失敗: %s", strings.TrimSpace(errBuf.String()))
 }
