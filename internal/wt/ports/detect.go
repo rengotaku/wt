@@ -30,6 +30,16 @@ func Listeners(start, end int) (map[int]Listener, error) {
 	return parseSS(string(out), start, end), nil
 }
 
+// AllListeners returns every LISTEN socket on the machine (no band filter),
+// keyed by port. Used by the port doctor to surface foreign squatters.
+func AllListeners() (map[int]Listener, error) {
+	out, err := exec.Command("ss", "-tlnpH").Output()
+	if err != nil {
+		return map[int]Listener{}, nil //nolint:nilerr // ss missing → treat as no listeners
+	}
+	return parseSS(string(out), 1, 65535), nil
+}
+
 // parseSS parses `ss -tlnpH` output, keeping only ports inside [start, end].
 func parseSS(out string, start, end int) map[int]Listener {
 	res := map[int]Listener{}

@@ -23,8 +23,19 @@ export interface ServeResult {
   running: boolean;
 }
 
+export interface ListenerRow {
+  port: number;
+  pid?: number;
+  proc?: string;
+  managed: boolean;
+  owner?: string; // "repo/wtname" when managed
+}
+
 export const portsApi = {
   list: (): Promise<PortItem[]> => apiClient.get("api/ports").json(),
+
+  listeners: (): Promise<ListenerRow[]> =>
+    apiClient.get("api/ports/listeners").json(),
 
   serve: (repo: string, wtName: string): Promise<ServeResult> =>
     apiClient
