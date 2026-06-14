@@ -221,10 +221,10 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
-      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+      expect(screen.getByLabelText("myrepo--feat-issue-3-new のパスをコピー")).toBeInTheDocument();
     });
 
-    const newRow = screen.getByText("myrepo--feat-issue-3-new").closest("tr");
+    const newRow = screen.getByLabelText("myrepo--feat-issue-3-new のパスをコピー").closest("tr");
     expect(newRow).toHaveClass("row-highlight");
   });
 
@@ -256,7 +256,7 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
-      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+      expect(screen.getByLabelText("myrepo--feat-issue-3-new のパスをコピー")).toBeInTheDocument();
     });
 
     expect(scrollIntoViewMock).toHaveBeenCalledWith({
@@ -293,10 +293,10 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "作成" }));
 
     await waitFor(() => {
-      expect(screen.getByText("myrepo--feat-issue-3-new")).toBeInTheDocument();
+      expect(screen.getByLabelText("myrepo--feat-issue-3-new のパスをコピー")).toBeInTheDocument();
     });
 
-    const newRow = screen.getByText("myrepo--feat-issue-3-new").closest("tr");
+    const newRow = screen.getByLabelText("myrepo--feat-issue-3-new のパスをコピー").closest("tr");
     expect(newRow).toHaveClass("row-highlight");
 
     await act(async () => {
@@ -334,17 +334,17 @@ describe("TreesPage - copy path toast", () => {
     });
 
     fireEvent.click(
-      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+      screen.getByLabelText("myrepo--feat-issue-1-abc のパスをコピー")
     );
 
     await waitFor(() => {
-      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("コピーしました", {
         description: "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc",
       });
     });
   });
 
-  it("does not toggle icon after copy (no Check icon rendered)", async () => {
+  it("shows a Check icon after a successful copy", async () => {
     render(<TreesPage />);
     await waitFor(() => {
       expect(
@@ -353,16 +353,17 @@ describe("TreesPage - copy path toast", () => {
     });
 
     fireEvent.click(
-      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+      screen.getByLabelText("myrepo--feat-issue-1-abc のパスをコピー")
     );
 
     await waitFor(() => {
       expect(vi.mocked(toast.success)).toHaveBeenCalled();
     });
 
-    // Check icon should never appear — the document should have no element with aria-label containing "check"
-    // We verify by ensuring clipboard was called but no state-based UI change occurred
-    expect(document.querySelector('[data-testid="check-icon"]')).not.toBeInTheDocument();
+    // コピー成功時はボタンが ✓ (text-green-600) に切り替わる
+    await waitFor(() => {
+      expect(document.querySelector(".text-green-600")).toBeInTheDocument();
+    });
   });
 
   it("calls toast.error when clipboard write fails", async () => {
@@ -380,7 +381,7 @@ describe("TreesPage - copy path toast", () => {
     });
 
     fireEvent.click(
-      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+      screen.getByLabelText("myrepo--feat-issue-1-abc のパスをコピー")
     );
 
     await waitFor(() => {
@@ -399,14 +400,14 @@ describe("TreesPage - copy path toast", () => {
     });
 
     fireEvent.click(
-      screen.getByTitle("/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc")
+      screen.getByLabelText("myrepo--feat-issue-1-abc のパスをコピー")
     );
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
         "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc"
       );
-      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("Copied:", {
+      expect(vi.mocked(toast.success)).toHaveBeenCalledWith("コピーしました", {
         description: "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc",
       });
     });
