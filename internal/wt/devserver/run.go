@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // RunningService records a started process.
@@ -84,9 +85,20 @@ func IsRunning(worktree string) bool {
 	return false
 }
 
+// startupGrace is how long Serve waits after spawning before judging whether a
+// service stayed up. A misconfigured command or a port conflict (EADDRINUSE)
+// makes the child exit within milliseconds, so this catches "started but
+// instantly died" while staying short enough not to delay a healthy launch.
+var startupGrace = 600 * time.Millisecond
+
 // Serve starts every service in .wt/dev.toml, assigning service i the port
 // base+i, and records their PIDs. Any previously started services are stopped
 // first. base must be a non-zero allocated port base.
+//
+// After spawning, Serve waits startupGrace and verifies each process is still
+// alive: a service that exited (e.g. its port was already taken) is reported as
+// failed with the tail of its log, and is NOT recorded as running. This is why
+// Serve never claims success for a process that died on startup.
 func Serve(out io.Writer, worktree string, base int) error {
 	cfg, err := Load(worktree)
 	if err != nil {
@@ -108,7 +120,15 @@ func Serve(out io.Writer, worktree string, base int) error {
 	// can proxy to a sibling backend on its allocated port.
 	shared := sharedEnv(cfg.Services, base)
 
-	var r running
+	// started tracks each spawned child with a channel that closes when the
+	// process exits. We must reap children we started (via Wait) so a process
+	// that died on startup is not left a zombie — a zombie still answers
+	// kill(pid, 0), which would otherwise make it look alive.
+	type spawned struct {
+		svc  RunningService
+		exit chan struct{}
+	}
+	var started []spawned
 	for i, svc := range cfg.Services {
 		port := base + i
 		cmdStr := applyPort(svc.Cmd, port)
@@ -126,13 +146,49 @@ func Serve(out io.Writer, worktree string, base int) error {
 			_, _ = fmt.Fprintf(out, "⚠️  %s の起動に失敗: %v\n", svc.Name, err)
 			continue
 		}
-		r.Services = append(r.Services, RunningService{Name: svc.Name, PID: c.Process.Pid, Port: port, Cmd: cmdStr})
-		_, _ = fmt.Fprintf(out, "▶ %s :%d (pid %d)\n", svc.Name, port, c.Process.Pid)
+		exit := make(chan struct{})
+		go func() { _ = c.Wait(); close(exit) }()
+		started = append(started, spawned{
+			svc:  RunningService{Name: svc.Name, PID: c.Process.Pid, Port: port, Cmd: cmdStr},
+			exit: exit,
+		})
+	}
+
+	// Give the children a moment, then keep only the ones that survived.
+	time.Sleep(startupGrace)
+	var r running
+	for _, s := range started {
+		select {
+		case <-s.exit:
+			_, _ = fmt.Fprintf(out, "⚠️  %s :%d が起動直後に終了しました\n%s\n",
+				s.svc.Name, s.svc.Port, logTail(worktree, s.svc.Name))
+		default:
+			r.Services = append(r.Services, s.svc)
+			_, _ = fmt.Fprintf(out, "▶ %s :%d (pid %d)\n", s.svc.Name, s.svc.Port, s.svc.PID)
+		}
 	}
 	if len(r.Services) == 0 {
-		return errors.New("起動できたサービスがありません")
+		return errors.New("起動できたサービスがありません（ログを確認してください）")
 	}
 	return saveRunning(worktree, r)
+}
+
+// logTail returns the last few lines of a service's log to explain a startup
+// failure (e.g. "Address already in use").
+func logTail(worktree, svc string) string {
+	data, err := os.ReadFile(logPath(worktree, svc))
+	if err != nil {
+		return "  (ログがありません)"
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	const maxLines = 8
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	for i, l := range lines {
+		lines[i] = "  │ " + l
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Down stops all services recorded for the worktree (killing the process group)

@@ -48,14 +48,26 @@ func RangeString(base int) string {
 	return fmt.Sprintf("%d-%d", base, base+BlockSize-1)
 }
 
-// freeBase returns the lowest block base within [start, end] not present in used.
-func freeBase(used map[int]bool, start, end int) (int, error) {
+// blockFree reports whether none of the BlockSize ports owned by base appear in
+// the occupied set (occupied is keyed by individual port, not by base).
+func blockFree(occupied map[int]bool, base int) bool {
+	for _, p := range PortsForBase(base) {
+		if occupied[p] {
+			return false
+		}
+	}
+	return true
+}
+
+// freeBase returns the lowest block base within [start, end] whose whole port
+// range is free of occupied ports.
+func freeBase(occupied map[int]bool, start, end int) (int, error) {
 	for base := start; base+BlockSize-1 <= end; base += BlockSize {
-		if !used[base] {
+		if blockFree(occupied, base) {
 			return base, nil
 		}
 	}
-	return 0, fmt.Errorf("ポート帯 %d-%d が満杯です（%d ブロック使用中）", start, end, len(used))
+	return 0, fmt.Errorf("ポート帯 %d-%d に空きブロックがありません", start, end)
 }
 
 // Allocations scans every wt-managed container and returns one Allocation per
@@ -87,32 +99,47 @@ func Allocations() ([]Allocation, error) {
 	return out, nil
 }
 
-// usedBases collects every allocated base across all containers.
-func usedBases() (map[int]bool, error) {
+// listenersInBand reports the ports currently being LISTENed on within
+// [start, end]. It is a package var so tests can stub the live scan. The
+// default shells out to `ss`; if ss is unavailable it returns no listeners.
+var listenersInBand = func(start, end int) map[int]Listener {
+	m, _ := Listeners(start, end)
+	return m
+}
+
+// occupiedPorts unions two sources of "this port is taken": every port of every
+// block already reserved in a .worktrees.json registry, and every port a process
+// is currently LISTENing on inside the band. Consulting live listeners (not just
+// the registry) prevents handing a new worktree a block that overlaps a foreign
+// process or a server that is up but not yet recorded.
+func occupiedPorts(start, end int) (map[int]bool, error) {
 	allocs, err := Allocations()
 	if err != nil {
 		return nil, err
 	}
-	used := make(map[int]bool, len(allocs))
+	occ := map[int]bool{}
 	for _, a := range allocs {
-		if a.PortBase != 0 {
-			used[a.PortBase] = true
+		for _, p := range PortsForBase(a.PortBase) {
+			occ[p] = true
 		}
 	}
-	return used, nil
+	for p := range listenersInBand(start, end) {
+		occ[p] = true
+	}
+	return occ, nil
 }
 
 // Allocate returns the lowest free base port within the configured dev band.
 // It does not persist anything; the caller stores the returned base on the
 // worktree entry. Freeing is implicit: deleting a worktree entry releases its
-// base for reuse.
+// base for reuse (unless a live process keeps the block occupied).
 func Allocate() (int, error) {
-	used, err := usedBases()
+	band := settings.Load().DevPorts
+	occupied, err := occupiedPorts(band.Start, band.End)
 	if err != nil {
 		return 0, err
 	}
-	band := settings.Load().DevPorts
-	return freeBase(used, band.Start, band.End)
+	return freeBase(occupied, band.Start, band.End)
 }
 
 // EnsureBase returns the worktree's allocated port base, allocating and
