@@ -1,0 +1,50 @@
+package ports
+
+// PortState is the live status of a single allocated port.
+type PortState struct {
+	Port      int
+	Listening bool
+	PID       int
+	Proc      string
+}
+
+// Row combines a worktree's allocation with the live status of each of its
+// ports. Ports is empty when the worktree has no allocation yet.
+type Row struct {
+	Repo     string
+	WtName   string
+	Branch   string
+	PortBase int
+	Ports    []PortState
+}
+
+// Status returns one Row per worktree across all containers, with live
+// listening status filled in for each allocated port.
+func Status() ([]Row, error) {
+	allocs, err := Allocations()
+	if err != nil {
+		return nil, err
+	}
+	listeners, _ := Listeners()
+
+	rows := make([]Row, 0, len(allocs))
+	for _, a := range allocs {
+		row := Row{
+			Repo:     a.Repo,
+			WtName:   a.WtName,
+			Branch:   a.Branch,
+			PortBase: a.PortBase,
+		}
+		for _, p := range PortsForBase(a.PortBase) {
+			st := PortState{Port: p}
+			if l, ok := listeners[p]; ok {
+				st.Listening = true
+				st.PID = l.PID
+				st.Proc = l.Proc
+			}
+			row.Ports = append(row.Ports, st)
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}

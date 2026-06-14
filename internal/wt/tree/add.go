@@ -15,7 +15,20 @@ import (
 	"time"
 
 	"wt/internal/wt/core"
+	"wt/internal/wt/ports"
 )
+
+// allocatePortBase returns a free dev port base, printing a warning and
+// returning 0 (unallocated) when the band is full. A full band must not block
+// worktree creation, which has already succeeded by this point.
+func allocatePortBase(out io.Writer) int {
+	base, err := ports.Allocate()
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "⚠️  ポート割当をスキップ: %v\n", err)
+		return 0
+	}
+	return base
+}
 
 // AddOptions holds CLI inputs for `wt tree add`.
 type AddOptions struct {
@@ -203,6 +216,7 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 		Description: description,
 		Issue:       issueRef,
 		Symlinked:   symlinkTargets,
+		PortBase:    allocatePortBase(out),
 	}
 	if err := core.PutEntry(containerDir, worktreeName, &entry); err != nil {
 		return nil, fmt.Errorf(".worktrees.json の更新に失敗しました（元ファイルは保持）: %w", err)
@@ -302,9 +316,10 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 		branchType = "feature"
 	}
 	entry := core.Entry{
-		Type:    branchType,
-		Created: time.Now().Format("2006-01-02"),
-		Branch:  opts.Branch,
+		Type:     branchType,
+		Created:  time.Now().Format("2006-01-02"),
+		Branch:   opts.Branch,
+		PortBase: allocatePortBase(out),
 	}
 	_ = core.PutEntry(containerDir, dir, &entry)
 
