@@ -107,6 +107,8 @@ func treeGcCmd() *cobra.Command {
 		},
 	}
 	c.Flags().BoolVar(&opts.Merged, "merged", false, "マージ済み PR に紐づくものだけ")
+	c.Flags().BoolVar(&opts.Closed, "closed", false, "issue/PR が closed/merged なものだけ")
+	c.Flags().BoolVar(&opts.IncludeDirty, "include-dirty", false, "--closed 時に未コミット変更ありも含める")
 	c.Flags().StringVar(&opts.OlderThan, "older-than", "", "最終コミットが N(d|h) 以上前")
 	c.Flags().BoolVar(&opts.NoTmux, "no-tmux", false, "tmux セッションが無いものだけ")
 	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "候補のみ列挙")

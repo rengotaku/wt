@@ -232,11 +232,13 @@ func (h *Handler) DeleteTree(w http.ResponseWriter, r *http.Request) {
 }
 
 type gcRequest struct {
-	Merged    bool   `json:"merged"`
-	OlderThan string `json:"older_than"`
-	NoTmux    bool   `json:"no_tmux"`
-	DryRun    bool   `json:"dry_run"`
-	Yes       bool   `json:"yes"`
+	Merged       bool   `json:"merged"`
+	Closed       bool   `json:"closed"`
+	IncludeDirty bool   `json:"include_dirty"`
+	OlderThan    string `json:"older_than"`
+	NoTmux       bool   `json:"no_tmux"`
+	DryRun       bool   `json:"dry_run"`
+	Yes          bool   `json:"yes"`
 }
 
 func (h *Handler) GcTrees(w http.ResponseWriter, r *http.Request) {
@@ -259,11 +261,13 @@ func (h *Handler) GcTrees(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	opts := gc.Options{
-		Merged:    req.Merged,
-		OlderThan: req.OlderThan,
-		NoTmux:    req.NoTmux,
-		DryRun:    req.DryRun,
-		Yes:       req.Yes,
+		Merged:       req.Merged,
+		Closed:       req.Closed,
+		IncludeDirty: req.IncludeDirty,
+		OlderThan:    req.OlderThan,
+		NoTmux:       req.NoTmux,
+		DryRun:       req.DryRun,
+		Yes:          req.Yes,
 	}
 	if err := gc.Run(&buf, opts); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
