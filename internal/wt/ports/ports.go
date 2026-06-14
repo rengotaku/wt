@@ -24,7 +24,8 @@ type Allocation struct {
 	Repo     string
 	WtName   string
 	Branch   string
-	PortBase int // 0 when unallocated
+	Path     string // absolute worktree path
+	PortBase int    // 0 when unallocated
 }
 
 // PortsForBase returns the BlockSize ports owned by a base port.
@@ -72,6 +73,7 @@ func Allocations() ([]Allocation, error) {
 				Repo:     repo,
 				WtName:   name,
 				Branch:   e.Branch,
+				Path:     filepath.Join(container, name),
 				PortBase: e.PortBase,
 			})
 		}

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { portsApi, settingsApi, type PortItem, type PortState } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +61,27 @@ export function PortsPage() {
 
   const allocated = ports.filter((p) => p.port_base > 0).length;
 
+  const queryClient = useQueryClient();
+  const serveMutation = useMutation({
+    mutationFn: ({ repo, wt }: { repo: string; wt: string }) =>
+      portsApi.serve(repo, wt),
+    onSuccess: (res, vars) => {
+      toast.success(`${vars.wt} を起動しました`, { description: res.output });
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+    },
+    onError: (e: Error) => toast.error("起動に失敗しました", { description: e.message }),
+  });
+  const downMutation = useMutation({
+    mutationFn: ({ repo, wt }: { repo: string; wt: string }) =>
+      portsApi.down(repo, wt),
+    onSuccess: (_res, vars) => {
+      toast.success(`${vars.wt} を停止しました`);
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+    },
+    onError: (e: Error) => toast.error("停止に失敗しました", { description: e.message }),
+  });
+  const busy = serveMutation.isPending || downMutation.isPending;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -76,23 +98,24 @@ export function PortsPage() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            各 worktree に割り当てられたポートブロックと稼働状況の一覧（現状は<strong>表示のみ</strong>）。
-            稼働中のポートは緑色で表示されます。
+            各 worktree に割り当てられたポートブロックと稼働状況の一覧。稼働中のポートは緑色で表示されます。
           </p>
           <div className="mt-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
             <p>
               ・ポートは <code className="font-mono">wt tree add</code> で worktree
-              を作成したときに自動採番されます。
+              を作成したときに自動採番されます（{allocated} 件が割当済み。本機能より前の worktree は「—」）。
             </p>
             <p>
-              ・この機能の追加より前に作られた worktree は未割当（「—」）です。新規作成分から番号が付きます（{allocated} 件が割当済み）。
+              ・<code className="font-mono">.wt/dev.toml</code> を置いた worktree は
+              「起動」ボタンで割当ポートを注入してサーバーを起動できます（CLI は{" "}
+              <code className="font-mono">wt serve</code> / <code className="font-mono">wt down</code>）。
             </p>
             <p>
               ・割当帯は{" "}
               <Link to="/settings" className="text-blue-600 hover:underline">
                 Settings
               </Link>{" "}
-              で変更できます。サーバー起動・ドメイン割当は後続対応の予定です。
+              で変更できます。ドメイン割当（*.wt.localhost）は後続対応の予定です。
             </p>
           </div>
         </CardHeader>
@@ -113,6 +136,7 @@ export function PortsPage() {
                   <TableHead>Worktree</TableHead>
                   <TableHead>ポート範囲</TableHead>
                   <TableHead>稼働</TableHead>
+                  <TableHead>操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -127,6 +151,37 @@ export function PortsPage() {
                     </TableCell>
                     <TableCell>
                       <LiveCell ports={p.ports} />
+                    </TableCell>
+                    <TableCell>
+                      {!p.has_dev_config ? (
+                        <span
+                          className="text-xs text-muted-foreground"
+                          title=".wt/dev.toml がありません"
+                        >
+                          —
+                        </span>
+                      ) : p.running ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() =>
+                            downMutation.mutate({ repo: p.repo, wt: p.wt_name })
+                          }
+                        >
+                          停止
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={busy || p.port_base === 0}
+                          onClick={() =>
+                            serveMutation.mutate({ repo: p.repo, wt: p.wt_name })
+                          }
+                        >
+                          起動
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
