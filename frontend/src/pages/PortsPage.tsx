@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
-import { portsApi, settingsApi, type PortItem, type PortState } from "@/api";
+import {
+  portsApi,
+  settingsApi,
+  type PortItem,
+  type PortState,
+  type ListenerRow,
+} from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -58,6 +64,12 @@ export function PortsPage() {
   const band = settings
     ? `${settings.dev_ports.start}-${settings.dev_ports.end}`
     : "9000-9999";
+
+  const { data: listeners = [], refetch: refetchListeners, isFetching: listenersFetching } =
+    useQuery<ListenerRow[]>({
+      queryKey: ["port-listeners"],
+      queryFn: portsApi.listeners,
+    });
 
   const allocated = ports.filter((p) => p.port_base > 0).length;
 
@@ -181,6 +193,65 @@ export function PortsPage() {
                         >
                           起動
                         </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>稼働中ポート（マシン全体）</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchListeners()}
+              disabled={listenersFetching}
+            >
+              {listenersFetching ? "更新中..." : "更新"}
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            この PC で LISTEN 中の全 TCP ポート。<strong>wt</strong>（worktree に割当）か{" "}
+            <strong>foreign</strong>（別プロジェクト等の占有）かを表示します。
+            ポート衝突の原因特定に使えます。
+          </p>
+        </CardHeader>
+        <CardContent>
+          {listeners.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              LISTEN 中のポートがありません（ss が無い環境かも）
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>ポート</TableHead>
+                  <TableHead>プロセス</TableHead>
+                  <TableHead>PID</TableHead>
+                  <TableHead>区分</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {listeners.map((l) => (
+                  <TableRow key={l.port}>
+                    <TableCell className="font-mono">{l.port}</TableCell>
+                    <TableCell className="text-xs">{l.proc || "—"}</TableCell>
+                    <TableCell className="font-mono text-xs">{l.pid || "—"}</TableCell>
+                    <TableCell>
+                      {l.managed ? (
+                        <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
+                          wt: {l.owner}
+                        </span>
+                      ) : (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                          foreign
+                        </span>
                       )}
                     </TableCell>
                   </TableRow>

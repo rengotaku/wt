@@ -25,6 +25,35 @@ type portItem struct {
 	Running      bool        `json:"running"`
 }
 
+type doctorRow struct {
+	Port    int    `json:"port"`
+	PID     int    `json:"pid,omitempty"`
+	Proc    string `json:"proc,omitempty"`
+	Managed bool   `json:"managed"`
+	Owner   string `json:"owner,omitempty"`
+}
+
+// ListListeners returns every listening TCP port on the machine, flagged as
+// wt-managed or foreign (port doctor).
+func (h *Handler) ListListeners(w http.ResponseWriter, _ *http.Request) {
+	rows, err := ports.Doctor()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]doctorRow, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, doctorRow{
+			Port:    r.Port,
+			PID:     r.PID,
+			Proc:    r.Proc,
+			Managed: r.Managed,
+			Owner:   r.Owner,
+		})
+	}
+	jsonOK(w, out)
+}
+
 // ListPorts returns the dev-band port allocation and live status for every
 // worktree across all wt-managed containers.
 func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
