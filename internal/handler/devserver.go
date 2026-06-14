@@ -7,39 +7,45 @@ import (
 
 	"wt/internal/wt/core"
 	"wt/internal/wt/devserver"
+	"wt/internal/wt/ports"
 )
 
 // resolveWorktree validates repo + wt path params and returns the worktree path
-// and its allocated port base.
-func (h *Handler) resolveWorktree(w http.ResponseWriter, r *http.Request) (worktree string, base int, ok bool) {
+// along with its container and name.
+func (h *Handler) resolveWorktree(w http.ResponseWriter, r *http.Request) (worktree, container, wtName string, ok bool) {
 	repo := r.PathValue("repo")
-	wtName := r.PathValue("wt")
+	wtName = r.PathValue("wt")
 	if !isKnownRepo(repo) {
 		jsonErr(w, http.StatusBadRequest, "unknown repo: "+repo)
-		return "", 0, false
+		return "", "", "", false
 	}
 	container, err := core.FindContainer(repo)
 	if err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
-		return "", 0, false
+		return "", "", "", false
 	}
 	entries, err := core.LoadEntries(container)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return "", 0, false
+		return "", "", "", false
 	}
-	e, ok := entries[wtName]
-	if !ok {
+	if _, exists := entries[wtName]; !exists {
 		jsonErr(w, http.StatusNotFound, "worktree が見つかりません: "+wtName)
-		return "", 0, false
+		return "", "", "", false
 	}
-	return filepath.Join(container, wtName), e.PortBase, true
+	return filepath.Join(container, wtName), container, wtName, true
 }
 
-// ServeWorktree starts the worktree's dev services on its allocated ports.
+// ServeWorktree starts the worktree's dev services, auto-allocating a port
+// block when the worktree has none yet.
 func (h *Handler) ServeWorktree(w http.ResponseWriter, r *http.Request) {
-	worktree, base, ok := h.resolveWorktree(w, r)
+	worktree, container, wtName, ok := h.resolveWorktree(w, r)
 	if !ok {
+		return
+	}
+	base, err := ports.EnsureBase(container, wtName)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	var buf bytes.Buffer
@@ -52,7 +58,7 @@ func (h *Handler) ServeWorktree(w http.ResponseWriter, r *http.Request) {
 
 // DownWorktree stops the worktree's dev services.
 func (h *Handler) DownWorktree(w http.ResponseWriter, r *http.Request) {
-	worktree, _, ok := h.resolveWorktree(w, r)
+	worktree, _, _, ok := h.resolveWorktree(w, r)
 	if !ok {
 		return
 	}

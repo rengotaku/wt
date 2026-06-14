@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -10,35 +9,32 @@ import (
 
 	"wt/internal/wt/core"
 	"wt/internal/wt/devserver"
+	"wt/internal/wt/ports"
 )
 
-// currentWorktree resolves the worktree root from the current directory along
-// with its allocated port base from the registry.
-func currentWorktree() (worktree string, base int, err error) {
+// currentWorktree resolves the worktree root and its container from the cwd.
+func currentWorktree() (worktree, container, name string, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", 0, err
+		return "", "", "", err
 	}
 	top, err := core.GitOutput(cwd, "rev-parse", "--show-toplevel")
 	if err != nil || top == "" {
-		return "", 0, errors.New("git worktree 内で実行してください")
+		return "", "", "", errors.New("git worktree 内で実行してください")
 	}
-	container := filepath.Dir(top)
-	name := filepath.Base(top)
-	entries, _ := core.LoadEntries(container)
-	e, ok := entries[name]
-	if !ok {
-		return top, 0, fmt.Errorf("worktree がレジストリに見つかりません: %s", name)
-	}
-	return top, e.PortBase, nil
+	return top, filepath.Dir(top), filepath.Base(top), nil
 }
 
 func registerServeCmd(parent *cobra.Command) {
 	serveCmd := &cobra.Command{
 		Use:   "serve",
-		Short: ".wt/dev.toml のサーバーを割当ポートで起動",
+		Short: ".wt/dev.toml のサーバーを割当ポートで起動（未割当なら自動採番）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			wt, base, err := currentWorktree()
+			wt, container, name, err := currentWorktree()
+			if err != nil {
+				return err
+			}
+			base, err := ports.EnsureBase(container, name)
 			if err != nil {
 				return err
 			}
@@ -49,7 +45,7 @@ func registerServeCmd(parent *cobra.Command) {
 		Use:   "down",
 		Short: "wt serve で起動したサーバーを停止",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			wt, _, err := currentWorktree()
+			wt, _, _, err := currentWorktree()
 			if err != nil {
 				return err
 			}

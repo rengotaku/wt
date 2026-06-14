@@ -119,6 +119,29 @@ func writeContainer(t *testing.T, repo string, bases map[string]int) string {
 	return container
 }
 
+func TestEnsureBase_AllocatesWhenUnset_ReusesWhenSet(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	container := writeContainer(t, "repo-a", map[string]int{"wt1": 0, "wt2": 9005})
+
+	got, err := EnsureBase(container, "wt1")
+	if err != nil {
+		t.Fatalf("EnsureBase wt1: %v", err)
+	}
+	if got == 0 || got == 9005 {
+		t.Errorf("wt1 base = %d, want a fresh non-zero base ≠ 9005", got)
+	}
+	entries, _ := core.LoadEntries(container)
+	if entries["wt1"].PortBase != got {
+		t.Errorf("wt1 base not persisted: %d vs %d", entries["wt1"].PortBase, got)
+	}
+	if again, _ := EnsureBase(container, "wt1"); again != got {
+		t.Errorf("EnsureBase reuse = %d, want %d", again, got)
+	}
+	if b, _ := EnsureBase(container, "wt2"); b != 9005 {
+		t.Errorf("wt2 base = %d, want 9005 (unchanged)", b)
+	}
+}
+
 func TestAllocate_GlobalUniqueAcrossRepos(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	writeContainer(t, "repo-a", map[string]int{"wt1": 9000})
