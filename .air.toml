@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -tags dev -o ./tmp/air-server ."
   bin = "./tmp/air-server"
-  full_bin = "./tmp/air-server web -p 8080"
+  full_bin = "./tmp/air-server web -p 8091"
   include_ext = ["go"]
   exclude_dir = ["tmp", "frontend", "internal/static/dist"]
   delay = 1000

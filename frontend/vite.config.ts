@@ -12,7 +12,9 @@ export default defineConfig({
   },
   server: {
     port: 5174,
-    proxy: { "/api": "http://localhost:8080" },
+    // dev backend = air on :8091 (see .air.toml). Distinct from the systemd
+    // wt-web instance on :8090 so `make run` exercises local backend code.
+    proxy: { "/api": "http://localhost:8091" },
   },
   build: {
     outDir: "../internal/static/dist",
