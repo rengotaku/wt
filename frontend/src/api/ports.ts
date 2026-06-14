@@ -32,6 +32,20 @@ export interface ListenerRow {
   owner?: string; // "repo/wtname" when managed
 }
 
+export interface DevService {
+  name: string;
+  cmd: string;
+  domain: boolean;
+}
+
+export interface DevConfig {
+  has_config: boolean;
+  services: DevService[];
+}
+
+const devConfigURL = (repo: string, wtName: string) =>
+  `api/ports/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/devconfig`;
+
 export const portsApi = {
   list: (): Promise<PortItem[]> => apiClient.get("api/ports").json(),
 
@@ -47,4 +61,14 @@ export const portsApi = {
     apiClient
       .post(`api/ports/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/down`)
       .json(),
+
+  getDevConfig: (repo: string, wtName: string): Promise<DevConfig> =>
+    apiClient.get(devConfigURL(repo, wtName)).json(),
+
+  putDevConfig: (
+    repo: string,
+    wtName: string,
+    services: DevService[],
+  ): Promise<DevConfig> =>
+    apiClient.put(devConfigURL(repo, wtName), { json: { services } }).json(),
 };

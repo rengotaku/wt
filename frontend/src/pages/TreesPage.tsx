@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, FileCog } from "lucide-react";
 import {
   treesApi,
   reposApi,
@@ -14,6 +14,7 @@ import {
   type PortItem,
 } from "@/api";
 import { filterTrees } from "./treesFilter";
+import { DevConfigPanel, type DevConfigTarget } from "@/components/DevConfigPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -92,6 +93,7 @@ export function TreesPage() {
     onError: (e: Error) => toast.error("停止に失敗しました", { description: e.message }),
   });
   const portBusy = serveMutation.isPending || downMutation.isPending;
+  const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
@@ -684,20 +686,32 @@ export function TreesPage() {
                           {t.created_at || "—"}
                         </TableCell>
                         <TableCell className="text-xs">
-                          {!port || (!port.has_dev_config && port.port_base === 0) ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : (
                             <div className="flex items-center gap-1.5">
                               <span
                                 className={
-                                  port.running
+                                  port?.running
                                     ? "font-mono text-green-700"
                                     : "font-mono text-muted-foreground"
                                 }
                               >
-                                {port.port_range ?? "未割当"}
+                                {port?.has_dev_config ? (port.port_range ?? "未割当") : "—"}
                               </span>
-                              {port.has_dev_config &&
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-1.5"
+                                title={
+                                  port?.has_dev_config
+                                    ? "dev.toml を編集"
+                                    : "dev.toml を作成して起動可能にする"
+                                }
+                                onClick={() =>
+                                  setDevConfigTarget({ repo: t.repo, wt: t.wt_name })
+                                }
+                              >
+                                <FileCog className="h-3 w-3" />
+                              </Button>
+                              {port?.has_dev_config &&
                                 (port.running ? (
                                   <Button
                                     variant="outline"
@@ -722,7 +736,7 @@ export function TreesPage() {
                                     起動
                                   </Button>
                                 ))}
-                              {port.running && port.domain && (
+                              {port?.running && port.domain && (
                                 <a
                                   href={`http://${port.domain}:8088`}
                                   target="_blank"
@@ -734,7 +748,6 @@ export function TreesPage() {
                                 </a>
                               )}
                             </div>
-                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -800,6 +813,10 @@ export function TreesPage() {
           </Card>
         </div>
       )}
+      <DevConfigPanel
+        target={devConfigTarget}
+        onClose={() => setDevConfigTarget(null)}
+      />
     </div>
   );
 }
