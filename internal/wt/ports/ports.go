@@ -114,3 +114,29 @@ func Allocate() (int, error) {
 	band := settings.Load().DevPorts
 	return freeBase(used, band.Start, band.End)
 }
+
+// EnsureBase returns the worktree's allocated port base, allocating and
+// persisting one to .worktrees.json when it currently has none (base 0). This
+// lets `wt serve` work on worktrees created before allocation existed.
+func EnsureBase(container, wtName string) (int, error) {
+	entries, err := core.LoadEntries(container)
+	if err != nil {
+		return 0, err
+	}
+	e, ok := entries[wtName]
+	if !ok {
+		return 0, fmt.Errorf("worktree がレジストリに見つかりません: %s", wtName)
+	}
+	if e.PortBase != 0 {
+		return e.PortBase, nil
+	}
+	base, err := Allocate()
+	if err != nil {
+		return 0, err
+	}
+	e.PortBase = base
+	if err := core.PutEntry(container, wtName, &e); err != nil {
+		return 0, err
+	}
+	return base, nil
+}
