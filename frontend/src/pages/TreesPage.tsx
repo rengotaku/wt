@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw, Copy, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import {
   treesApi,
   reposApi,
@@ -28,6 +28,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 // ページ遷移をまたいで保持するモジュールレベルキャッシュ
 const prCache = new Map<string, MergedPRInfo[]>();
 const issueCache = new Map<string, IssueDetail[]>();
+
+// navigator.clipboard が使えない環境向けの execCommand フォールバック。成否を返す。
+function fallbackCopy(text: string): boolean {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 export function TreesPage() {
   const [searchParams] = useSearchParams();
@@ -75,6 +92,10 @@ export function TreesPage() {
   const [copyTemplate, setCopyTemplate] = useState<string>(
     () => localStorage.getItem("wt-copy-template") ?? "$path"
   );
+
+  // コピー直後にボタンを ✓ 表示へ切り替えるための状態（行ごと、1.5秒で戻す）
+  const [copiedPath, setCopiedPath] = useState<string | null>(null);
+  const copyResetRef = useRef<number>(0);
 
   // キャッシュから初期化 → マウント後に未取得分を順次フェッチ
   const [prData, setPrData] = useState<Record<string, MergedPRInfo[]>>(() =>
@@ -176,13 +197,22 @@ export function TreesPage() {
   };
 
   const handleCopyPath = async (path: string) => {
+    const text = (copyTemplate || "$path").replace(/\$path/g, path);
     try {
-      const text = (copyTemplate || "$path").replace(/\$path/g, path);
       await navigator.clipboard.writeText(text);
-      toast.success("Copied:", { description: text });
     } catch {
-      toast.error("コピーに失敗しました");
+      // navigator.clipboard が使えない環境（非セキュアコンテキスト等）でも握りつぶさず
+      // フォールバックを試み、それでも失敗ならエラーを通知する。
+      const ok = fallbackCopy(text);
+      if (!ok) {
+        toast.error("コピーに失敗しました");
+        return;
+      }
     }
+    setCopiedPath(path);
+    window.clearTimeout(copyResetRef.current);
+    copyResetRef.current = window.setTimeout(() => setCopiedPath(null), 1500);
+    toast.success("コピーしました", { description: text });
   };
 
   const repoURLMap = Object.fromEntries(repos.map((r) => [r.name, r.github_url ?? ""]));
@@ -214,6 +244,15 @@ export function TreesPage() {
   };
 
   const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter, issueData);
+
+  // デフォルトは作成日の新しい順。created_at は "YYYY-MM-DD" なので辞書順比較で日付順になる。
+  // created_at が空（main worktree 等）は末尾に回す。
+  const sortedTrees = [...filteredTrees].sort((a, b) => {
+    if (!a.created_at && !b.created_at) return 0;
+    if (!a.created_at) return 1;
+    if (!b.created_at) return -1;
+    return b.created_at.localeCompare(a.created_at);
+  });
 
   const selectableTrees = filteredTrees.filter((t) => !t.is_main);
   const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
@@ -463,7 +502,7 @@ export function TreesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTrees.map((t) => {
+                  {sortedTrees.map((t) => {
                     const pr = getPR(t);
                     const issueURL = getIssueURL(t);
                     const issueDetail = getIssueDetail(t);
@@ -503,19 +542,25 @@ export function TreesPage() {
                             {t.repo}
                           </button>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex items-center gap-1">
-                            {t.wt_name}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-5 w-5 p-0"
-                              onClick={() => handleCopyPath(t.path)}
-                              title={t.path}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                          </div>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => handleCopyPath(t.path)}
+                            title={
+                              copiedPath === t.path
+                                ? "コピーしました"
+                                : `${t.wt_name}\n${t.path}`
+                            }
+                            aria-label={`${t.wt_name} のパスをコピー`}
+                          >
+                            {copiedPath === t.path ? (
+                              <Check className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {t.branch || "—"}

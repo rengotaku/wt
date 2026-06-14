@@ -31,7 +31,7 @@ export function Layout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
+      <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-0 py-8 sm:px-4">
         <Outlet />
       </main>
     </div>

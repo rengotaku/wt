@@ -102,3 +102,24 @@
 .row-highlight {
   animation: row-highlight-fade 3s ease-out forwards;
 }
+
+/*
+ * Always-visible thin horizontal scrollbar for wide tables.
+ * Linux/GTK のオーバーレイスクロールバーは未操作時に隠れるため、横に広いテーブルが
+ * 「中央で見切れて固定」しているように見える。明示スタイルでバーを常時描画し、
+ * スクロール可能であることを分かるようにする（::-webkit-scrollbar 指定で非オーバーレイ化）。
+ */
+.scrollbar-x-stable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-x-stable::-webkit-scrollbar {
+  height: 10px;
+}
+.scrollbar-x-stable::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+.scrollbar-x-stable::-webkit-scrollbar-track {
+  background-color: transparent;
+}
