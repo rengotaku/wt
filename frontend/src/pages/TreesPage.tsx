@@ -684,7 +684,7 @@ export function TreesPage() {
                           {t.created_at || "—"}
                         </TableCell>
                         <TableCell className="text-xs">
-                          {!port || port.port_base === 0 ? (
+                          {!port || (!port.has_dev_config && port.port_base === 0) ? (
                             <span className="text-muted-foreground">—</span>
                           ) : (
                             <div className="flex items-center gap-1.5">
@@ -695,7 +695,7 @@ export function TreesPage() {
                                     : "font-mono text-muted-foreground"
                                 }
                               >
-                                {port.port_range}
+                                {port.port_range ?? "未割当"}
                               </span>
                               {port.has_dev_config &&
                                 (port.running ? (
