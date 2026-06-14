@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -101,6 +102,48 @@ cmd = "sleep 30"
 	if IsRunning(wt) {
 		t.Error("IsRunning should be false after Down")
 	}
+}
+
+func TestServe_DeadOnStartupNotRecorded(t *testing.T) {
+	// A command that exits immediately (as a port conflict would) must be
+	// reported as failed, not as running.
+	wt := writeWorktree(t, "[[services]]\nname = \"crasher\"\ncmd = \"echo 'Address already in use' >&2; exit 1\"\n")
+	var buf bytes.Buffer
+	err := Serve(&buf, wt, 9000)
+	if err == nil {
+		t.Fatal("expected error when the only service dies on startup")
+	}
+	if IsRunning(wt) {
+		t.Error("IsRunning should be false: the crashed service must not be recorded")
+	}
+	if !strings.Contains(buf.String(), "Address already in use") {
+		t.Errorf("output should include the log tail explaining the failure, got:\n%s", buf.String())
+	}
+}
+
+func TestServe_PartialFailureKeepsSurvivors(t *testing.T) {
+	// One service stays up, one dies: Serve succeeds, records only the survivor.
+	wt := writeWorktree(t, `
+[[services]]
+name = "good"
+cmd = "sleep 30"
+
+[[services]]
+name = "bad"
+cmd = "exit 1"
+`)
+	var buf bytes.Buffer
+	if err := Serve(&buf, wt, 9000); err != nil {
+		t.Fatalf("Serve should succeed when at least one service survives: %v", err)
+	}
+	r, err := loadRunning(wt)
+	if err != nil {
+		t.Fatalf("loadRunning: %v", err)
+	}
+	if len(r.Services) != 1 || r.Services[0].Name != "good" {
+		t.Errorf("only the surviving service should be recorded, got %+v", r.Services)
+	}
+	_ = Down(&buf, wt)
 }
 
 func TestServe_NoConfig(t *testing.T) {

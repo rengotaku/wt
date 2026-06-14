@@ -49,6 +49,15 @@ func TestRangeString(t *testing.T) {
 	}
 }
 
+// stubNoListeners makes occupiedPorts ignore the machine's real `ss` output so
+// allocation tests are deterministic. Restored automatically after the test.
+func stubNoListeners(t *testing.T) {
+	t.Helper()
+	prev := listenersInBand
+	listenersInBand = func(int, int) map[int]Listener { return map[int]Listener{} }
+	t.Cleanup(func() { listenersInBand = prev })
+}
+
 func TestFreeBase(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -57,7 +66,8 @@ func TestFreeBase(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "empty → first", used: map[int]bool{}, want: 9000},
-		{name: "first taken → second", used: map[int]bool{9000: true}, want: 9005},
+		{name: "first port taken → second block", used: map[int]bool{9000: true}, want: 9005},
+		{name: "mid-block port taken → block skipped", used: map[int]bool{9002: true}, want: 9005},
 		{name: "gap reused", used: map[int]bool{9000: true, 9010: true}, want: 9005},
 	}
 	for _, tt := range tests {
@@ -121,6 +131,7 @@ func writeContainer(t *testing.T, repo string, bases map[string]int) string {
 
 func TestEnsureBase_AllocatesWhenUnset_ReusesWhenSet(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
 	container := writeContainer(t, "repo-a", map[string]int{"wt1": 0, "wt2": 9005})
 
 	got, err := EnsureBase(container, "wt1")
@@ -144,6 +155,7 @@ func TestEnsureBase_AllocatesWhenUnset_ReusesWhenSet(t *testing.T) {
 
 func TestAllocate_GlobalUniqueAcrossRepos(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
 	writeContainer(t, "repo-a", map[string]int{"wt1": 9000})
 	writeContainer(t, "repo-b", map[string]int{"wt2": 9005})
 
@@ -158,6 +170,7 @@ func TestAllocate_GlobalUniqueAcrossRepos(t *testing.T) {
 
 func TestAllocate_ReusesReleasedBlock(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
 	container := writeContainer(t, "repo-a", map[string]int{"wt1": 9000, "wt2": 9005})
 
 	// Releasing wt1 (delete entry) frees 9000 for reuse.
@@ -170,6 +183,26 @@ func TestAllocate_ReusesReleasedBlock(t *testing.T) {
 	}
 	if got != 9000 {
 		t.Errorf("Allocate = %d, want 9000 (released block reused)", got)
+	}
+}
+
+func TestAllocate_SkipsBlockWithLiveListener(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	// Registry is empty, so the registry-only logic would hand out 9000. But a
+	// foreign process is LISTENing on 9002, which falls in the 9000-9004 block,
+	// so that whole block must be skipped in favour of 9005.
+	prev := listenersInBand
+	listenersInBand = func(int, int) map[int]Listener {
+		return map[int]Listener{9002: {Port: 9002, PID: 1234, Proc: "foreign"}}
+	}
+	t.Cleanup(func() { listenersInBand = prev })
+
+	got, err := Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 9005 {
+		t.Errorf("Allocate = %d, want 9005 (9000 block occupied by live :9002)", got)
 	}
 }
 
