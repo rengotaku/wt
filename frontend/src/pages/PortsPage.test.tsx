@@ -1,40 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { within } from "@testing-library/react";
 import { render, screen, waitFor } from "@/test/test-utils";
 import { PortsPage } from "./PortsPage";
 
-const mockPorts = [
-  {
-    repo: "myrepo",
-    wt_name: "myrepo--feat-issue-1-abc",
-    branch: "feat/issue-1-abc",
-    port_base: 9000,
-    port_range: "9000-9004",
-    ports: [
-      { port: 9000, listening: true, pid: 12345, proc: "air" },
-      { port: 9001, listening: false },
-      { port: 9002, listening: false },
-      { port: 9003, listening: false },
-      { port: 9004, listening: false },
-    ],
-  },
-  {
-    repo: "myrepo",
-    wt_name: "myrepo--feat-issue-2-xyz",
-    branch: "feat/issue-2-xyz",
-    port_base: 9005,
-    port_range: "9005-9009",
-    ports: [
-      { port: 9005, listening: false },
-      { port: 9006, listening: false },
-    ],
-  },
-  {
-    repo: "otherrepo",
-    wt_name: "otherrepo",
-    branch: "main",
-    port_base: 0,
-    ports: [],
-  },
+const mockListeners = [
+  { port: 8000, pid: 111, proc: "python", managed: false }, // foreign squatter
+  { port: 9000, pid: 222, proc: "air", managed: true, owner: "wt/main" },
 ];
 
 vi.mock("@/api", async (importOriginal) => {
@@ -43,38 +14,36 @@ vi.mock("@/api", async (importOriginal) => {
     ...actual,
     portsApi: {
       ...actual.portsApi,
-      list: vi.fn(),
+      listeners: vi.fn(),
     },
   };
 });
 
-describe("PortsPage", () => {
+describe("PortsPage (machine-wide port doctor)", () => {
   beforeEach(async () => {
     const { portsApi } = await import("@/api");
-    vi.mocked(portsApi.list).mockResolvedValue(mockPorts as never);
+    vi.mocked(portsApi.listeners).mockResolvedValue(mockListeners as never);
   });
 
-  it("renders allocated port ranges and the listening port for a running worktree", async () => {
+  it("lists all listening ports with proc and pid", async () => {
     render(<PortsPage />);
-
     await waitFor(() => {
-      expect(screen.getByText("9000-9004")).toBeInTheDocument();
+      expect(screen.getByText("8000")).toBeInTheDocument();
     });
-    expect(screen.getByText("9005-9009")).toBeInTheDocument();
-    // Listening port shows its proc + pid.
-    expect(screen.getByText("9000 air(12345)")).toBeInTheDocument();
-    // The all-down worktree shows "idle".
-    expect(screen.getByText("idle")).toBeInTheDocument();
+    expect(screen.getByText("python")).toBeInTheDocument();
+    expect(screen.getByText("9000")).toBeInTheDocument();
   });
 
-  it("shows an em dash for an unallocated worktree", async () => {
+  it("classifies wt-managed vs foreign", async () => {
     render(<PortsPage />);
-
     await waitFor(() => {
-      expect(screen.getByText("9000-9004")).toBeInTheDocument();
+      expect(screen.getByText("8000")).toBeInTheDocument();
     });
-    // Unallocated row (port_base 0) renders dashes for both the range and live cells.
-    const dashes = screen.getAllByText("—");
-    expect(dashes.length).toBeGreaterThanOrEqual(2);
+    const table = screen.getByRole("table");
+    // Only the 8000 squatter is foreign; the 9000 wt-managed row is not.
+    expect(within(table).getAllByText("foreign")).toHaveLength(1);
+    expect(
+      within(table).getByText((c) => c.includes("wt/main"))
+    ).toBeInTheDocument();
   });
 });

@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { RefreshCw, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import {
   treesApi,
   reposApi,
+  portsApi,
   type AddTreeRequest,
   type TreeItem,
   type MergedPRInfo,
   type IssueDetail,
+  type PortItem,
 } from "@/api";
 import { filterTrees } from "./treesFilter";
 import { Button } from "@/components/ui/button";
@@ -65,6 +67,31 @@ export function TreesPage() {
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
+  const { data: portItems = [] } = useQuery<PortItem[]>({
+    queryKey: ["ports"],
+    queryFn: portsApi.list,
+    refetchOnWindowFocus: false,
+  });
+  const portMap = new Map(portItems.map((p) => [`${p.repo}/${p.wt_name}`, p]));
+
+  const queryClient = useQueryClient();
+  const serveMutation = useMutation({
+    mutationFn: ({ repo, wt }: { repo: string; wt: string }) => portsApi.serve(repo, wt),
+    onSuccess: (_r, v) => {
+      toast.success(`${v.wt} を起動しました`);
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+    },
+    onError: (e: Error) => toast.error("起動に失敗しました", { description: e.message }),
+  });
+  const downMutation = useMutation({
+    mutationFn: ({ repo, wt }: { repo: string; wt: string }) => portsApi.down(repo, wt),
+    onSuccess: (_r, v) => {
+      toast.success(`${v.wt} を停止しました`);
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+    },
+    onError: (e: Error) => toast.error("停止に失敗しました", { description: e.message }),
+  });
+  const portBusy = serveMutation.isPending || downMutation.isPending;
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
@@ -499,6 +526,7 @@ export function TreesPage() {
                       変更
                     </TableHead>
                     <TableHead>作成日</TableHead>
+                    <TableHead title="割当ポート帯と稼働状況">ポート</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -507,6 +535,7 @@ export function TreesPage() {
                     const issueURL = getIssueURL(t);
                     const issueDetail = getIssueDetail(t);
                     const isPRLoading = loadingPRRepos.has(t.repo);
+                    const port = portMap.get(`${t.repo}/${t.wt_name}`);
                     return (
                       <TableRow
                         key={t.path}
@@ -653,6 +682,48 @@ export function TreesPage() {
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {t.created_at || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {!port || port.port_base === 0 ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={
+                                  port.running
+                                    ? "font-mono text-green-700"
+                                    : "font-mono text-muted-foreground"
+                                }
+                              >
+                                {port.port_range}
+                              </span>
+                              {port.has_dev_config &&
+                                (port.running ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2"
+                                    disabled={portBusy}
+                                    onClick={() =>
+                                      downMutation.mutate({ repo: t.repo, wt: t.wt_name })
+                                    }
+                                  >
+                                    停止
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    className="h-6 px-2"
+                                    disabled={portBusy}
+                                    onClick={() =>
+                                      serveMutation.mutate({ repo: t.repo, wt: t.wt_name })
+                                    }
+                                  >
+                                    起動
+                                  </Button>
+                                ))}
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

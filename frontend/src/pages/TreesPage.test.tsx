@@ -63,6 +63,12 @@ vi.mock("@/api", async (importOriginal) => {
       ...actual.reposApi,
       list: vi.fn().mockResolvedValue([]),
     },
+    portsApi: {
+      ...actual.portsApi,
+      list: vi.fn().mockResolvedValue([]),
+      serve: vi.fn(),
+      down: vi.fn(),
+    },
   };
 });
 
