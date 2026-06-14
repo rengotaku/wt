@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+func TestSharedEnv(t *testing.T) {
+	svcs := []Service{{Name: "api"}, {Name: "web-ui"}}
+	got := sharedEnv(svcs, 9000)
+	want := []string{"WT_PORT_API=9000", "WT_PORT_WEB_UI=9001"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("env[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestApplyPort(t *testing.T) {
 	got := applyPort("go run . web -p ${port}", 9001)
 	if got != "go run . web -p 9001" {
