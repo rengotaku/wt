@@ -186,6 +186,48 @@ func TestAllocate_ReusesReleasedBlock(t *testing.T) {
 	}
 }
 
+func TestEnsureAll_AssignsMissingOnly_AndIdempotent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
+	// wt2 already has 9005; wt1 and wt3 are unallocated.
+	writeContainer(t, "repo-a", map[string]int{"wt1": 0, "wt2": 9005, "wt3": 0})
+
+	made, err := EnsureAll()
+	if err != nil {
+		t.Fatalf("EnsureAll: %v", err)
+	}
+	if len(made) != 2 {
+		t.Fatalf("got %d assignments, want 2 (the two unallocated)", len(made))
+	}
+
+	entries, _ := core.LoadEntries(filepath.Join(os.Getenv("HOME"), "Workspace", "repo-a"))
+	if entries["wt2"].PortBase != 9005 {
+		t.Errorf("wt2 base changed to %d, want 9005 (untouched)", entries["wt2"].PortBase)
+	}
+	bases := map[int]int{}
+	for _, name := range []string{"wt1", "wt2", "wt3"} {
+		b := entries[name].PortBase
+		if b == 0 {
+			t.Errorf("%s still unallocated", name)
+		}
+		bases[b]++
+	}
+	for b, n := range bases {
+		if n > 1 {
+			t.Errorf("base %d assigned to %d worktrees (collision)", b, n)
+		}
+	}
+
+	// Second run is a no-op: everything is now allocated.
+	again, err := EnsureAll()
+	if err != nil {
+		t.Fatalf("EnsureAll (2nd): %v", err)
+	}
+	if len(again) != 0 {
+		t.Errorf("2nd EnsureAll made %d assignments, want 0", len(again))
+	}
+}
+
 func TestAllocate_SkipsBlockWithLiveListener(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	// Registry is empty, so the registry-only logic would hand out 9000. But a
