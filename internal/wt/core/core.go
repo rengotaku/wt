@@ -148,6 +148,9 @@ type Entry struct {
 	Description string   `json:"description,omitempty"`
 	Issue       string   `json:"issue,omitempty"`
 	Symlinked   []string `json:"symlinked,omitempty"`
+	// PortBase is the first port of the worktree's dev port block (9000-9999,
+	// BlockSize ports). 0 means no allocation. See internal/wt/ports.
+	PortBase int `json:"port_base,omitempty"`
 }
 
 // LoadEntries reads worktree entries (skipping _config).

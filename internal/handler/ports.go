@@ -1,0 +1,54 @@
+package handler
+
+import (
+	"net/http"
+
+	"wt/internal/wt/ports"
+)
+
+type portState struct {
+	Port      int    `json:"port"`
+	Listening bool   `json:"listening"`
+	PID       int    `json:"pid,omitempty"`
+	Proc      string `json:"proc,omitempty"`
+}
+
+type portItem struct {
+	Repo      string      `json:"repo"`
+	WtName    string      `json:"wt_name"`
+	Branch    string      `json:"branch,omitempty"`
+	PortBase  int         `json:"port_base"`
+	PortRange string      `json:"port_range,omitempty"`
+	Ports     []portState `json:"ports"`
+}
+
+// ListPorts returns the dev-band port allocation and live status for every
+// worktree across all wt-managed containers.
+func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
+	rows, err := ports.Status()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	items := make([]portItem, 0, len(rows))
+	for _, r := range rows {
+		states := make([]portState, 0, len(r.Ports))
+		for _, p := range r.Ports {
+			states = append(states, portState{
+				Port:      p.Port,
+				Listening: p.Listening,
+				PID:       p.PID,
+				Proc:      p.Proc,
+			})
+		}
+		items = append(items, portItem{
+			Repo:      r.Repo,
+			WtName:    r.WtName,
+			Branch:    r.Branch,
+			PortBase:  r.PortBase,
+			PortRange: ports.RangeString(r.PortBase),
+			Ports:     states,
+		})
+	}
+	jsonOK(w, items)
+}

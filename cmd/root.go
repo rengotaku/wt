@@ -57,6 +57,7 @@ func init() {
 	registerRepoCmd(rootCmd)
 	registerSymlinkCmd(rootCmd)
 	registerWebCmd(rootCmd)
+	registerPortsCmd(rootCmd)
 }
 
 // Execute runs the root command with a background context.

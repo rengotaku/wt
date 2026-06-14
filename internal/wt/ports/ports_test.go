@@ -1,0 +1,162 @@
+package ports
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"wt/internal/wt/core"
+)
+
+func TestPortsForBase(t *testing.T) {
+	tests := []struct {
+		name string
+		base int
+		want []int
+	}{
+		{name: "unallocated", base: 0, want: nil},
+		{name: "band start", base: 9000, want: []int{9000, 9001, 9002, 9003, 9004}},
+		{name: "second block", base: 9005, want: []int{9005, 9006, 9007, 9008, 9009}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PortsForBase(tt.base)
+			if len(got) != len(tt.want) {
+				t.Fatalf("len = %d, want %d (%v)", len(got), len(tt.want), got)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("port[%d] = %d, want %d", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestRangeString(t *testing.T) {
+	tests := []struct {
+		base int
+		want string
+	}{
+		{base: 0, want: ""},
+		{base: 9000, want: "9000-9004"},
+		{base: 9995, want: "9995-9999"},
+	}
+	for _, tt := range tests {
+		if got := RangeString(tt.base); got != tt.want {
+			t.Errorf("RangeString(%d) = %q, want %q", tt.base, got, tt.want)
+		}
+	}
+}
+
+func TestFreeBase(t *testing.T) {
+	tests := []struct {
+		name    string
+		used    map[int]bool
+		want    int
+		wantErr bool
+	}{
+		{name: "empty → first", used: map[int]bool{}, want: 9000},
+		{name: "first taken → second", used: map[int]bool{9000: true}, want: 9005},
+		{name: "gap reused", used: map[int]bool{9000: true, 9010: true}, want: 9005},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := freeBase(tt.used)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got base %d", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("freeBase = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFreeBase_Full(t *testing.T) {
+	used := map[int]bool{}
+	for base := BandStart; base+BlockSize-1 <= BandEnd; base += BlockSize {
+		used[base] = true
+	}
+	if len(used) != BlockCount {
+		t.Fatalf("setup: used has %d blocks, want %d", len(used), BlockCount)
+	}
+	if _, err := freeBase(used); err == nil {
+		t.Error("expected error when band is full, got nil")
+	}
+}
+
+// writeContainer creates a temp container with the given worktree→base mapping.
+func writeContainer(t *testing.T, repo string, bases map[string]int) string {
+	t.Helper()
+	home := os.Getenv("HOME")
+	container := filepath.Join(home, "Workspace", repo)
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, base := range bases {
+		e := core.Entry{Branch: name}
+		e.PortBase = base
+		if err := core.PutEntry(container, name, &e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return container
+}
+
+func TestAllocate_GlobalUniqueAcrossRepos(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	writeContainer(t, "repo-a", map[string]int{"wt1": 9000})
+	writeContainer(t, "repo-b", map[string]int{"wt2": 9005})
+
+	got, err := Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 9010 {
+		t.Errorf("Allocate = %d, want 9010 (lowest free across both repos)", got)
+	}
+}
+
+func TestAllocate_ReusesReleasedBlock(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	container := writeContainer(t, "repo-a", map[string]int{"wt1": 9000, "wt2": 9005})
+
+	// Releasing wt1 (delete entry) frees 9000 for reuse.
+	if err := core.DeleteEntry(container, "wt1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 9000 {
+		t.Errorf("Allocate = %d, want 9000 (released block reused)", got)
+	}
+}
+
+func TestAllocations_SortedAndCarriesBase(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	writeContainer(t, "zrepo", map[string]int{"wtz": 9005})
+	writeContainer(t, "arepo", map[string]int{"wta": 9000})
+
+	allocs, err := Allocations()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(allocs) != 2 {
+		t.Fatalf("got %d allocations, want 2", len(allocs))
+	}
+	if allocs[0].Repo != "arepo" || allocs[1].Repo != "zrepo" {
+		t.Errorf("not sorted by repo: %+v", allocs)
+	}
+	if allocs[0].PortBase != 9000 {
+		t.Errorf("arepo base = %d, want 9000", allocs[0].PortBase)
+	}
+}
