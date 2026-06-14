@@ -722,6 +722,17 @@ export function TreesPage() {
                                     起動
                                   </Button>
                                 ))}
+                              {port.running && port.domain && (
+                                <a
+                                  href={`http://${port.domain}:8088`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-xs text-blue-600 hover:underline"
+                                  title="wt proxy 経由で開く（要 wt proxy 起動）"
+                                >
+                                  {port.domain}
+                                </a>
+                              )}
                             </div>
                           )}
                         </TableCell>

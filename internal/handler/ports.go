@@ -5,6 +5,7 @@ import (
 
 	"wt/internal/wt/devserver"
 	"wt/internal/wt/ports"
+	"wt/internal/wt/proxy"
 )
 
 type portState struct {
@@ -23,6 +24,7 @@ type portItem struct {
 	Ports        []portState `json:"ports"`
 	HasDevConfig bool        `json:"has_dev_config"`
 	Running      bool        `json:"running"`
+	Domain       string      `json:"domain,omitempty"` // <label>.wt.localhost when a domain service exists
 }
 
 type doctorRow struct {
@@ -62,6 +64,13 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// domain map keyed by repo/wtname for worktrees exposing a domain service.
+	domainOf := map[string]string{}
+	if routes, err := proxy.Routes(); err == nil {
+		for _, rt := range routes {
+			domainOf[rt.Repo+"/"+rt.WtName] = rt.Domain()
+		}
+	}
 	items := make([]portItem, 0, len(rows))
 	for _, r := range rows {
 		states := make([]portState, 0, len(r.Ports))
@@ -82,6 +91,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			Ports:        states,
 			HasDevConfig: devserver.HasConfig(r.Path),
 			Running:      devserver.IsRunning(r.Path),
+			Domain:       domainOf[r.Repo+"/"+r.WtName],
 		})
 	}
 	jsonOK(w, items)

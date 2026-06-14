@@ -59,6 +59,7 @@ func init() {
 	registerWebCmd(rootCmd)
 	registerPortsCmd(rootCmd)
 	registerServeCmd(rootCmd)
+	registerProxyCmd(rootCmd)
 }
 
 // Execute runs the root command with a background context.
