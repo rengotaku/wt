@@ -54,3 +54,15 @@ func Load(worktree string) (Config, error) {
 func applyPort(cmd string, port int) string {
 	return strings.ReplaceAll(cmd, "${port}", strconv.Itoa(port))
 }
+
+// sharedEnv builds WT_PORT_<NAME>=<port> entries for every service so each
+// service can discover its siblings' allocated ports. Service i gets base+i.
+func sharedEnv(services []Service, base int) []string {
+	repl := strings.NewReplacer("-", "_", " ", "_")
+	out := make([]string, 0, len(services))
+	for i, s := range services {
+		name := strings.ToUpper(repl.Replace(s.Name))
+		out = append(out, "WT_PORT_"+name+"="+strconv.Itoa(base+i))
+	}
+	return out
+}
