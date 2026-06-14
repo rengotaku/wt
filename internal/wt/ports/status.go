@@ -16,6 +16,7 @@ type Row struct {
 	Repo     string
 	WtName   string
 	Branch   string
+	Path     string
 	PortBase int
 	Ports    []PortState
 }
@@ -36,6 +37,7 @@ func Status() ([]Row, error) {
 			Repo:     a.Repo,
 			WtName:   a.WtName,
 			Branch:   a.Branch,
+			Path:     a.Path,
 			PortBase: a.PortBase,
 		}
 		for _, p := range PortsForBase(a.PortBase) {

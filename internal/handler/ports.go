@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"wt/internal/wt/devserver"
 	"wt/internal/wt/ports"
 )
 
@@ -14,12 +15,14 @@ type portState struct {
 }
 
 type portItem struct {
-	Repo      string      `json:"repo"`
-	WtName    string      `json:"wt_name"`
-	Branch    string      `json:"branch,omitempty"`
-	PortBase  int         `json:"port_base"`
-	PortRange string      `json:"port_range,omitempty"`
-	Ports     []portState `json:"ports"`
+	Repo         string      `json:"repo"`
+	WtName       string      `json:"wt_name"`
+	Branch       string      `json:"branch,omitempty"`
+	PortBase     int         `json:"port_base"`
+	PortRange    string      `json:"port_range,omitempty"`
+	Ports        []portState `json:"ports"`
+	HasDevConfig bool        `json:"has_dev_config"`
+	Running      bool        `json:"running"`
 }
 
 // ListPorts returns the dev-band port allocation and live status for every
@@ -42,12 +45,14 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			})
 		}
 		items = append(items, portItem{
-			Repo:      r.Repo,
-			WtName:    r.WtName,
-			Branch:    r.Branch,
-			PortBase:  r.PortBase,
-			PortRange: ports.RangeString(r.PortBase),
-			Ports:     states,
+			Repo:         r.Repo,
+			WtName:       r.WtName,
+			Branch:       r.Branch,
+			PortBase:     r.PortBase,
+			PortRange:    ports.RangeString(r.PortBase),
+			Ports:        states,
+			HasDevConfig: devserver.HasConfig(r.Path),
+			Running:      devserver.IsRunning(r.Path),
 		})
 	}
 	jsonOK(w, items)
