@@ -1,13 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
-import {
-  portsApi,
-  settingsApi,
-  type PortItem,
-  type PortState,
-  type ListenerRow,
-} from "@/api";
+import { portsApi, type ListenerRow } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,87 +12,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function LiveCell({ ports }: { ports: PortState[] }) {
-  if (ports.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-  const up = ports.filter((p) => p.listening);
-  if (up.length === 0) {
-    return <span className="text-muted-foreground text-xs">idle</span>;
-  }
-  return (
-    <span className="flex flex-wrap gap-1">
-      {up.map((p) => (
-        <span
-          key={p.port}
-          className="rounded bg-green-100 px-1.5 py-0.5 text-xs font-mono text-green-700"
-          title={p.pid ? `PID ${p.pid}` : undefined}
-        >
-          {p.port}
-          {p.proc ? ` ${p.proc}` : ""}
-          {p.pid ? `(${p.pid})` : ""}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 export function PortsPage() {
   const {
-    data: ports = [],
-    isLoading,
-    isError,
-    error,
+    data: listeners = [],
     refetch,
     isFetching,
-  } = useQuery<PortItem[]>({
-    queryKey: ["ports"],
-    queryFn: portsApi.list,
+  } = useQuery<ListenerRow[]>({
+    queryKey: ["port-listeners"],
+    queryFn: portsApi.listeners,
   });
-
-  const { data: settings } = useQuery({
-    queryKey: ["settings"],
-    queryFn: settingsApi.get,
-  });
-  const band = settings
-    ? `${settings.dev_ports.start}-${settings.dev_ports.end}`
-    : "9000-9999";
-
-  const { data: listeners = [], refetch: refetchListeners, isFetching: listenersFetching } =
-    useQuery<ListenerRow[]>({
-      queryKey: ["port-listeners"],
-      queryFn: portsApi.listeners,
-    });
-
-  const allocated = ports.filter((p) => p.port_base > 0).length;
-
-  const queryClient = useQueryClient();
-  const serveMutation = useMutation({
-    mutationFn: ({ repo, wt }: { repo: string; wt: string }) =>
-      portsApi.serve(repo, wt),
-    onSuccess: (res, vars) => {
-      toast.success(`${vars.wt} を起動しました`, { description: res.output });
-      queryClient.invalidateQueries({ queryKey: ["ports"] });
-    },
-    onError: (e: Error) => toast.error("起動に失敗しました", { description: e.message }),
-  });
-  const downMutation = useMutation({
-    mutationFn: ({ repo, wt }: { repo: string; wt: string }) =>
-      portsApi.down(repo, wt),
-    onSuccess: (_res, vars) => {
-      toast.success(`${vars.wt} を停止しました`);
-      queryClient.invalidateQueries({ queryKey: ["ports"] });
-    },
-    onError: (e: Error) => toast.error("停止に失敗しました", { description: e.message }),
-  });
-  const busy = serveMutation.isPending || downMutation.isPending;
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>開発ポート ({band})</CardTitle>
+            <CardTitle>稼働中ポート（マシン全体）</CardTitle>
             <Button
               variant="outline"
               size="sm"
@@ -110,116 +38,14 @@ export function PortsPage() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            各 worktree に割り当てられたポートブロックと稼働状況の一覧。稼働中のポートは緑色で表示されます。
-          </p>
-          <div className="mt-2 rounded-md bg-muted/50 p-3 text-xs text-muted-foreground space-y-1">
-            <p>
-              ・ポートは <code className="font-mono">wt tree add</code> で worktree
-              を作成したときに自動採番されます（{allocated} 件が割当済み。本機能より前の worktree は「—」）。
-            </p>
-            <p>
-              ・<code className="font-mono">.wt/dev.toml</code> を置いた worktree は
-              「起動」ボタンで割当ポートを注入してサーバーを起動できます（CLI は{" "}
-              <code className="font-mono">wt serve</code> / <code className="font-mono">wt down</code>）。
-            </p>
-            <p>
-              ・割当帯は{" "}
-              <Link to="/settings" className="text-blue-600 hover:underline">
-                Settings
-              </Link>{" "}
-              で変更できます。ドメイン割当（*.wt.localhost）は後続対応の予定です。
-            </p>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">読み込み中...</p>
-          ) : isError ? (
-            <p className="text-sm text-destructive">
-              取得に失敗しました: {(error as Error)?.message}
-            </p>
-          ) : ports.length === 0 ? (
-            <p className="text-sm text-muted-foreground">worktree がありません</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Repo</TableHead>
-                  <TableHead>Worktree</TableHead>
-                  <TableHead>ポート範囲</TableHead>
-                  <TableHead>稼働</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ports.map((p) => (
-                  <TableRow key={`${p.repo}/${p.wt_name}`}>
-                    <TableCell>{p.repo}</TableCell>
-                    <TableCell className="font-mono text-xs">{p.wt_name}</TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {p.port_range ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <LiveCell ports={p.ports} />
-                    </TableCell>
-                    <TableCell>
-                      {!p.has_dev_config ? (
-                        <span
-                          className="text-xs text-muted-foreground"
-                          title=".wt/dev.toml がありません"
-                        >
-                          —
-                        </span>
-                      ) : p.running ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() =>
-                            downMutation.mutate({ repo: p.repo, wt: p.wt_name })
-                          }
-                        >
-                          停止
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          disabled={busy || p.port_base === 0}
-                          onClick={() =>
-                            serveMutation.mutate({ repo: p.repo, wt: p.wt_name })
-                          }
-                        >
-                          起動
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>稼働中ポート（マシン全体）</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refetchListeners()}
-              disabled={listenersFetching}
-            >
-              {listenersFetching ? "更新中..." : "更新"}
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">
             この PC で LISTEN 中の全 TCP ポート。<strong>wt</strong>（worktree に割当）か{" "}
-            <strong>foreign</strong>（別プロジェクト等の占有）かを表示します。
-            ポート衝突の原因特定に使えます。
+            <strong>foreign</strong>（別プロジェクト等の占有）かを表示します。ポート衝突の原因特定に使えます。
+            <br />
+            各 worktree のポート割当・サーバー起動は{" "}
+            <Link to="/" className="text-blue-600 hover:underline">
+              Worktrees
+            </Link>{" "}
+            一覧で確認・操作できます。
           </p>
         </CardHeader>
         <CardContent>
@@ -246,7 +72,7 @@ export function PortsPage() {
                     <TableCell>
                       {l.managed ? (
                         <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                          wt: {l.owner}
+                          {`wt: ${l.owner ?? ""}`}
                         </span>
                       ) : (
                         <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
