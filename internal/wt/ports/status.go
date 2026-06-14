@@ -1,5 +1,7 @@
 package ports
 
+import "wt/internal/wt/settings"
+
 // PortState is the live status of a single allocated port.
 type PortState struct {
 	Port      int
@@ -25,7 +27,8 @@ func Status() ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	listeners, _ := Listeners()
+	band := settings.Load().DevPorts
+	listeners, _ := Listeners(band.Start, band.End)
 
 	rows := make([]Row, 0, len(allocs))
 	for _, a := range allocs {
