@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export function GcPage() {
   const [opts, setOpts] = useState<GcRequest>({
     merged: false,
+    closed: false,
+    include_dirty: false,
     older_than: "",
     no_tmux: false,
     dry_run: true,
@@ -56,6 +58,30 @@ export function GcPage() {
           </label>
           <p className="text-xs text-muted-foreground ml-5">
             マージ済みブランチを持つ worktree のみを GC 対象にします。
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={opts.closed ?? false}
+              onChange={(e) => setOpts({ ...opts, closed: e.target.checked })}
+            />
+            closed な issue/PR のみ対象
+          </label>
+          <p className="text-xs text-muted-foreground ml-5">
+            対応する issue / PR が close（マージ含む）された worktree を対象にします。
+            放置された没ブランチの掃除に。
+          </p>
+          <label className="flex items-center gap-2 text-sm ml-5">
+            <input
+              type="checkbox"
+              checked={opts.include_dirty ?? false}
+              disabled={!opts.closed}
+              onChange={(e) => setOpts({ ...opts, include_dirty: e.target.checked })}
+            />
+            未コミット変更ありも含める（closed 時）
+          </label>
+          <p className="text-xs text-muted-foreground ml-5">
+            通常は変更ありの worktree は対象外ですが、closed なものは変更があっても削除します。
           </p>
           <label className="flex items-center gap-2 text-sm">
             <input

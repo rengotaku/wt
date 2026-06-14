@@ -18,14 +18,60 @@ import (
 
 // Options captures CLI flags for `wt tree gc`.
 type Options struct {
-	Merged     bool
-	OlderThan  string // "30d", "24h"
-	NoTmux     bool
-	DryRun     bool
-	Yes        bool
-	KeepTmux   bool
-	KeepBranch bool
-	Force      bool
+	Merged       bool
+	Closed       bool   // issue/PR が closed/merged な worktree を対象に
+	IncludeDirty bool   // --closed 時に未コミット変更ありも含める
+	OlderThan    string // "30d", "24h"
+	NoTmux       bool
+	DryRun       bool
+	Yes          bool
+	KeepTmux     bool
+	KeepBranch   bool
+	Force        bool
+}
+
+// allowDirty reports whether dirty worktrees should be kept as candidates.
+func (o Options) allowDirty() bool {
+	return o.Force || (o.Closed && o.IncludeDirty)
+}
+
+var issueNumRe = regexp.MustCompile(`issue[-_]?(\d+)`)
+
+// issueNumFromBranch extracts an issue number from a branch like
+// "feat/issue-84-abc" → 84. Returns 0 when none.
+func issueNumFromBranch(branch string) int {
+	m := issueNumRe.FindStringSubmatch(strings.ToLower(branch))
+	if m == nil {
+		return 0
+	}
+	n, _ := strconv.Atoi(m[1])
+	return n
+}
+
+// closedCandidate decides whether a worktree (by branch) is a GC candidate
+// under --closed, returning a human-readable reason. Open/draft PR is never a
+// candidate; closed/merged PR is; with no PR, a closed issue referenced by the
+// branch qualifies. Unknown → not a candidate (safe side).
+func closedCandidate(branch string, prState map[string]string, issueState func(int) string) (match bool, reason string) {
+	if branch == "" {
+		return false, ""
+	}
+	if st, ok := prState[branch]; ok {
+		switch st {
+		case "OPEN":
+			return false, ""
+		case "MERGED":
+			return true, "PR merged"
+		case "CLOSED":
+			return true, "PR closed"
+		}
+	}
+	if n := issueNumFromBranch(branch); n > 0 {
+		if issueState(n) == "CLOSED" {
+			return true, fmt.Sprintf("issue #%d closed", n)
+		}
+	}
+	return false, ""
 }
 
 var olderThanRegex = regexp.MustCompile(`^(\d+)([dh])$`)
@@ -60,12 +106,26 @@ func Run(out io.Writer, opts Options) error {
 		}
 	}
 
+	// --closed: branch→PR state と issue state を repo 単位でキャッシュ。
+	prStateCache := map[string]map[string]string{}
+	issueCache := map[string]map[int]string{} // mainDir → issueNum → state
+	if opts.Closed {
+		_, _ = fmt.Fprintln(out, "🧹 closed な issue/PR を判定中...")
+		for i := range items {
+			md := items[i].MainDir
+			if _, ok := prStateCache[md]; !ok {
+				prStateCache[md] = fetchPRStates(md)
+				issueCache[md] = map[int]string{}
+			}
+		}
+	}
+
 	for i := range items {
 		it := &items[i]
 		if it.WtName == "main" || it.WtName == "master" {
 			continue
 		}
-		if core.IsDirty(it.WtPath) && !opts.Force {
+		if core.IsDirty(it.WtPath) && !opts.allowDirty() {
 			continue
 		}
 
@@ -92,6 +152,26 @@ func Run(out io.Writer, opts Options) error {
 			if !matched {
 				continue
 			}
+		}
+
+		if opts.Closed {
+			md := it.MainDir
+			issueState := func(n int) string {
+				if st, ok := issueCache[md][n]; ok {
+					return st
+				}
+				st := fetchIssueState(md, n)
+				issueCache[md][n] = st
+				return st
+			}
+			ok, reason := closedCandidate(branch, prStateCache[md], issueState)
+			if !ok {
+				continue
+			}
+			if info != "" {
+				info += "  "
+			}
+			info += reason
 		}
 
 		if olderSecs > 0 {
@@ -147,7 +227,7 @@ func Run(out io.Writer, opts Options) error {
 	rmOpts := tree.RmOptions{
 		KeepTmux:   opts.KeepTmux,
 		KeepBranch: opts.KeepBranch,
-		Force:      opts.Force,
+		Force:      opts.allowDirty(),
 	}
 	for i := range cands {
 		c := &cands[i]
@@ -187,10 +267,11 @@ type mergedPR struct {
 	MergedAt    string `json:"mergedAt"`
 }
 
-func fetchMergedPRs(mainDir string) []mergedPR {
+// repoSlug returns "owner/repo" from the origin remote, or "" if not GitHub.
+func repoSlug(mainDir string) string {
 	remote, err := core.GitOutput(mainDir, "remote", "get-url", "origin")
 	if err != nil {
-		return nil
+		return ""
 	}
 	slug := remote
 	if i := strings.Index(slug, "github.com"); i >= 0 {
@@ -199,7 +280,11 @@ func fetchMergedPRs(mainDir string) []mergedPR {
 			slug = slug[1:]
 		}
 	}
-	slug = strings.TrimSuffix(slug, ".git")
+	return strings.TrimSuffix(slug, ".git")
+}
+
+func fetchMergedPRs(mainDir string) []mergedPR {
+	slug := repoSlug(mainDir)
 	if slug == "" {
 		return nil
 	}
@@ -216,4 +301,50 @@ func fetchMergedPRs(mainDir string) []mergedPR {
 		return nil
 	}
 	return prs
+}
+
+// fetchPRStates returns branch→state (OPEN/CLOSED/MERGED) for all PRs of a repo.
+func fetchPRStates(mainDir string) map[string]string {
+	slug := repoSlug(mainDir)
+	if slug == "" {
+		return map[string]string{}
+	}
+	out, err := exec.Command("gh", "pr", "list",
+		"--state", "all",
+		"--json", "headRefName,state",
+		"--limit", "300",
+		"--repo", slug).Output()
+	if err != nil {
+		return map[string]string{}
+	}
+	var prs []struct {
+		HeadRefName string `json:"headRefName"`
+		State       string `json:"state"`
+	}
+	if err := json.Unmarshal(out, &prs); err != nil {
+		return map[string]string{}
+	}
+	states := make(map[string]string, len(prs))
+	for _, p := range prs {
+		// 同一ブランチに複数 PR があれば OPEN を優先（安全側）。
+		if cur, ok := states[p.HeadRefName]; ok && cur == "OPEN" {
+			continue
+		}
+		states[p.HeadRefName] = p.State
+	}
+	return states
+}
+
+// fetchIssueState returns "OPEN"/"CLOSED" for an issue, or "" on error.
+func fetchIssueState(mainDir string, num int) string {
+	slug := repoSlug(mainDir)
+	if slug == "" {
+		return ""
+	}
+	out, err := exec.Command("gh", "issue", "view", strconv.Itoa(num),
+		"--repo", slug, "--json", "state", "-q", ".state").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

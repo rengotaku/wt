@@ -33,6 +33,8 @@ export interface DeleteTreeRequest {
 
 export interface GcRequest {
   merged?: boolean;
+  closed?: boolean;
+  include_dirty?: boolean;
   older_than?: string;
   no_tmux?: boolean;
   dry_run?: boolean;
