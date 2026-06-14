@@ -62,7 +62,7 @@ func TestFreeBase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := freeBase(tt.used)
+			got, err := freeBase(tt.used, 9000, 9999)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got base %d", got)
@@ -80,15 +80,24 @@ func TestFreeBase(t *testing.T) {
 }
 
 func TestFreeBase_Full(t *testing.T) {
+	const start, end = 9000, 9999
 	used := map[int]bool{}
-	for base := BandStart; base+BlockSize-1 <= BandEnd; base += BlockSize {
+	for base := start; base+BlockSize-1 <= end; base += BlockSize {
 		used[base] = true
 	}
-	if len(used) != BlockCount {
-		t.Fatalf("setup: used has %d blocks, want %d", len(used), BlockCount)
-	}
-	if _, err := freeBase(used); err == nil {
+	if _, err := freeBase(used, start, end); err == nil {
 		t.Error("expected error when band is full, got nil")
+	}
+}
+
+func TestFreeBase_RespectsConfiguredBand(t *testing.T) {
+	// A custom narrow band starting at 9500 must allocate from there.
+	got, err := freeBase(map[int]bool{}, 9500, 9520)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 9500 {
+		t.Errorf("freeBase = %d, want 9500 (band start)", got)
 	}
 }
 

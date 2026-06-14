@@ -34,6 +34,8 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/trees/merged-prs", h.GetMergedPRs)
 	mux.HandleFunc("GET /api/trees/issue-details", h.GetIssueDetails)
 	mux.HandleFunc("GET /api/ports", h.ListPorts)
+	mux.HandleFunc("GET /api/settings", h.GetSettings)
+	mux.HandleFunc("PUT /api/settings", h.UpdateSettings)
 
 	mux.Handle("/", staticHandler)
 

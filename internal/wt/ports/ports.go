@@ -1,8 +1,9 @@
 // Package ports manages per-worktree dev port-block allocation within the
-// machine-wide dev band (9000-9999). Each worktree owns a block of BlockSize
-// consecutive ports; the base port is persisted in .worktrees.json so blocks
-// stay stable across processes. Allocation is global across every wt-managed
-// container so two worktrees never collide.
+// machine-wide dev band (configurable via package settings; default 9000-9999).
+// Each worktree owns a block of BlockSize consecutive ports; the base port is
+// persisted in .worktrees.json so blocks stay stable across processes.
+// Allocation is global across every wt-managed container so two worktrees never
+// collide.
 package ports
 
 import (
@@ -11,19 +12,12 @@ import (
 	"sort"
 
 	"wt/internal/wt/core"
+	"wt/internal/wt/settings"
 )
 
-const (
-	// BandStart is the first port of the dev band.
-	BandStart = 9000
-	// BandEnd is the last port of the dev band (inclusive).
-	BandEnd = 9999
-	// BlockSize is how many consecutive ports one worktree owns.
-	BlockSize = 5
-)
-
-// BlockCount is the number of allocatable blocks in the band.
-const BlockCount = (BandEnd - BandStart + 1) / BlockSize
+// BlockSize is how many consecutive ports one worktree owns. The band itself
+// (start/end) is user-configurable via package settings.
+const BlockSize = 5
 
 // Allocation is a worktree's port assignment.
 type Allocation struct {
@@ -53,14 +47,14 @@ func RangeString(base int) string {
 	return fmt.Sprintf("%d-%d", base, base+BlockSize-1)
 }
 
-// freeBase returns the lowest base in the band not present in used.
-func freeBase(used map[int]bool) (int, error) {
-	for base := BandStart; base+BlockSize-1 <= BandEnd; base += BlockSize {
+// freeBase returns the lowest block base within [start, end] not present in used.
+func freeBase(used map[int]bool, start, end int) (int, error) {
+	for base := start; base+BlockSize-1 <= end; base += BlockSize {
 		if !used[base] {
 			return base, nil
 		}
 	}
-	return 0, fmt.Errorf("ポート帯 %d-%d が満杯です（%d ブロック使用中）", BandStart, BandEnd, len(used))
+	return 0, fmt.Errorf("ポート帯 %d-%d が満杯です（%d ブロック使用中）", start, end, len(used))
 }
 
 // Allocations scans every wt-managed container and returns one Allocation per
@@ -106,13 +100,15 @@ func usedBases() (map[int]bool, error) {
 	return used, nil
 }
 
-// Allocate returns the lowest free base port in the dev band. It does not
-// persist anything; the caller stores the returned base on the worktree entry.
-// Freeing is implicit: deleting a worktree entry releases its base for reuse.
+// Allocate returns the lowest free base port within the configured dev band.
+// It does not persist anything; the caller stores the returned base on the
+// worktree entry. Freeing is implicit: deleting a worktree entry releases its
+// base for reuse.
 func Allocate() (int, error) {
 	used, err := usedBases()
 	if err != nil {
 		return 0, err
 	}
-	return freeBase(used)
+	band := settings.Load().DevPorts
+	return freeBase(used, band.Start, band.End)
 }

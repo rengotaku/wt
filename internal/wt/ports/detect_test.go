@@ -30,7 +30,7 @@ LISTEN 0 4096 127.0.0.1:9000 0.0.0.0:* users:(("air",pid=12345,fd=7))
 LISTEN 0 511 [::]:9001 [::]:* users:(("node",pid=678,fd=20))
 LISTEN 0 128 127.0.0.1:5174 0.0.0.0:* users:(("vite",pid=999,fd=3))`
 
-	got := parseSS(out)
+	got := parseSS(out, 9000, 9999)
 
 	// Out-of-band ports (8000, 5174) must be excluded.
 	if _, ok := got[8000]; ok {

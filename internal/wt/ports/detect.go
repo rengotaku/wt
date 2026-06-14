@@ -19,19 +19,19 @@ var (
 	ssProcRe = regexp.MustCompile(`\("([^"]+)"`)
 )
 
-// Listeners returns LISTEN sockets whose local port falls inside the dev band,
+// Listeners returns LISTEN sockets whose local port falls inside [start, end],
 // keyed by port. It shells out to `ss -tlnpH`; if ss is unavailable the result
 // is an empty map (callers degrade to "all down" rather than failing).
-func Listeners() (map[int]Listener, error) {
+func Listeners(start, end int) (map[int]Listener, error) {
 	out, err := exec.Command("ss", "-tlnpH").Output()
 	if err != nil {
 		return map[int]Listener{}, nil //nolint:nilerr // ss missing → treat as no listeners
 	}
-	return parseSS(string(out)), nil
+	return parseSS(string(out), start, end), nil
 }
 
-// parseSS parses the output of `ss -tlnpH`, keeping only ports in the dev band.
-func parseSS(out string) map[int]Listener {
+// parseSS parses `ss -tlnpH` output, keeping only ports inside [start, end].
+func parseSS(out string, start, end int) map[int]Listener {
 	res := map[int]Listener{}
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -39,7 +39,7 @@ func parseSS(out string) map[int]Listener {
 			continue
 		}
 		port, ok := portFromLocalAddr(fields[3])
-		if !ok || port < BandStart || port > BandEnd {
+		if !ok || port < start || port > end {
 			continue
 		}
 		l := Listener{Port: port}

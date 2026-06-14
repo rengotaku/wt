@@ -28,6 +28,9 @@ export function Layout() {
             <NavLink to="/ports" className={navLinkClass}>
               Ports
             </NavLink>
+            <NavLink to="/settings" className={navLinkClass}>
+              Settings
+            </NavLink>
           </nav>
         </div>
       </header>
