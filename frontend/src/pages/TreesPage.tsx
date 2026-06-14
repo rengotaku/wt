@@ -736,6 +736,21 @@ export function TreesPage() {
                                     起動
                                   </Button>
                                 ))}
+                              {port?.running &&
+                                port.ports
+                                  .filter((p) => p.listening)
+                                  .map((p) => (
+                                    <a
+                                      key={p.port}
+                                      href={`http://localhost:${p.port}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-mono text-xs text-blue-600 hover:underline"
+                                      title="このポートのサーバーを開く"
+                                    >
+                                      :{p.port}
+                                    </a>
+                                  ))}
                               {port?.running && port.domain && (
                                 <a
                                   href={`http://${port.domain}:8088`}
