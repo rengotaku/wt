@@ -26,11 +26,11 @@ build: build-frontend
 run:
 	$(MAKE) -j2 run-server run-frontend
 
-## run-server: Run Go server with air hot-reload (-tags dev, SPA served by Vite)
+## run-server: Run Go server with air hot-reload (-tags dev, listens on :8091)
 run-server:
 	air
 
-## run-frontend: Run Vite dev server (proxies /api to :8090)
+## run-frontend: Run Vite dev server (proxies /api to the air backend on :8091)
 run-frontend:
 	cd $(FRONTEND_DIR) && npm run dev
 
