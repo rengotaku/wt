@@ -66,7 +66,10 @@ func Routes() ([]Route, error) {
 		if a.PortBase == 0 {
 			continue
 		}
-		cfg, err := devserver.Load(a.Path)
+		// EffectiveConfig resolves the dev config from metadata (worktree override
+		// > repo default) or a committed file, so domain routes work regardless of
+		// where the config lives.
+		cfg, _, err := devserver.EffectiveConfig(a.Path)
 		if err != nil {
 			continue
 		}

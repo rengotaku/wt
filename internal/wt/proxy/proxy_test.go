@@ -4,8 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
+
+	"wt/internal/wt/core"
 )
 
 func TestLabel(t *testing.T) {
@@ -40,6 +44,48 @@ func TestLabelFromHost(t *testing.T) {
 		if ok != tt.ok || (ok && got != tt.want) {
 			t.Errorf("labelFromHost(%q) = (%q,%v), want (%q,%v)", tt.host, got, ok, tt.want, tt.ok)
 		}
+	}
+}
+
+func TestRoutes_FromMetadataDefault(t *testing.T) {
+	// A repo whose domain service lives only in metadata (_config.dev_services),
+	// with no committed .wt/dev.toml, must still produce a proxy route.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := filepath.Join(home, "Workspace", "myrepo")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "main", &core.Entry{
+		Type: "main", Branch: "main", PortBase: 9000,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.SaveConfig(container, core.EntryConfig{
+		DevServices: []core.DevService{
+			{Name: "api", Cmd: "run-api"},
+			{Name: "web", Cmd: "run-web", Domain: true},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	routes, err := Routes()
+	if err != nil {
+		t.Fatalf("Routes: %v", err)
+	}
+	var found *Route
+	for i := range routes {
+		if routes[i].Repo == "myrepo" {
+			found = &routes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("no route for myrepo; routes=%+v", routes)
+	}
+	// web is the domain service at declaration index 1 → port base+1 = 9001.
+	if found.Label != "main" || found.Port != 9001 {
+		t.Errorf("route = {label:%q port:%d}, want {main 9001}", found.Label, found.Port)
 	}
 }
 
