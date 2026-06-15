@@ -396,12 +396,13 @@ func (h *Handler) GetIssueDetails(w http.ResponseWriter, r *http.Request) {
 
 	var issueNums []int
 	seen := map[int]bool{}
-	for _, e := range entries {
-		if e.Issue == "" {
+	for k := range entries {
+		issue := entries[k].Issue
+		if issue == "" {
 			continue
 		}
 		var num int
-		if n, _ := fmt.Sscan(strings.TrimPrefix(e.Issue, "#"), &num); n == 1 && num > 0 && !seen[num] {
+		if n, _ := fmt.Sscan(strings.TrimPrefix(issue, "#"), &num); n == 1 && num > 0 && !seen[num] {
 			issueNums = append(issueNums, num)
 			seen[num] = true
 		}

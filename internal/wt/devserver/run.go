@@ -100,12 +100,12 @@ var startupGrace = 600 * time.Millisecond
 // failed with the tail of its log, and is NOT recorded as running. This is why
 // Serve never claims success for a process that died on startup.
 func Serve(out io.Writer, worktree string, base int) error {
-	cfg, err := Load(worktree)
+	cfg, source, err := EffectiveConfig(worktree)
 	if err != nil {
-		return fmt.Errorf(".wt/dev.toml が読み込めません: %w", err)
+		return fmt.Errorf("dev 設定が読み込めません: %w", err)
 	}
-	if len(cfg.Services) == 0 {
-		return errors.New(".wt/dev.toml に services が定義されていません")
+	if source == SourceNone || len(cfg.Services) == 0 {
+		return errors.New("dev 設定がありません（リポジトリ既定または worktree 上書きを設定してください）")
 	}
 	if base == 0 {
 		return errors.New("この worktree にはポートが割り当てられていません（wt tree add で作成した worktree が必要）")

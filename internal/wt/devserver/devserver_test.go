@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"wt/internal/wt/core"
 )
 
 func TestSharedEnv(t *testing.T) {
@@ -196,6 +198,50 @@ func TestSave_RoundTripAndRejectsInvalid(t *testing.T) {
 	if HasConfig(wt2) {
 		t.Error("invalid Save must not create a dev.toml")
 	}
+}
+
+func TestEffectiveConfig_Precedence(t *testing.T) {
+	container := t.TempDir()
+	wtName := "feat-x"
+	worktree := filepath.Join(container, wtName)
+	if err := os.MkdirAll(worktree, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1) Nothing → SourceNone.
+	if _, src, err := EffectiveConfig(worktree); err != nil || src != SourceNone {
+		t.Fatalf("empty: src=%q err=%v, want none", src, err)
+	}
+
+	// 2) Repo default only → SourceRepo.
+	if err := core.SaveConfig(container, core.EntryConfig{
+		DevServices: []core.DevService{{Name: "api", Cmd: "run-default"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, src, err := EffectiveConfig(worktree)
+	if err != nil || src != SourceRepo || cfg.Services[0].Cmd != "run-default" {
+		t.Fatalf("repo default: src=%q cmd=%q err=%v", src, cmdOf(cfg), err)
+	}
+
+	// 3) Per-worktree override wins over repo default → SourceWorktree.
+	if err := core.PutEntry(container, wtName, &core.Entry{
+		Branch:      "feat/x",
+		DevServices: []core.DevService{{Name: "api", Cmd: "run-override"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, src, err = EffectiveConfig(worktree)
+	if err != nil || src != SourceWorktree || cfg.Services[0].Cmd != "run-override" {
+		t.Fatalf("override: src=%q cmd=%q err=%v", src, cmdOf(cfg), err)
+	}
+}
+
+func cmdOf(c Config) string {
+	if len(c.Services) == 0 {
+		return ""
+	}
+	return c.Services[0].Cmd
 }
 
 func TestServe_NoConfig(t *testing.T) {

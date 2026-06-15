@@ -6,14 +6,17 @@ import (
 	"strings"
 
 	"wt/internal/wt/core"
+	"wt/internal/wt/devserver"
 )
 
 type repoConfigResponse struct {
-	SymlinkCandidates []string `json:"symlink_candidates"`
+	SymlinkCandidates []string          `json:"symlink_candidates"`
+	DevServices       []core.DevService `json:"dev_services"`
 }
 
 type repoConfigRequest struct {
-	SymlinkCandidates []string `json:"symlink_candidates"`
+	SymlinkCandidates []string          `json:"symlink_candidates"`
+	DevServices       []core.DevService `json:"dev_services"`
 }
 
 func (h *Handler) GetRepoConfig(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +34,11 @@ func (h *Handler) GetRepoConfig(w http.ResponseWriter, r *http.Request) {
 	if candidates == nil {
 		candidates = []string{}
 	}
-	jsonOK(w, repoConfigResponse{SymlinkCandidates: candidates})
+	dev := cfg.DevServices
+	if dev == nil {
+		dev = []core.DevService{}
+	}
+	jsonOK(w, repoConfigResponse{SymlinkCandidates: candidates, DevServices: dev})
 }
 
 func (h *Handler) UpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +57,38 @@ func (h *Handler) UpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := core.SaveConfig(container, core.EntryConfig{SymlinkCandidates: cleaned}); err != nil {
+	if len(req.DevServices) > 0 {
+		if err := (devserver.Config{Services: toDevServices(req.DevServices)}).Validate(); err != nil {
+			jsonErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	// Preserve other _config fields (e.g. git_crypt_key) by loading first.
+	cfg, err := core.LoadConfig(container)
+	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	jsonOK(w, repoConfigResponse{SymlinkCandidates: cleaned})
+	cfg.SymlinkCandidates = cleaned
+	cfg.DevServices = req.DevServices
+	if err := core.SaveConfig(container, cfg); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	dev := cfg.DevServices
+	if dev == nil {
+		dev = []core.DevService{}
+	}
+	jsonOK(w, repoConfigResponse{SymlinkCandidates: cleaned, DevServices: dev})
+}
+
+// toDevServices converts metadata services to runtime services for validation.
+func toDevServices(in []core.DevService) []devserver.Service {
+	out := make([]devserver.Service, 0, len(in))
+	for _, s := range in {
+		out = append(out, devserver.Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+	}
+	return out
 }
 
 // resolveRepoContainer validates the repo name and returns its container path.

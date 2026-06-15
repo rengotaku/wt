@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { DevService } from "./ports";
 
 export interface Repo {
   name: string;
@@ -14,6 +15,7 @@ export interface Repo {
 
 export interface RepoConfig {
   symlink_candidates: string[];
+  dev_services: DevService[];
 }
 
 export const reposApi = {

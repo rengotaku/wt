@@ -103,10 +103,22 @@ func SaveMeta(container string, meta map[string]json.RawMessage) error {
 	return os.Rename(tmpPath, dst)
 }
 
+// DevService is one dev server definition stored in wt metadata (not in the
+// repo, so it is never committed). Mirrors devserver.Service field-for-field.
+type DevService struct {
+	Name   string `json:"name"`
+	Cmd    string `json:"cmd"`
+	Domain bool   `json:"domain,omitempty"`
+}
+
 // EntryConfig holds the _config sub-object of .worktrees.json.
 type EntryConfig struct {
 	SymlinkCandidates []string `json:"symlink_candidates"`
 	GitCryptKey       string   `json:"git_crypt_key,omitempty"`
+	// DevServices is the repository-wide default dev config, applied to any
+	// worktree that has no per-worktree override. Stored here (outside the repo)
+	// so it is never committed.
+	DevServices []DevService `json:"dev_services,omitempty"`
 }
 
 // LoadConfig returns the _config block, defaulting to empty when missing.
@@ -151,6 +163,9 @@ type Entry struct {
 	// PortBase is the first port of the worktree's dev port block (9000-9999,
 	// BlockSize ports). 0 means no allocation. See internal/wt/ports.
 	PortBase int `json:"port_base,omitempty"`
+	// DevServices is a per-worktree dev config override. When set it takes
+	// precedence over the repository default. Stored in metadata (not committed).
+	DevServices []DevService `json:"dev_services,omitempty"`
 }
 
 // LoadEntries reads worktree entries (skipping _config).

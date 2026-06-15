@@ -178,8 +178,8 @@ func (h *Handler) DeleteRepo(w http.ResponseWriter, r *http.Request) {
 
 	// main/master のみかチェック
 	entries, _ := core.LoadEntries(container)
-	for name, entry := range entries {
-		if entry.Type == "main" || name == "main" || name == "master" {
+	for name := range entries {
+		if entries[name].Type == "main" || name == "main" || name == "master" {
 			continue
 		}
 		jsonErr(w, http.StatusConflict, "追加 worktree が残存しているため削除できません: "+name)

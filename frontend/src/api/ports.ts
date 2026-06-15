@@ -40,6 +40,7 @@ export interface DevService {
 
 export interface DevConfig {
   has_config: boolean;
+  source: string; // "worktree" | "repo" | "file" | ""
   services: DevService[];
 }
 
