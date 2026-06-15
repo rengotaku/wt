@@ -146,6 +146,58 @@ cmd = "exit 1"
 	_ = Down(&buf, wt)
 }
 
+func TestConfigValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{name: "ok", cfg: Config{Services: []Service{{Name: "api", Cmd: "go run ."}}}},
+		{name: "no services", cfg: Config{}, wantErr: true},
+		{name: "empty name", cfg: Config{Services: []Service{{Name: "", Cmd: "x"}}}, wantErr: true},
+		{name: "empty cmd", cfg: Config{Services: []Service{{Name: "api", Cmd: "  "}}}, wantErr: true},
+		{name: "dup name", cfg: Config{Services: []Service{{Name: "api", Cmd: "a"}, {Name: "api", Cmd: "b"}}}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() err = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSave_RoundTripAndRejectsInvalid(t *testing.T) {
+	wt := t.TempDir()
+	cfg := Config{Services: []Service{
+		{Name: "api", Cmd: "go run . -p ${port}"},
+		{Name: "web", Cmd: "npm run dev", Domain: true},
+	}}
+	if err := Save(wt, cfg); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if !HasConfig(wt) {
+		t.Fatal("HasConfig should be true after Save")
+	}
+	got, err := Load(wt)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(got.Services) != 2 || got.Services[0].Name != "api" || !got.Services[1].Domain {
+		t.Errorf("round-trip mismatch: %+v", got.Services)
+	}
+
+	// Invalid config must not be written.
+	wt2 := t.TempDir()
+	if err := Save(wt2, Config{}); err == nil {
+		t.Error("Save should reject empty config")
+	}
+	if HasConfig(wt2) {
+		t.Error("invalid Save must not create a dev.toml")
+	}
+}
+
 func TestServe_NoConfig(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	var buf bytes.Buffer

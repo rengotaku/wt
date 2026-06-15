@@ -142,6 +142,53 @@ func Allocate() (int, error) {
 	return freeBase(occupied, band.Start, band.End)
 }
 
+// Assignment records a port base newly allocated to a worktree, for reporting.
+type Assignment struct {
+	Repo     string
+	WtName   string
+	PortBase int
+}
+
+// EnsureAll allocates and persists a port base for every registered worktree
+// that currently has none (base 0), across all containers. Worktrees that
+// already own a base are left untouched. It returns the assignments it made.
+//
+// This is how existing worktrees — created before allocation existed, or before
+// they were ever served — get ports without having to `wt serve` each one.
+func EnsureAll() ([]Assignment, error) {
+	var made []Assignment
+	for _, container := range core.ListContainers() {
+		entries, err := core.LoadEntries(container)
+		if err != nil {
+			continue
+		}
+		// Deterministic order so repeated runs assign the same blocks.
+		names := make([]string, 0, len(entries))
+		for name := range entries {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			e := entries[name]
+			if e.PortBase != 0 {
+				continue
+			}
+			// Allocate re-scans the registry each call, so a base persisted in a
+			// previous iteration is already counted as occupied here.
+			base, err := Allocate()
+			if err != nil {
+				return made, err
+			}
+			e.PortBase = base
+			if err := core.PutEntry(container, name, &e); err != nil {
+				return made, err
+			}
+			made = append(made, Assignment{Repo: filepath.Base(container), WtName: name, PortBase: base})
+		}
+	}
+	return made, nil
+}
+
 // EnsureBase returns the worktree's allocated port base, allocating and
 // persisting one to .worktrees.json when it currently has none (base 0). This
 // lets `wt serve` work on worktrees created before allocation existed.
