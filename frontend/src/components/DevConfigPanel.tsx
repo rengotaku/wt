@@ -97,7 +97,23 @@ function PanelBody({ target, onClose }: { target: DevConfigTarget; onClose: () =
         <p className="text-xs text-muted-foreground">
           宣言順に割当ブロックの base+i が割り当てられ、cmd 内の <code>${"{port}"}</code>{" "}
           に置換されます。「ドメイン公開」で wt proxy 経由の名前アクセス対象になります。
+          保存するとこの worktree 専用の上書きとしてメタデータに保存されます（repo に
+          コミットされません）。
         </p>
+        {data && (
+          <p className="text-xs">
+            現在の参照元:{" "}
+            <span className="font-medium">
+              {data.source === "worktree"
+                ? "この worktree 専用の上書き"
+                : data.source === "repo"
+                  ? "リポジトリ既定を継承中"
+                  : data.source === "file"
+                    ? "コミット済み .wt/dev.toml"
+                    : "未設定"}
+            </span>
+          </p>
+        )}
 
         {isLoading && <p className="text-sm text-muted-foreground">読み込み中...</p>}
         {error && (
@@ -160,6 +176,17 @@ function PanelBody({ target, onClose }: { target: DevConfigTarget; onClose: () =
       </div>
 
       <footer className="p-4 border-t flex justify-end gap-2">
+        {data?.source === "worktree" && (
+          <Button
+            variant="outline"
+            className="mr-auto"
+            onClick={() => saveMutation.mutate([])}
+            disabled={saveMutation.isPending}
+            title="この worktree の上書きを消してリポジトリ既定に戻す"
+          >
+            既定に戻す
+          </Button>
+        )}
         <Button variant="outline" onClick={onClose}>
           閉じる
         </Button>

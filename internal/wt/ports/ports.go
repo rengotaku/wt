@@ -80,7 +80,8 @@ func Allocations() ([]Allocation, error) {
 		if err != nil {
 			continue
 		}
-		for name, e := range entries {
+		for name := range entries {
+			e := entries[name]
 			out = append(out, Allocation{
 				Repo:     repo,
 				WtName:   name,

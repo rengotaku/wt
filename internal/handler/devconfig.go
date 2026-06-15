@@ -3,42 +3,46 @@ package handler
 import (
 	"net/http"
 
+	"wt/internal/wt/core"
 	"wt/internal/wt/devserver"
 )
 
-// devConfigResponse is the GET payload: the worktree's services plus whether a
-// dev.toml currently exists (false → the client shows a "create" flow).
+// devConfigResponse is the GET payload: the worktree's effective services plus
+// where they come from ("worktree" override / "repo" default / "file" / "" none).
 type devConfigResponse struct {
 	HasConfig bool                `json:"has_config"`
+	Source    string              `json:"source"`
 	Services  []devserver.Service `json:"services"`
 }
 
-// GetDevConfig returns the worktree's .wt/dev.toml as structured services. When
-// no config exists yet it returns has_config=false with an empty service list.
+// GetDevConfig returns the worktree's effective dev config (per-worktree
+// override > repo default > committed .wt/dev.toml).
 func (h *Handler) GetDevConfig(w http.ResponseWriter, r *http.Request) {
 	worktree, _, _, ok := h.resolveWorktree(w, r)
 	if !ok {
 		return
 	}
-	if !devserver.HasConfig(worktree) {
-		jsonOK(w, devConfigResponse{HasConfig: false, Services: []devserver.Service{}})
-		return
-	}
-	cfg, err := devserver.Load(worktree)
+	cfg, source, err := devserver.EffectiveConfig(worktree)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if cfg.Services == nil {
-		cfg.Services = []devserver.Service{}
+	services := cfg.Services
+	if services == nil {
+		services = []devserver.Service{}
 	}
-	jsonOK(w, devConfigResponse{HasConfig: true, Services: cfg.Services})
+	jsonOK(w, devConfigResponse{
+		HasConfig: source != devserver.SourceNone,
+		Source:    source,
+		Services:  services,
+	})
 }
 
-// PutDevConfig validates and writes the worktree's .wt/dev.toml from the posted
-// service list, making the worktree serve-able from the Web UI.
+// PutDevConfig stores a per-worktree dev config override in metadata (never a
+// committed file). An empty service list clears the override (falls back to the
+// repo default).
 func (h *Handler) PutDevConfig(w http.ResponseWriter, r *http.Request) {
-	worktree, _, _, ok := h.resolveWorktree(w, r)
+	_, container, wtName, ok := h.resolveWorktree(w, r)
 	if !ok {
 		return
 	}
@@ -49,10 +53,35 @@ func (h *Handler) PutDevConfig(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, "リクエストの解析に失敗しました: "+err.Error())
 		return
 	}
-	cfg := devserver.Config{Services: body.Services}
-	if err := devserver.Save(worktree, cfg); err != nil {
-		jsonErr(w, http.StatusBadRequest, err.Error())
+	// A non-empty override must be valid; empty means "clear override".
+	if len(body.Services) > 0 {
+		if err := (devserver.Config{Services: body.Services}).Validate(); err != nil {
+			jsonErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	entries, err := core.LoadEntries(container)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	jsonOK(w, devConfigResponse{HasConfig: true, Services: cfg.Services})
+	entry := entries[wtName]
+	entry.DevServices = toCoreServices(body.Services)
+	if err := core.PutEntry(container, wtName, &entry); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.GetDevConfig(w, r)
+}
+
+// toCoreServices converts API services to the metadata representation.
+func toCoreServices(in []devserver.Service) []core.DevService {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]core.DevService, 0, len(in))
+	for _, s := range in {
+		out = append(out, core.DevService{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+	}
+	return out
 }

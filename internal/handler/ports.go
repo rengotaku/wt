@@ -89,7 +89,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			PortBase:     r.PortBase,
 			PortRange:    ports.RangeString(r.PortBase),
 			Ports:        states,
-			HasDevConfig: devserver.HasConfig(r.Path),
+			HasDevConfig: devserver.HasEffectiveConfig(r.Path),
 			Running:      devserver.IsRunning(r.Path),
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
 		})

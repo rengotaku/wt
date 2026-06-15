@@ -14,6 +14,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"wt/internal/wt/core"
 )
 
 // Service is one dev service. Declaration order matters: service i is assigned
@@ -108,6 +110,55 @@ func Load(worktree string) (Config, error) {
 		return c, err
 	}
 	return c, nil
+}
+
+// Config sources, returned by EffectiveConfig.
+const (
+	SourceNone     = ""         // no config anywhere
+	SourceWorktree = "worktree" // per-worktree metadata override
+	SourceRepo     = "repo"     // repository default in _config
+	SourceFile     = "file"     // committed .wt/dev.toml
+)
+
+// fromCore converts stored metadata services into a runtime Config.
+func fromCore(in []core.DevService) Config {
+	out := make([]Service, 0, len(in))
+	for _, s := range in {
+		out = append(out, Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+	}
+	return Config{Services: out}
+}
+
+// EffectiveConfig resolves the dev config for a worktree by precedence:
+// per-worktree metadata override > repository default (metadata) > committed
+// .wt/dev.toml file. source reports which one was used (SourceNone when none).
+func EffectiveConfig(worktree string) (cfg Config, source string, err error) {
+	container := filepath.Dir(worktree)
+	wtName := filepath.Base(worktree)
+
+	if entries, e := core.LoadEntries(container); e == nil {
+		if entry, ok := entries[wtName]; ok && len(entry.DevServices) > 0 {
+			return fromCore(entry.DevServices), SourceWorktree, nil
+		}
+	}
+	if rc, e := core.LoadConfig(container); e == nil && len(rc.DevServices) > 0 {
+		return fromCore(rc.DevServices), SourceRepo, nil
+	}
+	if HasConfig(worktree) {
+		c, e := Load(worktree)
+		if e != nil {
+			return Config{}, SourceNone, e
+		}
+		return c, SourceFile, nil
+	}
+	return Config{}, SourceNone, nil
+}
+
+// HasEffectiveConfig reports whether a worktree resolves to any dev config
+// (override, repo default, or committed file).
+func HasEffectiveConfig(worktree string) bool {
+	_, source, err := EffectiveConfig(worktree)
+	return err == nil && source != SourceNone
 }
 
 // applyPort substitutes ${port} in a command string with the given port.
