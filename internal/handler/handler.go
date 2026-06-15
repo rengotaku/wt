@@ -10,10 +10,11 @@ import (
 // Handler holds shared state for API handlers.
 type Handler struct {
 	cache *ttlCache
+	prx   *proxyController
 }
 
 // New returns a ready-to-use Handler.
-func New() *Handler { return &Handler{cache: newTTLCache()} }
+func New() *Handler { return &Handler{cache: newTTLCache(), prx: &proxyController{}} }
 
 // Routes wires all API endpoints and falls back to staticHandler for SPA assets.
 func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
@@ -39,6 +40,9 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/ports/{repo}/{wt}/down", h.DownWorktree)
 	mux.HandleFunc("GET /api/ports/{repo}/{wt}/devconfig", h.GetDevConfig)
 	mux.HandleFunc("PUT /api/ports/{repo}/{wt}/devconfig", h.PutDevConfig)
+	mux.HandleFunc("GET /api/proxy", h.GetProxy)
+	mux.HandleFunc("POST /api/proxy/start", h.StartProxy)
+	mux.HandleFunc("POST /api/proxy/stop", h.StopProxy)
 	mux.HandleFunc("GET /api/settings", h.GetSettings)
 	mux.HandleFunc("PUT /api/settings", h.UpdateSettings)
 

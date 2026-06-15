@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, FileCog } from "lucide-react";
+import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, FileCog, Globe } from "lucide-react";
 import {
   treesApi,
   reposApi,
   portsApi,
+  proxyApi,
   type AddTreeRequest,
   type TreeItem,
   type MergedPRInfo,
@@ -94,6 +95,19 @@ export function TreesPage() {
   });
   const portBusy = serveMutation.isPending || downMutation.isPending;
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
+
+  const { data: proxyStatus } = useQuery({
+    queryKey: ["proxy"],
+    queryFn: () => proxyApi.status(),
+  });
+  const proxyMutation = useMutation({
+    mutationFn: (next: boolean) => (next ? proxyApi.start() : proxyApi.stop()),
+    onSuccess: (s) => {
+      toast.success(s.running ? "proxy を起動しました" : "proxy を停止しました");
+      queryClient.invalidateQueries({ queryKey: ["proxy"] });
+    },
+    onError: (e: Error) => toast.error("proxy 操作に失敗しました", { description: e.message }),
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
@@ -431,6 +445,20 @@ export function TreesPage() {
           <div className="flex items-center justify-between">
             <CardTitle>Worktree 一覧</CardTitle>
             <div className="flex items-center gap-2">
+              <Button
+                variant={proxyStatus?.running ? "default" : "outline"}
+                size="sm"
+                onClick={() => proxyMutation.mutate(!proxyStatus?.running)}
+                disabled={proxyMutation.isPending}
+                title={
+                  proxyStatus?.running
+                    ? `proxy 稼働中（${proxyStatus.port}）— 停止する`
+                    : "proxy を起動して *.wt.localhost 名前アクセスを有効化"
+                }
+              >
+                <Globe className="h-3 w-3 mr-1" />
+                proxy {proxyStatus?.running ? "停止" : "起動"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

@@ -10,6 +10,8 @@ export type {
   DevService,
   DevConfig,
 } from "./ports";
+export { proxyApi } from "./proxy";
+export type { ProxyStatus } from "./proxy";
 export { settingsApi } from "./settings";
 export type { Settings, DevPorts, UpdateSettingsRequest } from "./settings";
 export { treesApi } from "./trees";
