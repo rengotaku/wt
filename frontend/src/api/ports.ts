@@ -5,6 +5,7 @@ export interface PortState {
   listening: boolean;
   pid?: number;
   proc?: string;
+  service?: string; // dev service名 (api/web/admin 等)
 }
 
 export interface PortItem {
