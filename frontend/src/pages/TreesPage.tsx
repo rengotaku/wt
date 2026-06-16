@@ -156,7 +156,7 @@ export function TreesPage() {
 
   const [filterText, setFilterText] = useState("");
   const initialRepoFilter = searchParams.get("repo") ?? "";
-  const [showMain, setShowMain] = useState(initialRepoFilter !== "");
+  const [showMain, setShowMain] = useState(true);
   const [repoFilter, setRepoFilter] = useState(initialRepoFilter);
 
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
