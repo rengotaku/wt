@@ -45,8 +45,16 @@ export interface DevConfig {
   services: DevService[];
 }
 
+export interface ServiceLog {
+  name: string;
+  content: string;
+}
+
 const devConfigURL = (repo: string, wtName: string) =>
   `api/ports/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/devconfig`;
+
+const logsURL = (repo: string, wtName: string) =>
+  `api/ports/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/logs`;
 
 export const portsApi = {
   list: (): Promise<PortItem[]> => apiClient.get("api/ports").json(),
@@ -73,4 +81,7 @@ export const portsApi = {
     services: DevService[],
   ): Promise<DevConfig> =>
     apiClient.put(devConfigURL(repo, wtName), { json: { services } }).json(),
+
+  logs: (repo: string, wtName: string): Promise<{ logs: ServiceLog[] }> =>
+    apiClient.get(logsURL(repo, wtName)).json(),
 };

@@ -74,6 +74,20 @@ func (h *Handler) PutDevConfig(w http.ResponseWriter, r *http.Request) {
 	h.GetDevConfig(w, r)
 }
 
+// GetLogs returns each dev service's captured stdout+stderr so it can be viewed
+// from the Web UI. Logs persist after stop, so crashes are inspectable.
+func (h *Handler) GetLogs(w http.ResponseWriter, r *http.Request) {
+	worktree, _, _, ok := h.resolveWorktree(w, r)
+	if !ok {
+		return
+	}
+	logs := devserver.Logs(worktree, 64*1024)
+	if logs == nil {
+		logs = []devserver.ServiceLog{}
+	}
+	jsonOK(w, map[string]any{"logs": logs})
+}
+
 // toCoreServices converts API services to the metadata representation.
 func toCoreServices(in []devserver.Service) []core.DevService {
 	if len(in) == 0 {

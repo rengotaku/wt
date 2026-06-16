@@ -191,6 +191,58 @@ func logTail(worktree, svc string) string {
 	return strings.Join(lines, "\n")
 }
 
+// ServiceLog is one service's captured stdout+stderr.
+type ServiceLog struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+// Logs returns each started service's captured log, capped to the last maxBytes
+// per service. Services are ordered by the effective dev config; extra logs
+// follow in filename order. Logs persist after a service stops, so a crashed
+// serve can still be inspected.
+func Logs(worktree string, maxBytes int) []ServiceLog {
+	entries, err := os.ReadDir(runDir(worktree))
+	if err != nil {
+		return nil
+	}
+	content := map[string]string{}
+	var fileOrder []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+			continue
+		}
+		name := strings.TrimSuffix(e.Name(), ".log")
+		data, err := os.ReadFile(filepath.Join(runDir(worktree), e.Name()))
+		if err != nil {
+			continue
+		}
+		if maxBytes > 0 && len(data) > maxBytes {
+			data = data[len(data)-maxBytes:]
+		}
+		content[name] = string(data)
+		fileOrder = append(fileOrder, name)
+	}
+	if len(content) == 0 {
+		return nil
+	}
+	var out []ServiceLog
+	seen := map[string]bool{}
+	cfg, _, _ := EffectiveConfig(worktree)
+	for _, s := range cfg.Services {
+		if c, ok := content[s.Name]; ok {
+			out = append(out, ServiceLog{Name: s.Name, Content: c})
+			seen[s.Name] = true
+		}
+	}
+	for _, name := range fileOrder {
+		if !seen[name] {
+			out = append(out, ServiceLog{Name: name, Content: content[name]})
+		}
+	}
+	return out
+}
+
 // Down stops all services recorded for the worktree (killing the process group)
 // and clears the state. It is a no-op when nothing is recorded.
 func Down(out io.Writer, worktree string) error {

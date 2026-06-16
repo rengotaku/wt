@@ -40,6 +40,7 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/ports/{repo}/{wt}/down", h.DownWorktree)
 	mux.HandleFunc("GET /api/ports/{repo}/{wt}/devconfig", h.GetDevConfig)
 	mux.HandleFunc("PUT /api/ports/{repo}/{wt}/devconfig", h.PutDevConfig)
+	mux.HandleFunc("GET /api/ports/{repo}/{wt}/logs", h.GetLogs)
 	mux.HandleFunc("GET /api/proxy", h.GetProxy)
 	mux.HandleFunc("POST /api/proxy/start", h.StartProxy)
 	mux.HandleFunc("POST /api/proxy/stop", h.StopProxy)
