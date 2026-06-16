@@ -9,6 +9,7 @@ export type {
   ServeResult,
   DevService,
   DevConfig,
+  ServiceLog,
 } from "./ports";
 export { proxyApi } from "./proxy";
 export type { ProxyStatus } from "./proxy";

@@ -2,7 +2,16 @@ import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { RefreshCw, Copy, Check, ChevronDown, ChevronRight, FileCog, Globe } from "lucide-react";
+import {
+  RefreshCw,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileCog,
+  Globe,
+  ScrollText,
+} from "lucide-react";
 import {
   treesApi,
   reposApi,
@@ -16,6 +25,7 @@ import {
 } from "@/api";
 import { filterTrees } from "./treesFilter";
 import { DevConfigPanel, type DevConfigTarget } from "@/components/DevConfigPanel";
+import { LogPanel, type LogTarget } from "@/components/LogPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -95,6 +105,32 @@ export function TreesPage() {
   });
   const portBusy = serveMutation.isPending || downMutation.isPending;
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
+  const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+
+  // Issue / 親issue / PR 列の表示。既定は非表示。localStorage に永続化。
+  const [showCols, setShowCols] = useState<{
+    issue: boolean;
+    parentIssue: boolean;
+    pr: boolean;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem("wt.trees.cols");
+      if (saved) return JSON.parse(saved);
+    } catch {
+      /* ignore */
+    }
+    return { issue: false, parentIssue: false, pr: false };
+  });
+  const toggleCol = (key: "issue" | "parentIssue" | "pr") =>
+    setShowCols((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      try {
+        localStorage.setItem("wt.trees.cols", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   const { data: proxyStatus } = useQuery({
     queryKey: ["proxy"],
@@ -523,6 +559,31 @@ export function TreesPage() {
               />
               main/master を表示
             </label>
+            <span className="text-xs text-muted-foreground">列:</span>
+            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCols.issue}
+                onChange={() => toggleCol("issue")}
+              />
+              Issue
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCols.parentIssue}
+                onChange={() => toggleCol("parentIssue")}
+              />
+              親 issue
+            </label>
+            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showCols.pr}
+                onChange={() => toggleCol("pr")}
+              />
+              PR
+            </label>
           </div>
         </CardHeader>
         <CardContent>
@@ -548,9 +609,9 @@ export function TreesPage() {
                     <TableHead>Repo</TableHead>
                     <TableHead>フォルダ名</TableHead>
                     <TableHead>Branch</TableHead>
-                    <TableHead>Issue</TableHead>
-                    <TableHead>親 issue</TableHead>
-                    <TableHead>PR</TableHead>
+                    {showCols.issue && <TableHead>Issue</TableHead>}
+                    {showCols.parentIssue && <TableHead>親 issue</TableHead>}
+                    {showCols.pr && <TableHead>PR</TableHead>}
                     <TableHead title="同名の tmux セッションが存在するか">tmux</TableHead>
                     <TableHead title="git status の変更ファイル数（未追跡除く）">
                       変更
@@ -624,6 +685,7 @@ export function TreesPage() {
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {t.branch || "—"}
                         </TableCell>
+                        {showCols.issue && (
                         <TableCell className="text-xs">
                           {issueURL ? (
                             <div className="flex items-center gap-1">
@@ -653,6 +715,8 @@ export function TreesPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {showCols.parentIssue && (
                         <TableCell className="text-xs">
                           {issueDetail?.parent_number ? (
                             <a
@@ -669,6 +733,8 @@ export function TreesPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
+                        {showCols.pr && (
                         <TableCell className="text-xs">
                           {pr ? (
                             (() => {
@@ -694,6 +760,7 @@ export function TreesPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        )}
                         <TableCell className="text-xs">
                           {t.has_tmux ? (
                             <span className="text-green-600">✓</span>
@@ -738,6 +805,17 @@ export function TreesPage() {
                                 }
                               >
                                 <FileCog className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-1.5"
+                                title="サーバーログを見る"
+                                onClick={() =>
+                                  setLogTarget({ repo: t.repo, wt: t.wt_name })
+                                }
+                              >
+                                <ScrollText className="h-3 w-3" />
                               </Button>
                               {port?.has_dev_config &&
                                 (port.running ? (
@@ -860,6 +938,7 @@ export function TreesPage() {
         target={devConfigTarget}
         onClose={() => setDevConfigTarget(null)}
       />
+      <LogPanel target={logTarget} onClose={() => setLogTarget(null)} />
     </div>
   );
 }

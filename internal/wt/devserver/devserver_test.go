@@ -244,6 +244,27 @@ func cmdOf(c Config) string {
 	return c.Services[0].Cmd
 }
 
+func TestLogs_CapturesOutputAndPersists(t *testing.T) {
+	wt := writeWorktree(t, "[[services]]\nname = \"noisy\"\ncmd = \"echo HELLO_LOG_LINE; sleep 30\"\n")
+	var buf bytes.Buffer
+	if err := Serve(&buf, wt, 9000); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	// Output is flushed during the startup grace, so it's available immediately.
+	logs := Logs(wt, 0)
+	if len(logs) != 1 || logs[0].Name != "noisy" {
+		t.Fatalf("logs = %+v, want one 'noisy' entry", logs)
+	}
+	if !strings.Contains(logs[0].Content, "HELLO_LOG_LINE") {
+		t.Errorf("log content missing output: %q", logs[0].Content)
+	}
+	// Logs persist after stop so a crashed/stopped serve stays inspectable.
+	_ = Down(&buf, wt)
+	if logs := Logs(wt, 0); len(logs) != 1 {
+		t.Errorf("logs should persist after Down, got %+v", logs)
+	}
+}
+
 func TestServe_NoConfig(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	var buf bytes.Buffer
