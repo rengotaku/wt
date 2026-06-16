@@ -13,6 +13,7 @@ type portState struct {
 	Listening bool   `json:"listening"`
 	PID       int    `json:"pid,omitempty"`
 	Proc      string `json:"proc,omitempty"`
+	Service   string `json:"service,omitempty"` // dev service名（service i = base+i）
 }
 
 type portItem struct {
@@ -73,14 +74,16 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 	}
 	items := make([]portItem, 0, len(rows))
 	for _, r := range rows {
+		// Resolve the effective dev config once: its service order maps port
+		// base+i → service i, used to label each port (api/web/admin).
+		cfg, source, _ := devserver.EffectiveConfig(r.Path)
 		states := make([]portState, 0, len(r.Ports))
-		for _, p := range r.Ports {
-			states = append(states, portState{
-				Port:      p.Port,
-				Listening: p.Listening,
-				PID:       p.PID,
-				Proc:      p.Proc,
-			})
+		for i, p := range r.Ports {
+			st := portState{Port: p.Port, Listening: p.Listening, PID: p.PID, Proc: p.Proc}
+			if i < len(cfg.Services) {
+				st.Service = cfg.Services[i].Name
+			}
+			states = append(states, st)
 		}
 		items = append(items, portItem{
 			Repo:         r.Repo,
@@ -89,7 +92,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			PortBase:     r.PortBase,
 			PortRange:    ports.RangeString(r.PortBase),
 			Ports:        states,
-			HasDevConfig: devserver.HasEffectiveConfig(r.Path),
+			HasDevConfig: source != devserver.SourceNone,
 			Running:      devserver.IsRunning(r.Path),
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
 		})

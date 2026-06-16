@@ -774,9 +774,9 @@ export function TreesPage() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="font-mono text-xs text-blue-600 hover:underline"
-                                      title="このポートのサーバーを開く"
+                                      title={`${p.service ? p.service + " " : ""}:${p.port} を開く`}
                                     >
-                                      :{p.port}
+                                      {p.service ? `${p.service}:${p.port}` : `:${p.port}`}
                                     </a>
                                   ))}
                               {port?.running && port.domain && (
