@@ -21,6 +21,7 @@ type syncResult struct {
 	name   string
 	branch string
 	ok     bool
+	warn   bool
 	msg    string
 }
 
@@ -127,6 +128,22 @@ func Sync() {
 
 	for _, t := range targets {
 		go func(t target) {
+			// フォルダ名（main/master）と実際に checkout されているブランチを照合する。
+			// worktree-first 運用を破って main フォルダで feat ブランチに切り替えていると、
+			// --ff-only pull が意図しないブランチを進めてしまうため、pull せず警告する。
+			folderName := filepath.Base(t.path)
+			curBranchOut, _ := exec.Command("git", "-C", t.path, "rev-parse", "--abbrev-ref", "HEAD").Output()
+			curBranch := strings.TrimSpace(string(curBranchOut))
+			if curBranch != "" && curBranch != folderName {
+				ch <- syncResult{
+					name:   t.name,
+					branch: curBranch,
+					warn:   true,
+					msg:    fmt.Sprintf("フォルダ %q に別ブランチ %q が checkout されています → pull skip", folderName, curBranch),
+				}
+				return
+			}
+
 			oldHead, _ := exec.Command("git", "-C", t.path, "rev-parse", "HEAD").Output()
 
 			cmd := exec.Command("git", "-C", t.path, "pull", "--ff-only")
@@ -151,22 +168,29 @@ func Sync() {
 		}(t)
 	}
 
-	success, fail := 0, 0
+	success, fail, warn := 0, 0, 0
 	for range targets {
 		r := <-ch
-		if r.ok {
+		switch {
+		case r.warn:
+			fmt.Printf("⚠️  %s (%s) %s\n", r.name, r.branch, r.msg)
+			warn++
+		case r.ok:
 			fmt.Printf("✅ %s (%s) %s\n", r.name, r.branch, r.msg)
 			success++
-		} else {
+		default:
 			fmt.Printf("❌ %s (%s) %s\n", r.name, r.branch, r.msg)
 			fail++
 		}
 	}
 
 	fmt.Println()
-	if fail == 0 {
-		fmt.Printf("✅ %d/%d 完了\n", success, len(targets))
-	} else {
-		fmt.Printf("✅ %d/%d 完了, ❌ %d 失敗\n", success, len(targets), fail)
+	summary := fmt.Sprintf("✅ %d/%d 完了", success, len(targets))
+	if warn > 0 {
+		summary += fmt.Sprintf(", ⚠️ %d 警告", warn)
 	}
+	if fail > 0 {
+		summary += fmt.Sprintf(", ❌ %d 失敗", fail)
+	}
+	fmt.Println(summary)
 }
