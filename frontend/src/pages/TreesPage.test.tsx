@@ -207,6 +207,67 @@ describe("TreesPage - dirty worktree は一括削除の対象外", () => {
   });
 });
 
+describe("TreesPage - 行から1件ずつ削除", () => {
+  const trees = [
+    { ...mockTrees[0], diff_count: 0 },
+    { ...mockTrees[1], wt_name: "myrepo--dirty", diff_count: 4, branch: "feat/dirty" },
+  ];
+
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(trees as never);
+    vi.mocked(treesApi.delete).mockClear();
+  });
+
+  it("clean な行は確認のみで force=false で削除する", async () => {
+    const { treesApi } = await import("@/api");
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo--feat-issue-1-abc を削除")
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("myrepo--feat-issue-1-abc を削除"));
+    const del = await screen.findByRole("button", { name: "削除" });
+    fireEvent.click(del);
+
+    await waitFor(() => {
+      expect(treesApi.delete).toHaveBeenCalledWith({
+        repo: "myrepo",
+        branch: "feat/issue-1-abc",
+        force: false,
+      });
+    });
+  });
+
+  it("dirty な行は名前入力が一致するまで強制削除できない", async () => {
+    const { treesApi } = await import("@/api");
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("myrepo--dirty を削除")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("myrepo--dirty を削除"));
+
+    const forceBtn = await screen.findByRole("button", { name: "強制削除" });
+    expect(forceBtn).toBeDisabled();
+
+    const input = screen.getByLabelText("削除確認のため worktree 名を入力");
+    fireEvent.change(input, { target: { value: "myrepo--dirty" } });
+    expect(forceBtn).toBeEnabled();
+
+    fireEvent.click(forceBtn);
+    await waitFor(() => {
+      expect(treesApi.delete).toHaveBeenCalledWith({
+        repo: "myrepo",
+        branch: "feat/dirty",
+        force: true,
+      });
+    });
+  });
+});
+
 const newTree = {
   wt_name: "myrepo--feat-issue-3-new",
   repo: "myrepo",
