@@ -576,9 +576,6 @@ export function TreesPage() {
                     const issueDetail = getIssueDetail(t);
                     const isPRLoading = loadingPRRepos.has(t.repo);
                     const port = portMap.get(`${t.repo}/${t.wt_name}`);
-                    // 「開く」遷移先: domain サービス(=ユーザー向けUI)を優先、無ければ最初の稼働ポート
-                    const openPort =
-                      port?.domain_port || port?.ports.find((p) => p.listening)?.port;
                     return (
                       <TableRow
                         key={t.path}
@@ -755,56 +752,19 @@ export function TreesPage() {
                           {!port?.has_dev_config ? (
                             <span className="text-muted-foreground">—</span>
                           ) : (
-                            <div className="flex items-center gap-2">
+                            <span
+                              className={
+                                port.running
+                                  ? "inline-flex items-center gap-1 text-green-700"
+                                  : "inline-flex items-center gap-1 text-muted-foreground"
+                              }
+                              title={port.port_range ?? "未割当"}
+                            >
                               <span
-                                className={
-                                  port.running
-                                    ? "inline-flex items-center gap-1 text-green-700"
-                                    : "inline-flex items-center gap-1 text-muted-foreground"
-                                }
-                                title={port.port_range ?? "未割当"}
-                              >
-                                <span
-                                  className={`h-2 w-2 rounded-full ${port.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
-                                />
-                                {port.running ? "稼働" : "停止"}
-                              </span>
-                              {port.running ? (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2"
-                                  disabled={portBusy}
-                                  onClick={() =>
-                                    downMutation.mutate({ repo: t.repo, wt: t.wt_name })
-                                  }
-                                >
-                                  停止
-                                </Button>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  className="h-6 px-2"
-                                  disabled={portBusy}
-                                  onClick={() =>
-                                    serveMutation.mutate({ repo: t.repo, wt: t.wt_name })
-                                  }
-                                >
-                                  起動
-                                </Button>
-                              )}
-                              {port.running && openPort && (
-                                <a
-                                  href={`http://localhost:${openPort}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline"
-                                  title={`http://localhost:${openPort} を開く`}
-                                >
-                                  開く↗
-                                </a>
-                              )}
-                            </div>
+                                className={`h-2 w-2 rounded-full ${port.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
+                              />
+                              {port.running ? "稼働" : "停止"}
+                            </span>
                           )}
                         </TableCell>
                       </TableRow>
