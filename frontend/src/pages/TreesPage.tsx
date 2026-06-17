@@ -104,6 +104,16 @@ export function TreesPage() {
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
+  const deleteMutation = useMutation({
+    mutationFn: ({ repo, branch, force }: { repo: string; branch: string; force: boolean }) =>
+      treesApi.delete({ repo, branch, force }),
+    onSuccess: (_r, v) => {
+      toast.success(`${v.branch} を削除しました`);
+      setDetailTree(null);
+      refetch();
+    },
+    onError: (e: Error) => toast.error("削除に失敗しました", { description: e.message }),
+  });
 
   // Issue / 親issue / PR 列の表示。既定は非表示。localStorage に永続化。
   const [showCols, setShowCols] = useState<{
@@ -309,7 +319,8 @@ export function TreesPage() {
     return b.created_at.localeCompare(a.created_at);
   });
 
-  const selectableTrees = filteredTrees.filter((t) => !t.is_main);
+  // 未コミット変更がある worktree は一括削除の対象外（個別に強制削除する）。
+  const selectableTrees = filteredTrees.filter((t) => !t.is_main && t.diff_count === 0);
   const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
   const allSelected =
     selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
@@ -602,12 +613,18 @@ export function TreesPage() {
                           .filter(Boolean)
                           .join(" ")}
                       >
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           {!t.is_main && (
                             <input
                               type="checkbox"
                               checked={selectedPaths.has(t.path)}
                               onChange={() => togglePath(t.path)}
+                              disabled={t.diff_count > 0}
+                              title={
+                                t.diff_count > 0
+                                  ? "未コミット変更があるため一括削除の対象外（詳細から強制削除）"
+                                  : undefined
+                              }
                               aria-label={`${t.repo}/${t.wt_name} を選択`}
                             />
                           )}
@@ -837,6 +854,7 @@ export function TreesPage() {
       />
       <LogPanel target={logTarget} onClose={() => setLogTarget(null)} />
       <WorktreeDetailPanel
+        key={detailTree?.path ?? "none"}
         detail={
           detailTree
             ? {
@@ -865,6 +883,15 @@ export function TreesPage() {
         onShowLogs={() =>
           detailTree && setLogTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
         }
+        onDelete={(force) =>
+          detailTree &&
+          deleteMutation.mutate({
+            repo: detailTree.repo,
+            branch: detailTree.branch || detailTree.wt_name,
+            force,
+          })
+        }
+        deleting={deleteMutation.isPending}
         onClose={() => setDetailTree(null)}
       />
     </div>

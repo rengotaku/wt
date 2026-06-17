@@ -173,6 +173,40 @@ describe("TreesPage - checkbox and bulk action", () => {
   });
 });
 
+describe("TreesPage - dirty worktree は一括削除の対象外", () => {
+  const dirtyTrees = [
+    { ...mockTrees[0], diff_count: 0 },
+    { ...mockTrees[1], diff_count: 4 },
+  ];
+
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(dirtyTrees as never);
+  });
+
+  it("dirty 行のチェックボックスは無効で、全選択でも選ばれない", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("全選択")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("全選択"));
+
+    // clean な 1 件のみ選択される
+    expect(screen.getByText("1 件選択中")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+    ).toBeChecked();
+    expect(
+      screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
+    ).not.toBeChecked();
+  });
+});
+
 const newTree = {
   wt_name: "myrepo--feat-issue-3-new",
   repo: "myrepo",

@@ -1,4 +1,5 @@
-import { X, FileCog, ScrollText } from "lucide-react";
+import { useState } from "react";
+import { X, FileCog, ScrollText, Trash2 } from "lucide-react";
 import type { TreeItem, PortItem, IssueDetail, MergedPRInfo } from "@/api";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +19,8 @@ interface WorktreeDetailPanelProps {
   onDown: () => void;
   onEditConfig: () => void;
   onShowLogs: () => void;
+  onDelete: (force: boolean) => void;
+  deleting: boolean;
   portBusy: boolean;
 }
 
@@ -42,11 +45,21 @@ export function WorktreeDetailPanel({
   onDown,
   onEditConfig,
   onShowLogs,
+  onDelete,
+  deleting,
   portBusy,
 }: WorktreeDetailPanelProps) {
+  // 削除確認 UI の状態。呼び出し側が worktree の path を key にしているため、
+  // 別の worktree を開く / 閉じるたびにコンポーネントが再マウントされリセットされる。
+  const [confirming, setConfirming] = useState(false);
+  const [confirmInput, setConfirmInput] = useState("");
+
   if (detail === null) return null;
   const { tree: t, port, issueURL, issueDetail, pr, repoURL } = detail;
   const livePorts = (port?.ports ?? []).filter((p) => p.listening);
+  const isDirty = t.diff_count > 0;
+  // dirty な worktree は名前の一致入力を必須にして強制削除する（AWS 風）。
+  const canDelete = !isDirty || confirmInput === t.wt_name;
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -206,6 +219,67 @@ export function WorktreeDetailPanel({
           <Row label="tmux">{t.has_tmux ? "あり" : "なし"}</Row>
           <Row label="作成日">{t.created_at || "—"}</Row>
         </div>
+
+        <footer className="border-t p-4">
+          {!confirming ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-full"
+              onClick={() => setConfirming(true)}
+            >
+              <Trash2 className="h-3 w-3 mr-1" />
+              worktree を削除
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              {isDirty ? (
+                <>
+                  <p className="text-sm text-amber-600">
+                    未コミット変更が {t.diff_count} 件あります。削除すると失われます。
+                  </p>
+                  <p className="text-sm">
+                    続行するには worktree 名{" "}
+                    <span className="font-mono font-semibold">{t.wt_name}</span>{" "}
+                    を入力してください。
+                  </p>
+                  <input
+                    type="text"
+                    value={confirmInput}
+                    onChange={(e) => setConfirmInput(e.target.value)}
+                    placeholder={t.wt_name}
+                    aria-label="削除確認のため worktree 名を入力"
+                    autoFocus
+                    className="w-full rounded border px-2 py-1 font-mono text-sm"
+                  />
+                </>
+              ) : (
+                <p className="text-sm">
+                  <span className="font-mono font-semibold">{t.wt_name}</span>{" "}
+                  を削除しますか？この操作は取り消せません。
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirming(false)}
+                  disabled={deleting}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => onDelete(isDirty)}
+                  disabled={!canDelete || deleting}
+                >
+                  {deleting ? "削除中..." : isDirty ? "強制削除" : "削除"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </footer>
       </aside>
     </div>
   );
