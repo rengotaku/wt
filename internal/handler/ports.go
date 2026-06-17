@@ -25,7 +25,8 @@ type portItem struct {
 	Ports        []portState `json:"ports"`
 	HasDevConfig bool        `json:"has_dev_config"`
 	Running      bool        `json:"running"`
-	Domain       string      `json:"domain,omitempty"` // <label>.wt.localhost when a domain service exists
+	Domain       string      `json:"domain,omitempty"`      // <label>.wt.localhost when a domain service exists
+	DomainPort   int         `json:"domain_port,omitempty"` // localhost port of the domain(=user-facing)サービス。「開く」の遷移先
 }
 
 type doctorRow struct {
@@ -85,6 +86,15 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			}
 			states = append(states, st)
 		}
+		// domainPort: the localhost port of the first domain-exposed service.
+		// It is the user-facing UI (not the API), so the list's「開く」targets it.
+		domainPort := 0
+		for i := range cfg.Services {
+			if cfg.Services[i].Domain {
+				domainPort = r.PortBase + i
+				break
+			}
+		}
 		items = append(items, portItem{
 			Repo:         r.Repo,
 			WtName:       r.WtName,
@@ -95,6 +105,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			HasDevConfig: source != devserver.SourceNone,
 			Running:      devserver.IsRunning(r.Path),
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
+			DomainPort:   domainPort,
 		})
 	}
 	jsonOK(w, items)

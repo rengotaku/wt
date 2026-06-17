@@ -18,6 +18,7 @@ export interface PortItem {
   has_dev_config: boolean;
   running: boolean;
   domain?: string; // <label>.wt.localhost when a domain service exists
+  domain_port?: number; // localhost port of the domain(=user-facing)サービス
 }
 
 export interface ServeResult {

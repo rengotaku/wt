@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X, FileCog, ScrollText } from "lucide-react";
 import type { TreeItem, PortItem, IssueDetail, MergedPRInfo } from "@/api";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,11 @@ export interface WorktreeDetail {
 interface WorktreeDetailPanelProps {
   detail: WorktreeDetail | null;
   onClose: () => void;
+  onServe: () => void;
+  onDown: () => void;
+  onEditConfig: () => void;
+  onShowLogs: () => void;
+  portBusy: boolean;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -30,7 +35,15 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  * clicking a row. Shows the full, untruncated details that the compact table
  * abbreviates.
  */
-export function WorktreeDetailPanel({ detail, onClose }: WorktreeDetailPanelProps) {
+export function WorktreeDetailPanel({
+  detail,
+  onClose,
+  onServe,
+  onDown,
+  onEditConfig,
+  onShowLogs,
+  portBusy,
+}: WorktreeDetailPanelProps) {
   if (detail === null) return null;
   const { tree: t, port, issueURL, issueDetail, pr, repoURL } = detail;
   const livePorts = (port?.ports ?? []).filter((p) => p.listening);
@@ -48,6 +61,26 @@ export function WorktreeDetailPanel({ detail, onClose }: WorktreeDetailPanelProp
             <X className="h-4 w-4" />
           </Button>
         </header>
+
+        <div className="flex flex-wrap items-center gap-2 border-b p-4">
+          {port?.running ? (
+            <Button variant="outline" size="sm" disabled={portBusy} onClick={onDown}>
+              停止
+            </Button>
+          ) : (
+            <Button size="sm" disabled={portBusy} onClick={onServe}>
+              起動
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onEditConfig}>
+            <FileCog className="h-3 w-3 mr-1" />
+            dev.toml
+          </Button>
+          <Button variant="outline" size="sm" onClick={onShowLogs}>
+            <ScrollText className="h-3 w-3 mr-1" />
+            ログ
+          </Button>
+        </div>
 
         <div className="flex-1 overflow-y-auto p-4">
           <Row label="Repo">{t.repo}</Row>

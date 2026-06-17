@@ -8,8 +8,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  FileCog,
-  ScrollText,
 } from "lucide-react";
 import {
   treesApi,
@@ -568,7 +566,7 @@ export function TreesPage() {
                       変更
                     </TableHead>
                     <TableHead className="w-24">作成日</TableHead>
-                    <TableHead className="w-64" title="割当ポート帯と稼働状況">ポート</TableHead>
+                    <TableHead className="w-40" title="稼働状況と起動/停止">ポート</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -578,6 +576,9 @@ export function TreesPage() {
                     const issueDetail = getIssueDetail(t);
                     const isPRLoading = loadingPRRepos.has(t.repo);
                     const port = portMap.get(`${t.repo}/${t.wt_name}`);
+                    // 「開く」遷移先: domain サービス(=ユーザー向けUI)を優先、無ければ最初の稼働ポート
+                    const openPort =
+                      port?.domain_port || port?.ports.find((p) => p.listening)?.port;
                     return (
                       <TableRow
                         key={t.path}
@@ -750,95 +751,61 @@ export function TreesPage() {
                         <TableCell className="text-xs text-muted-foreground">
                           {t.created_at || "—"}
                         </TableCell>
-                        <TableCell className="text-xs whitespace-normal">
-                            <div className="flex flex-wrap items-center gap-1.5">
+                        <TableCell className="text-xs">
+                          {!port?.has_dev_config ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
                               <span
                                 className={
-                                  port?.running
-                                    ? "font-mono text-green-700"
-                                    : "font-mono text-muted-foreground"
+                                  port.running
+                                    ? "inline-flex items-center gap-1 text-green-700"
+                                    : "inline-flex items-center gap-1 text-muted-foreground"
                                 }
+                                title={port.port_range ?? "未割当"}
                               >
-                                {port?.has_dev_config ? (port.port_range ?? "未割当") : "—"}
+                                <span
+                                  className={`h-2 w-2 rounded-full ${port.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
+                                />
+                                {port.running ? "稼働" : "停止"}
                               </span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-1.5"
-                                title={
-                                  port?.has_dev_config
-                                    ? "dev.toml を編集"
-                                    : "dev.toml を作成して起動可能にする"
-                                }
-                                onClick={() =>
-                                  setDevConfigTarget({ repo: t.repo, wt: t.wt_name })
-                                }
-                              >
-                                <FileCog className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-1.5"
-                                title="サーバーログを見る"
-                                onClick={() =>
-                                  setLogTarget({ repo: t.repo, wt: t.wt_name })
-                                }
-                              >
-                                <ScrollText className="h-3 w-3" />
-                              </Button>
-                              {port?.has_dev_config &&
-                                (port.running ? (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 px-2"
-                                    disabled={portBusy}
-                                    onClick={() =>
-                                      downMutation.mutate({ repo: t.repo, wt: t.wt_name })
-                                    }
-                                  >
-                                    停止
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    className="h-6 px-2"
-                                    disabled={portBusy}
-                                    onClick={() =>
-                                      serveMutation.mutate({ repo: t.repo, wt: t.wt_name })
-                                    }
-                                  >
-                                    起動
-                                  </Button>
-                                ))}
-                              {port?.running &&
-                                port.ports
-                                  .filter((p) => p.listening)
-                                  .map((p) => (
-                                    <a
-                                      key={p.port}
-                                      href={`http://localhost:${p.port}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="font-mono text-xs text-blue-600 hover:underline"
-                                      title={`${p.service ? p.service + " " : ""}:${p.port} を開く`}
-                                    >
-                                      {p.service ? `${p.service}:${p.port}` : `:${p.port}`}
-                                    </a>
-                                  ))}
-                              {port?.running && port.domain && (
+                              {port.running ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2"
+                                  disabled={portBusy}
+                                  onClick={() =>
+                                    downMutation.mutate({ repo: t.repo, wt: t.wt_name })
+                                  }
+                                >
+                                  停止
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  className="h-6 px-2"
+                                  disabled={portBusy}
+                                  onClick={() =>
+                                    serveMutation.mutate({ repo: t.repo, wt: t.wt_name })
+                                  }
+                                >
+                                  起動
+                                </Button>
+                              )}
+                              {port.running && openPort && (
                                 <a
-                                  href={`http://${port.domain}:8088`}
+                                  href={`http://localhost:${openPort}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="font-mono text-xs text-blue-600 hover:underline"
-                                  title="wt proxy 経由で開く（要 wt proxy 起動）"
+                                  className="text-blue-600 hover:underline"
+                                  title={`http://localhost:${openPort} を開く`}
                                 >
-                                  {port.domain}
+                                  開く↗
                                 </a>
                               )}
                             </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -921,6 +888,22 @@ export function TreesPage() {
                 repoURL: repoURLMap[detailTree.repo],
               }
             : null
+        }
+        portBusy={portBusy}
+        onServe={() =>
+          detailTree &&
+          serveMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+        }
+        onDown={() =>
+          detailTree &&
+          downMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+        }
+        onEditConfig={() =>
+          detailTree &&
+          setDevConfigTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
+        }
+        onShowLogs={() =>
+          detailTree && setLogTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
         }
         onClose={() => setDetailTree(null)}
       />
