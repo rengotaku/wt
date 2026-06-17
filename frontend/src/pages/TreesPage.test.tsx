@@ -173,7 +173,7 @@ describe("TreesPage - checkbox and bulk action", () => {
   });
 });
 
-describe("TreesPage - dirty worktree は一括削除の対象外", () => {
+describe("TreesPage - dirty worktree も選択可能", () => {
   const dirtyTrees = [
     { ...mockTrees[0], diff_count: 0 },
     { ...mockTrees[1], diff_count: 4 },
@@ -184,7 +184,7 @@ describe("TreesPage - dirty worktree は一括削除の対象外", () => {
     vi.mocked(treesApi.list).mockResolvedValue(dirtyTrees as never);
   });
 
-  it("dirty 行のチェックボックスは無効で、全選択でも選ばれない", async () => {
+  it("dirty 行のチェックボックスも有効で、全選択で両方選ばれる", async () => {
     render(<TreesPage />);
     await waitFor(() => {
       expect(screen.getByLabelText("全選択")).toBeInTheDocument();
@@ -192,22 +192,22 @@ describe("TreesPage - dirty worktree は一括削除の対象外", () => {
 
     expect(
       screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
-    ).toBeDisabled();
+    ).toBeEnabled();
 
     fireEvent.click(screen.getByLabelText("全選択"));
 
-    // clean な 1 件のみ選択される
-    expect(screen.getByText("1 件選択中")).toBeInTheDocument();
+    // dirty 行も含めて 2 件選択される
+    expect(screen.getByText("2 件選択中")).toBeInTheDocument();
     expect(
       screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
     ).toBeChecked();
     expect(
       screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
-    ).not.toBeChecked();
+    ).toBeChecked();
   });
 });
 
-describe("TreesPage - 行から1件ずつ削除", () => {
+describe("TreesPage - バルク削除確認モーダル", () => {
   const trees = [
     { ...mockTrees[0], diff_count: 0 },
     { ...mockTrees[1], wt_name: "myrepo--dirty", diff_count: 4, branch: "feat/dirty" },
@@ -219,19 +219,29 @@ describe("TreesPage - 行から1件ずつ削除", () => {
     vi.mocked(treesApi.delete).mockClear();
   });
 
-  it("clean な行は確認のみで force=false で削除する", async () => {
+  it("すべて clean な選択ではシンプルな確認モーダルで force=false で削除する", async () => {
     const { treesApi } = await import("@/api");
     render(<TreesPage />);
     await waitFor(() => {
       expect(
-        screen.getByLabelText("myrepo--feat-issue-1-abc を削除")
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText("myrepo--feat-issue-1-abc を削除"));
-    const del = await screen.findByRole("button", { name: "削除" });
-    fireEvent.click(del);
+    // clean な行だけ選択
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
 
+    await waitFor(() => {
+      expect(screen.getByText("削除確認")).toBeInTheDocument();
+    });
+
+    // dirty が含まれないので yes 入力は不要、"削除" ボタンが表示される
+    expect(screen.queryByLabelText("削除確認のため yes と入力")).not.toBeInTheDocument();
+    const delBtn = screen.getByRole("button", { name: "削除" });
+    expect(delBtn).toBeEnabled();
+
+    fireEvent.click(delBtn);
     await waitFor(() => {
       expect(treesApi.delete).toHaveBeenCalledWith({
         repo: "myrepo",
@@ -241,24 +251,47 @@ describe("TreesPage - 行から1件ずつ削除", () => {
     });
   });
 
-  it("dirty な行は名前入力が一致するまで強制削除できない", async () => {
+  it("dirty 含む選択では yes 入力が一致するまで強制削除できない", async () => {
     const { treesApi } = await import("@/api");
     render(<TreesPage />);
     await waitFor(() => {
-      expect(screen.getByLabelText("myrepo--dirty を削除")).toBeInTheDocument();
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByLabelText("myrepo--dirty を削除"));
+    // 両方選択（dirty 含む）
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--dirty を選択"));
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
 
-    const forceBtn = await screen.findByRole("button", { name: "強制削除" });
+    await waitFor(() => {
+      expect(screen.getByText("削除確認")).toBeInTheDocument();
+    });
+
+    // yes 入力が必要
+    const input = screen.getByLabelText("削除確認のため yes と入力");
+    expect(input).toBeInTheDocument();
+
+    const forceBtn = screen.getByRole("button", { name: "強制削除" });
     expect(forceBtn).toBeDisabled();
 
-    const input = screen.getByLabelText("削除確認のため worktree 名を入力");
-    fireEvent.change(input, { target: { value: "myrepo--dirty" } });
+    // 間違った文字列では有効化されない
+    fireEvent.change(input, { target: { value: "no" } });
+    expect(forceBtn).toBeDisabled();
+
+    // 正しい文字列で有効化
+    fireEvent.change(input, { target: { value: "yes" } });
     expect(forceBtn).toBeEnabled();
 
     fireEvent.click(forceBtn);
     await waitFor(() => {
+      // clean なものは force=false、dirty なものは force=true
+      expect(treesApi.delete).toHaveBeenCalledWith({
+        repo: "myrepo",
+        branch: "feat/issue-1-abc",
+        force: false,
+      });
       expect(treesApi.delete).toHaveBeenCalledWith({
         repo: "myrepo",
         branch: "feat/dirty",

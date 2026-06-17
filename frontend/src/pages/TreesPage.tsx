@@ -8,7 +8,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Trash2,
 } from "lucide-react";
 import {
   treesApi,
@@ -105,17 +104,12 @@ export function TreesPage() {
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
-  // 一覧から 1 件ずつ削除する際の対象と、dirty 時の名前入力確認。
-  const [deleteTarget, setDeleteTarget] = useState<TreeItem | null>(null);
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const deleteMutation = useMutation({
     mutationFn: ({ repo, branch, force }: { repo: string; branch: string; force: boolean }) =>
       treesApi.delete({ repo, branch, force }),
     onSuccess: (_r, v) => {
       toast.success(`${v.branch} を削除しました`);
       setDetailTree(null);
-      setDeleteTarget(null);
-      setDeleteConfirmInput("");
       refetch();
     },
     onError: (e: Error) => toast.error("削除に失敗しました", { description: e.message }),
@@ -163,6 +157,7 @@ export function TreesPage() {
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState("delete");
   const [bulkConfirming, setBulkConfirming] = useState(false);
+  const [bulkConfirmInput, setBulkConfirmInput] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
@@ -325,8 +320,8 @@ export function TreesPage() {
     return b.created_at.localeCompare(a.created_at);
   });
 
-  // 未コミット変更がある worktree は一括削除の対象外（個別に強制削除する）。
-  const selectableTrees = filteredTrees.filter((t) => !t.is_main && t.diff_count === 0);
+  // すべての非 main 行を選択可能にする。
+  const selectableTrees = filteredTrees.filter((t) => !t.is_main);
   const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
   const allSelected =
     selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
@@ -360,6 +355,7 @@ export function TreesPage() {
 
   const handleBulkExecute = () => {
     if (!someSelected) return;
+    setBulkConfirmInput("");
     setBulkConfirming(true);
   };
 
@@ -368,13 +364,14 @@ export function TreesPage() {
     const targets = selectedInView;
     for (const t of targets) {
       try {
-        await treesApi.delete({ repo: t.repo, branch: t.branch || t.wt_name });
+        await treesApi.delete({ repo: t.repo, branch: t.branch || t.wt_name, force: t.diff_count > 0 });
       } catch (e: unknown) {
         alert((e as Error).message);
       }
     }
     setBulkDeleting(false);
     setBulkConfirming(false);
+    setBulkConfirmInput("");
     setSelectedPaths(new Set());
     refetch();
   };
@@ -558,8 +555,27 @@ export function TreesPage() {
           ) : filteredTrees.length === 0 ? (
             <p className="text-sm text-muted-foreground">Worktree がありません</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table className="table-fixed w-full whitespace-nowrap">
+            <>
+              {someSelected && (
+                <div className="flex items-center gap-2 mb-3 pb-3 border-b">
+                  <span className="text-sm text-muted-foreground">
+                    {selectedInView.length} 件選択中
+                  </span>
+                  <select
+                    className="border rounded px-2 py-1 text-sm"
+                    value={bulkAction}
+                    onChange={(e) => setBulkAction(e.target.value)}
+                    aria-label="アクション選択"
+                  >
+                    <option value="delete">削除</option>
+                  </select>
+                  <Button variant="destructive" size="sm" onClick={handleBulkExecute}>
+                    実行
+                  </Button>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <Table className="table-fixed w-full whitespace-nowrap">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8">
@@ -625,12 +641,6 @@ export function TreesPage() {
                               type="checkbox"
                               checked={selectedPaths.has(t.path)}
                               onChange={() => togglePath(t.path)}
-                              disabled={t.diff_count > 0}
-                              title={
-                                t.diff_count > 0
-                                  ? "未コミット変更があるため一括削除の対象外（詳細から強制削除）"
-                                  : undefined
-                              }
                               aria-label={`${t.repo}/${t.wt_name} を選択`}
                             />
                           )}
@@ -667,21 +677,6 @@ export function TreesPage() {
                                 <Copy className="h-3.5 w-3.5" />
                               )}
                             </Button>
-                            {!t.is_main && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  setDeleteConfirmInput("");
-                                  setDeleteTarget(t);
-                                }}
-                                title={`${t.wt_name} を削除`}
-                                aria-label={`${t.wt_name} を削除`}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
                           </div>
                         </TableCell>
                         <TableCell
@@ -813,138 +808,86 @@ export function TreesPage() {
                 </TableBody>
               </Table>
             </div>
-          )}
-          {someSelected && (
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-              <span className="text-sm text-muted-foreground">
-                {selectedInView.length} 件選択中
-              </span>
-              <select
-                className="border rounded px-2 py-1 text-sm"
-                value={bulkAction}
-                onChange={(e) => setBulkAction(e.target.value)}
-                aria-label="アクション選択"
-              >
-                <option value="delete">削除</option>
-              </select>
-              <Button variant="destructive" size="sm" onClick={handleBulkExecute}>
-                実行
-              </Button>
-            </div>
+            </>
           )}
         </CardContent>
       </Card>
 
-      {/* 単体削除確認モーダル（dirty は AWS 風に worktree 名の入力を要求） */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <Card className="w-[32rem]">
-            <CardHeader>
-              <CardTitle>削除確認</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm font-mono">
-                {deleteTarget.repo} / {deleteTarget.wt_name}
-              </p>
-              {deleteTarget.diff_count > 0 ? (
-                <>
-                  <p className="text-sm text-amber-600">
-                    未コミット変更が {deleteTarget.diff_count} 件あります。削除すると失われます。
-                  </p>
-                  <p className="text-sm">
-                    続行するには worktree 名{" "}
-                    <span className="font-mono font-semibold">
-                      {deleteTarget.wt_name}
-                    </span>{" "}
-                    を入力してください。
-                  </p>
-                  <input
-                    type="text"
-                    value={deleteConfirmInput}
-                    onChange={(e) => setDeleteConfirmInput(e.target.value)}
-                    placeholder={deleteTarget.wt_name}
-                    aria-label="削除確認のため worktree 名を入力"
-                    autoFocus
-                    className="w-full rounded border px-2 py-1 font-mono text-sm"
-                  />
-                </>
-              ) : (
-                <p className="text-sm">この操作は取り消せません。削除しますか？</p>
-              )}
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDeleteTarget(null);
-                    setDeleteConfirmInput("");
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  キャンセル
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() =>
-                    deleteMutation.mutate({
-                      repo: deleteTarget.repo,
-                      branch: deleteTarget.branch || deleteTarget.wt_name,
-                      force: deleteTarget.diff_count > 0,
-                    })
-                  }
-                  disabled={
-                    deleteMutation.isPending ||
-                    (deleteTarget.diff_count > 0 &&
-                      deleteConfirmInput !== deleteTarget.wt_name)
-                  }
-                >
-                  {deleteMutation.isPending
-                    ? "削除中..."
-                    : deleteTarget.diff_count > 0
-                      ? "強制削除"
-                      : "削除"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* バルク削除確認モーダル */}
-      {bulkConfirming && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <Card className="w-[32rem]">
-            <CardHeader>
-              <CardTitle>削除確認</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm">以下の Worktree を削除しますか？</p>
-              <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto border rounded p-2">
-                {selectedInView.map((t) => (
-                  <li key={t.path}>
-                    {t.repo} / {t.wt_name}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setBulkConfirming(false)}
-                  disabled={bulkDeleting}
-                >
-                  キャンセル
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleBulkDelete}
-                  disabled={bulkDeleting}
-                >
-                  {bulkDeleting ? "削除中..." : "削除"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {bulkConfirming && (() => {
+        const hasDirty = selectedInView.some((t) => t.diff_count > 0);
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <Card className="w-[32rem]">
+              <CardHeader>
+                <CardTitle>削除確認</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm">以下の Worktree を削除しますか？</p>
+                <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto border rounded p-2">
+                  {selectedInView.map((t) => (
+                    <li key={t.path}>
+                      {t.repo} / {t.wt_name}
+                      {t.diff_count > 0 && (
+                        <span className="text-amber-600 ml-1">
+                          （変更 {t.diff_count} 件）
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {hasDirty ? (
+                  <>
+                    <p className="text-sm text-amber-600">
+                      未コミット変更のある worktree が含まれています。削除すると変更が失われます。
+                    </p>
+                    <p className="text-sm">
+                      続行するには <span className="font-mono font-semibold">yes</span> と入力してください。
+                    </p>
+                    <input
+                      type="text"
+                      value={bulkConfirmInput}
+                      onChange={(e) => setBulkConfirmInput(e.target.value)}
+                      placeholder="yes"
+                      aria-label="削除確認のため yes と入力"
+                      autoFocus
+                      className="w-full rounded border px-2 py-1 font-mono text-sm"
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm">この操作は取り消せません。</p>
+                )}
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setBulkConfirming(false);
+                      setBulkConfirmInput("");
+                    }}
+                    disabled={bulkDeleting}
+                  >
+                    キャンセル
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleBulkDelete}
+                    disabled={
+                      bulkDeleting ||
+                      (hasDirty && bulkConfirmInput !== "yes")
+                    }
+                  >
+                    {bulkDeleting
+                      ? "削除中..."
+                      : hasDirty
+                        ? "強制削除"
+                        : "削除"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
       <DevConfigPanel
         target={devConfigTarget}
         onClose={() => setDevConfigTarget(null)}
