@@ -24,6 +24,7 @@ import {
 import { filterTrees } from "./treesFilter";
 import { DevConfigPanel, type DevConfigTarget } from "@/components/DevConfigPanel";
 import { LogPanel, type LogTarget } from "@/components/LogPanel";
+import { WorktreeDetailPanel } from "@/components/WorktreeDetailPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -104,6 +105,7 @@ export function TreesPage() {
   const portBusy = serveMutation.isPending || downMutation.isPending;
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+  const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
 
   // Issue / 親issue / PR 列の表示。既定は非表示。localStorage に永続化。
   const [showCols, setShowCols] = useState<{
@@ -542,7 +544,7 @@ export function TreesPage() {
             <p className="text-sm text-muted-foreground">Worktree がありません</p>
           ) : (
             <div className="overflow-x-auto">
-              <Table className="whitespace-nowrap">
+              <Table className="table-fixed w-full whitespace-nowrap">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-8">
@@ -555,18 +557,18 @@ export function TreesPage() {
                         aria-label="全選択"
                       />
                     </TableHead>
-                    <TableHead>Repo</TableHead>
-                    <TableHead>フォルダ名</TableHead>
-                    <TableHead>Branch</TableHead>
-                    {showCols.issue && <TableHead>Issue</TableHead>}
-                    {showCols.parentIssue && <TableHead>親 issue</TableHead>}
-                    {showCols.pr && <TableHead>PR</TableHead>}
-                    <TableHead title="同名の tmux セッションが存在するか">tmux</TableHead>
-                    <TableHead title="git status の変更ファイル数（未追跡除く）">
+                    <TableHead className="w-36">Repo</TableHead>
+                    <TableHead className="w-12">コピー</TableHead>
+                    <TableHead className="w-56">フォルダ名 / Branch</TableHead>
+                    {showCols.issue && <TableHead className="w-24">Issue</TableHead>}
+                    {showCols.parentIssue && <TableHead className="w-20">親 issue</TableHead>}
+                    {showCols.pr && <TableHead className="w-24">PR</TableHead>}
+                    <TableHead className="w-14" title="同名の tmux セッションが存在するか">tmux</TableHead>
+                    <TableHead className="w-14" title="git status の変更ファイル数（未追跡除く）">
                       変更
                     </TableHead>
-                    <TableHead>作成日</TableHead>
-                    <TableHead title="割当ポート帯と稼働状況">ポート</TableHead>
+                    <TableHead className="w-24">作成日</TableHead>
+                    <TableHead className="w-64" title="割当ポート帯と稼働状況">ポート</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -583,7 +585,19 @@ export function TreesPage() {
                           if (el) rowRefs.current.set(t.path, el);
                           else rowRefs.current.delete(t.path);
                         }}
+                        onClick={(e) => {
+                          // 行内のインタラクティブ要素クリックでは詳細を開かない
+                          if (
+                            (e.target as HTMLElement).closest(
+                              "a,button,input,select,label"
+                            )
+                          ) {
+                            return;
+                          }
+                          setDetailTree(t);
+                        }}
                         className={[
+                          "cursor-pointer",
                           t.is_main ? "opacity-60" : "",
                           t.path === newlyAddedPath ? "row-highlight" : "",
                         ]
@@ -600,9 +614,10 @@ export function TreesPage() {
                             />
                           )}
                         </TableCell>
-                        <TableCell className="text-xs">
+                        <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
                           <button
-                            className="text-blue-600 hover:underline"
+                            className="block w-full truncate text-left text-blue-600 hover:underline"
+                            title={t.repo}
                             onClick={() => {
                               setRepoFilter(t.repo);
                               setShowMain(true);
@@ -611,7 +626,7 @@ export function TreesPage() {
                             {t.repo}
                           </button>
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -631,8 +646,14 @@ export function TreesPage() {
                             )}
                           </Button>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {t.branch || "—"}
+                        <TableCell
+                          className="text-xs"
+                          title={`${t.wt_name}\n${t.branch || "（ブランチなし）"}`}
+                        >
+                          <div className="truncate">{t.wt_name}</div>
+                          <div className="truncate font-mono text-muted-foreground">
+                            {t.branch || "—"}
+                          </div>
                         </TableCell>
                         {showCols.issue && (
                         <TableCell className="text-xs">
@@ -729,8 +750,8 @@ export function TreesPage() {
                         <TableCell className="text-xs text-muted-foreground">
                           {t.created_at || "—"}
                         </TableCell>
-                        <TableCell className="text-xs">
-                            <div className="flex items-center gap-1.5">
+                        <TableCell className="text-xs whitespace-normal">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span
                                 className={
                                   port?.running
@@ -888,6 +909,21 @@ export function TreesPage() {
         onClose={() => setDevConfigTarget(null)}
       />
       <LogPanel target={logTarget} onClose={() => setLogTarget(null)} />
+      <WorktreeDetailPanel
+        detail={
+          detailTree
+            ? {
+                tree: detailTree,
+                port: portMap.get(`${detailTree.repo}/${detailTree.wt_name}`),
+                issueURL: getIssueURL(detailTree),
+                issueDetail: getIssueDetail(detailTree),
+                pr: getPR(detailTree),
+                repoURL: repoURLMap[detailTree.repo],
+              }
+            : null
+        }
+        onClose={() => setDetailTree(null)}
+      />
     </div>
   );
 }
