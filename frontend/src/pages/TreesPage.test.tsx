@@ -395,14 +395,12 @@ describe("TreesPage - copy path toast", () => {
     });
   });
 
-  it("expands copy template before writing to clipboard", async () => {
+  it("copies the raw worktree path to the clipboard", async () => {
     render(<TreesPage />);
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("$path")).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByPlaceholderText("$path"), {
-      target: { value: "cd $path && tmc" },
+      expect(
+        screen.getByLabelText("myrepo--feat-issue-1-abc のパスをコピー")
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(
@@ -411,10 +409,10 @@ describe("TreesPage - copy path toast", () => {
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-        "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc"
+        "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc"
       );
       expect(vi.mocked(toast.success)).toHaveBeenCalledWith("コピーしました", {
-        description: "cd /home/user/Workspace/myrepo/myrepo--feat-issue-1-abc && tmc",
+        description: "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc",
       });
     });
   });

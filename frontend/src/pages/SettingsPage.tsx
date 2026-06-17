@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { settingsApi, type Settings } from "@/api";
+import { Globe } from "lucide-react";
+import { settingsApi, proxyApi, type Settings } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +47,19 @@ export function SettingsPage() {
     }
     mutation.mutate({ dev_ports: { start: s, end: e } });
   };
+
+  const { data: proxyStatus } = useQuery({
+    queryKey: ["proxy"],
+    queryFn: proxyApi.status,
+  });
+  const proxyMutation = useMutation({
+    mutationFn: (next: boolean) => (next ? proxyApi.start() : proxyApi.stop()),
+    onSuccess: (s) => {
+      queryClient.invalidateQueries({ queryKey: ["proxy"] });
+      toast.success(s.running ? "proxy を起動しました" : "proxy を停止しました");
+    },
+    onError: (e: Error) => toast.error("proxy 操作に失敗しました", { description: e.message }),
+  });
 
   const blockSize = data?.dev_ports.block_size ?? 5;
   const span = Number(end) - Number(start) + 1;
@@ -105,6 +119,46 @@ export function SettingsPage() {
               )}
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>内蔵 proxy（名前アクセス）</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            起動すると <code className="font-mono text-xs">{`<label>`}.wt.localhost:{proxyStatus?.port ?? 8088}</code>{" "}
+            で各 worktree の dev サーバに名前でアクセスできます（
+            <code className="font-mono text-xs">domain = true</code> のサービスのみ）。
+            マシン全体で1つの共有サービスです。通常のアクセスはポート直リンクで足り、
+            名前アクセスを使いたいときだけ起動してください。
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <span
+              className={
+                proxyStatus?.running
+                  ? "inline-flex items-center gap-1.5 text-sm text-green-700"
+                  : "inline-flex items-center gap-1.5 text-sm text-muted-foreground"
+              }
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${proxyStatus?.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
+              />
+              {proxyStatus?.running
+                ? `稼働中（127.0.0.1:${proxyStatus.port}）`
+                : "停止中"}
+            </span>
+            <Button
+              variant={proxyStatus?.running ? "outline" : "default"}
+              size="sm"
+              onClick={() => proxyMutation.mutate(!proxyStatus?.running)}
+              disabled={proxyMutation.isPending}
+            >
+              <Globe className="h-3 w-3 mr-1" />
+              {proxyStatus?.running ? "proxy 停止" : "proxy 起動"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

@@ -9,14 +9,12 @@ import {
   ChevronDown,
   ChevronRight,
   FileCog,
-  Globe,
   ScrollText,
 } from "lucide-react";
 import {
   treesApi,
   reposApi,
   portsApi,
-  proxyApi,
   type AddTreeRequest,
   type TreeItem,
   type MergedPRInfo,
@@ -132,19 +130,6 @@ export function TreesPage() {
       return next;
     });
 
-  const { data: proxyStatus } = useQuery({
-    queryKey: ["proxy"],
-    queryFn: () => proxyApi.status(),
-  });
-  const proxyMutation = useMutation({
-    mutationFn: (next: boolean) => (next ? proxyApi.start() : proxyApi.stop()),
-    onSuccess: (s) => {
-      toast.success(s.running ? "proxy を起動しました" : "proxy を停止しました");
-      queryClient.invalidateQueries({ queryKey: ["proxy"] });
-    },
-    onError: (e: Error) => toast.error("proxy 操作に失敗しました", { description: e.message }),
-  });
-
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
   const [form, setForm] = useState<AddTreeRequest>({
@@ -167,10 +152,6 @@ export function TreesPage() {
 
   const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
-
-  const [copyTemplate, setCopyTemplate] = useState<string>(
-    () => localStorage.getItem("wt-copy-template") ?? "$path"
-  );
 
   // コピー直後にボタンを ✓ 表示へ切り替えるための状態（行ごと、1.5秒で戻す）
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -270,13 +251,8 @@ export function TreesPage() {
     }
   };
 
-  const handleCopyTemplate = (value: string) => {
-    setCopyTemplate(value);
-    localStorage.setItem("wt-copy-template", value);
-  };
-
   const handleCopyPath = async (path: string) => {
-    const text = (copyTemplate || "$path").replace(/\$path/g, path);
+    const text = path;
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -482,20 +458,6 @@ export function TreesPage() {
             <CardTitle>Worktree 一覧</CardTitle>
             <div className="flex items-center gap-2">
               <Button
-                variant={proxyStatus?.running ? "default" : "outline"}
-                size="sm"
-                onClick={() => proxyMutation.mutate(!proxyStatus?.running)}
-                disabled={proxyMutation.isPending}
-                title={
-                  proxyStatus?.running
-                    ? `proxy 稼働中（${proxyStatus.port}）— 停止する`
-                    : "proxy を起動して *.wt.localhost 名前アクセスを有効化"
-                }
-              >
-                <Globe className="h-3 w-3 mr-1" />
-                proxy {proxyStatus?.running ? "停止" : "起動"}
-              </Button>
-              <Button
                 variant="outline"
                 size="sm"
                 onClick={handleRefresh}
@@ -518,46 +480,33 @@ export function TreesPage() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center gap-3 mt-2 flex-wrap">
+          <div className="flex items-center gap-x-4 gap-y-2 mt-2 flex-wrap text-sm">
             <Input
-              className="max-w-xs"
-              placeholder="名前で絞り込み..."
+              className="h-8 w-48"
+              placeholder="フリーワードで絞り込み..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
             />
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                コピー形式:
-              </span>
-              <Input
-                className="w-56 font-mono text-xs h-7"
-                placeholder="$path"
-                value={copyTemplate}
-                onChange={(e) => handleCopyTemplate(e.target.value)}
-                title="$path がパスに置換されます（例: cd $path && tmc）"
-              />
-            </div>
-            {repoFilter && (
-              <div className="flex items-center gap-1 text-sm">
-                <span className="text-muted-foreground">リポ:</span>
-                <span className="font-medium">{repoFilter}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-5 px-1 text-xs"
-                  onClick={() => setRepoFilter("")}
-                >
-                  ✕
-                </Button>
-              </div>
-            )}
-            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={repoFilter}
+              onChange={(e) => setRepoFilter(e.target.value)}
+              title="リポジトリで絞り込み"
+            >
+              <option value="">全 repo</option>
+              {repos.map((r) => (
+                <option key={r.name} value={r.name}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
                 checked={showMain}
                 onChange={(e) => setShowMain(e.target.checked)}
               />
-              main/master を表示
+              main/master
             </label>
             <span className="text-xs text-muted-foreground">列:</span>
             <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
