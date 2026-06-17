@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
 import {
   treesApi,
@@ -104,12 +105,17 @@ export function TreesPage() {
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
+  // 一覧から 1 件ずつ削除する際の対象と、dirty 時の名前入力確認。
+  const [deleteTarget, setDeleteTarget] = useState<TreeItem | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const deleteMutation = useMutation({
     mutationFn: ({ repo, branch, force }: { repo: string; branch: string; force: boolean }) =>
       treesApi.delete({ repo, branch, force }),
     onSuccess: (_r, v) => {
       toast.success(`${v.branch} を削除しました`);
       setDetailTree(null);
+      setDeleteTarget(null);
+      setDeleteConfirmInput("");
       refetch();
     },
     onError: (e: Error) => toast.error("削除に失敗しました", { description: e.message }),
@@ -642,24 +648,41 @@ export function TreesPage() {
                           </button>
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0"
-                            onClick={() => handleCopyPath(t.path)}
-                            title={
-                              copiedPath === t.path
-                                ? "コピーしました"
-                                : `${t.wt_name}\n${t.path}`
-                            }
-                            aria-label={`${t.wt_name} のパスをコピー`}
-                          >
-                            {copiedPath === t.path ? (
-                              <Check className="h-3.5 w-3.5 text-green-600" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
+                          <div className="flex items-center gap-0.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0"
+                              onClick={() => handleCopyPath(t.path)}
+                              title={
+                                copiedPath === t.path
+                                  ? "コピーしました"
+                                  : `${t.wt_name}\n${t.path}`
+                              }
+                              aria-label={`${t.wt_name} のパスをコピー`}
+                            >
+                              {copiedPath === t.path ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                            {!t.is_main && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  setDeleteConfirmInput("");
+                                  setDeleteTarget(t);
+                                }}
+                                title={`${t.wt_name} を削除`}
+                                aria-label={`${t.wt_name} を削除`}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             )}
-                          </Button>
+                          </div>
                         </TableCell>
                         <TableCell
                           className="text-xs"
@@ -811,6 +834,80 @@ export function TreesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 単体削除確認モーダル（dirty は AWS 風に worktree 名の入力を要求） */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <Card className="w-[32rem]">
+            <CardHeader>
+              <CardTitle>削除確認</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm font-mono">
+                {deleteTarget.repo} / {deleteTarget.wt_name}
+              </p>
+              {deleteTarget.diff_count > 0 ? (
+                <>
+                  <p className="text-sm text-amber-600">
+                    未コミット変更が {deleteTarget.diff_count} 件あります。削除すると失われます。
+                  </p>
+                  <p className="text-sm">
+                    続行するには worktree 名{" "}
+                    <span className="font-mono font-semibold">
+                      {deleteTarget.wt_name}
+                    </span>{" "}
+                    を入力してください。
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmInput}
+                    onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                    placeholder={deleteTarget.wt_name}
+                    aria-label="削除確認のため worktree 名を入力"
+                    autoFocus
+                    className="w-full rounded border px-2 py-1 font-mono text-sm"
+                  />
+                </>
+              ) : (
+                <p className="text-sm">この操作は取り消せません。削除しますか？</p>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDeleteTarget(null);
+                    setDeleteConfirmInput("");
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  キャンセル
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() =>
+                    deleteMutation.mutate({
+                      repo: deleteTarget.repo,
+                      branch: deleteTarget.branch || deleteTarget.wt_name,
+                      force: deleteTarget.diff_count > 0,
+                    })
+                  }
+                  disabled={
+                    deleteMutation.isPending ||
+                    (deleteTarget.diff_count > 0 &&
+                      deleteConfirmInput !== deleteTarget.wt_name)
+                  }
+                >
+                  {deleteMutation.isPending
+                    ? "削除中..."
+                    : deleteTarget.diff_count > 0
+                      ? "強制削除"
+                      : "削除"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* バルク削除確認モーダル */}
       {bulkConfirming && (
