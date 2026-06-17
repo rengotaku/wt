@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,6 +24,27 @@ type syncResult struct {
 	msg    string
 }
 
+// loadSyncSkipList reads ~/.config/wt/sync-skip and returns the set of repo
+// directory names to exclude from `wt repo sync`. One name per line; lines
+// starting with `#` and blank lines are ignored. Missing file = empty set.
+func loadSyncSkipList(home string) map[string]struct{} {
+	skip := map[string]struct{}{}
+	f, err := os.Open(filepath.Join(home, ".config", "wt", "sync-skip"))
+	if err != nil {
+		return skip
+	}
+	defer func() { _ = f.Close() }()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		skip[line] = struct{}{}
+	}
+	return skip
+}
+
 func resolveMain(container string) (path, name string) {
 	for _, candidate := range []string{"main", "master"} {
 		p := filepath.Join(container, candidate)
@@ -41,12 +63,15 @@ func Sync() {
 		filepath.Join(home, "MyWorkspace"),
 	}
 
+	skipSet := loadSyncSkipList(home)
+
 	type target struct {
 		name   string
 		branch string
 		path   string
 	}
 	var targets []target
+	var skipped []string
 
 	for _, base := range dirs {
 		containers, _ := filepath.Glob(filepath.Join(base, "*"))
@@ -57,6 +82,12 @@ func Sync() {
 			}
 			mainPath, mainName := resolveMain(container)
 			if mainPath == "" {
+				continue
+			}
+
+			repo := filepath.Base(container)
+			if _, ok := skipSet[repo]; ok {
+				skipped = append(skipped, repo)
 				continue
 			}
 
@@ -74,16 +105,22 @@ func Sync() {
 				}
 			}
 
-			repo := filepath.Base(container)
 			targets = append(targets, target{name: repo, branch: branchLabel, path: mainPath})
 		}
 	}
 
 	if len(targets) == 0 {
-		fmt.Println("対象リポなし")
+		if len(skipped) > 0 {
+			fmt.Printf("対象リポなし（⏭ %d 件スキップ: %s）\n", len(skipped), strings.Join(skipped, ", "))
+		} else {
+			fmt.Println("対象リポなし")
+		}
 		return
 	}
 
+	if len(skipped) > 0 {
+		fmt.Printf("⏭ %d 件スキップ: %s\n", len(skipped), strings.Join(skipped, ", "))
+	}
 	fmt.Printf("⏳ %d リポを同期中...\n", len(targets))
 
 	ch := make(chan syncResult, len(targets))
