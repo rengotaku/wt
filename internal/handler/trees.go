@@ -196,6 +196,7 @@ func (h *Handler) AddTree(w http.ResponseWriter, r *http.Request) {
 type deleteTreeRequest struct {
 	Repo   string `json:"repo"`
 	Branch string `json:"branch"`
+	Force  bool   `json:"force"`
 }
 
 func (h *Handler) DeleteTree(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +222,7 @@ func (h *Handler) DeleteTree(w http.ResponseWriter, r *http.Request) {
 	opts := tree.RmOptions{
 		Repo:   req.Repo,
 		Branch: req.Branch,
-		Force:  false,
+		Force:  req.Force,
 		DryRun: false,
 	}
 	if err := tree.Rm(&buf, opts); err != nil {

@@ -29,6 +29,8 @@ export interface AddTreeResponse {
 export interface DeleteTreeRequest {
   repo: string;
   branch: string;
+  /** 未コミット変更がある worktree を強制削除する（AWS 風の入力確認を経て指定） */
+  force?: boolean;
 }
 
 export interface GcRequest {
