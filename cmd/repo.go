@@ -15,6 +15,7 @@ func registerRepoCmd(parent *cobra.Command) {
 	}
 
 	repoCmd.AddCommand(repoSyncCmd())
+	repoCmd.AddCommand(repoRescueMainCmd())
 	repoCmd.AddCommand(repoAddCmd())
 	repoCmd.AddCommand(repoRmCmd())
 	repoCmd.AddCommand(repoLsCmd())
@@ -30,6 +31,19 @@ func repoSyncCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			repo.Sync()
 			return nil
+		},
+	}
+}
+
+func repoRescueMainCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rescue-main <repo>",
+		Short: "main/master フォルダに別ブランチが checkout された状態を修復（別ブランチを worktree 化して main/master に戻す）",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 1 {
+				return errors.New("Usage: wt repo rescue-main <repo>") //nolint:staticcheck // user-facing usage string
+			}
+			return repo.RescueMain(cmd.OutOrStdout(), args[0])
 		},
 	}
 }
