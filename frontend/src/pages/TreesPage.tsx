@@ -520,23 +520,26 @@ export function TreesPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleRefresh}
-                disabled={anyLoading}
-                title="Issue / PR 状態をリフレッシュ"
+                onClick={() => refetch()}
+                disabled={isLoading}
+                title="Worktree 一覧を再スキャン（ローカルの git worktree を読み直す）"
               >
                 <RefreshCw
-                  className={`h-3 w-3 mr-1 ${anyLoading ? "animate-spin" : ""}`}
+                  className={`h-3 w-3 mr-1 ${isLoading ? "animate-spin" : ""}`}
                 />
-                更新
+                再読込
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => refetch()}
-                disabled={isLoading}
-                title="Worktree 一覧をリロード"
+                onClick={handleRefresh}
+                disabled={anyLoading}
+                title="Issue / PR 状態を GitHub から再取得（Issue/PR 列を表示中のみ反映）"
               >
-                <RefreshCw className="h-4 w-4" />
+                <RefreshCw
+                  className={`h-3 w-3 mr-1 ${anyLoading ? "animate-spin" : ""}`}
+                />
+                Issue/PR更新
               </Button>
             </div>
           </div>
