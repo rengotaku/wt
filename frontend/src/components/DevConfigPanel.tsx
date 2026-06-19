@@ -23,9 +23,12 @@ interface DevConfigPanelProps {
  */
 export function DevConfigPanel({ target, onClose }: DevConfigPanelProps) {
   if (target === null) return null;
+  // この panel は常に WorktreeDetailPanel(z-50) の上から開かれる。詳細パネルを
+  // 完全に隠さず左端を少し残してその上に重ねるため、z を一段上げ、背面は暗幕を
+  // 敷かず透明のクリック捕捉のみにする（詳細パネルの縁がそのまま透けて見える）。
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40" onClick={onClose} />
+    <div className="fixed inset-0 z-[60] flex">
+      <div className="flex-1" onClick={onClose} />
       <PanelBody key={`${target.repo}/${target.wt}`} target={target} onClose={onClose} />
     </div>
   );
@@ -73,7 +76,7 @@ function PanelBody({ target, onClose }: { target: DevConfigTarget; onClose: () =
   const handleSave = () => saveMutation.mutate(effective);
 
   return (
-    <aside className="w-full max-w-md bg-background border-l border-border h-full flex flex-col shadow-xl">
+    <aside className="w-full max-w-[34rem] bg-background border-l border-border h-full flex flex-col shadow-2xl">
       <header className="flex items-center justify-between p-4 border-b">
         <div>
           <h2 className="text-lg font-semibold">dev.toml 編集</h2>
