@@ -313,6 +313,68 @@ const newTree = {
   branch: "feat/issue-3-new",
 };
 
+describe("TreesPage - ピン留め", () => {
+  const path1 = "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc";
+
+  beforeEach(async () => {
+    localStorage.removeItem("wt.trees.pinned");
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+  });
+  afterEach(() => {
+    localStorage.removeItem("wt.trees.pinned");
+  });
+
+  it("チェックして『ピン留め』を実行するとピンが付き先頭に並ぶ", async () => {
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
+    });
+
+    // 既定の並びは作成日降順なので issue-2(01-02) が issue-1(01-01) より上。
+    const before = screen.getAllByRole("row");
+    expect(before[1]).toHaveTextContent("myrepo--feat-issue-2-xyz");
+
+    // issue-1 を選択し、アクションを「ピン留め」にして実行。
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
+    fireEvent.change(screen.getByLabelText("アクション選択"), {
+      target: { value: "pin" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
+
+    // ピン解除ボタン（=ピン付与の証跡）が出て、localStorage に保存される。
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
+      ).toBeInTheDocument();
+    });
+    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(path1);
+
+    // ピン留めにより issue-1 が先頭へ。
+    const after = screen.getAllByRole("row");
+    expect(after[1]).toHaveTextContent("myrepo--feat-issue-1-abc");
+  });
+
+  it("起動時に localStorage のピンを復元し、アイコンのクリックで解除できる", async () => {
+    localStorage.setItem("wt.trees.pinned", JSON.stringify([path1]));
+    render(<TreesPage />);
+
+    const unpin = await waitFor(() =>
+      screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
+    );
+    fireEvent.click(unpin);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
+      ).not.toBeInTheDocument();
+    });
+    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).not.toContain(path1);
+  });
+});
+
 describe("TreesPage - new row highlight and auto-scroll", () => {
   beforeEach(async () => {
     const { treesApi } = await import("@/api");

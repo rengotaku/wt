@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Pin,
 } from "lucide-react";
 import {
   treesApi,
@@ -134,6 +135,29 @@ export function TreesPage() {
       const next = { ...prev, [key]: !prev[key] };
       try {
         localStorage.setItem("wt.trees.cols", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+
+  // ピン留めした worktree の path 集合。一覧の先頭に固定表示する。localStorage に永続化。
+  const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem("wt.trees.pinned");
+      if (saved) return new Set<string>(JSON.parse(saved));
+    } catch {
+      /* ignore */
+    }
+    return new Set<string>();
+  });
+  // 指定 path 群のピンを付与/解除し、localStorage に反映する。
+  const applyPin = (paths: string[], pin: boolean) =>
+    setPinnedPaths((prev) => {
+      const next = new Set(prev);
+      paths.forEach((p) => (pin ? next.add(p) : next.delete(p)));
+      try {
+        localStorage.setItem("wt.trees.pinned", JSON.stringify([...next]));
       } catch {
         /* ignore */
       }
@@ -311,9 +335,13 @@ export function TreesPage() {
 
   const filteredTrees = filterTrees(trees, filterText, showMain, repoFilter, issueData);
 
-  // デフォルトは作成日の新しい順。created_at は "YYYY-MM-DD" なので辞書順比較で日付順になる。
+  // ピン留めを最優先で先頭に固定し、その中／外それぞれを作成日の新しい順で並べる。
+  // created_at は "YYYY-MM-DD" なので辞書順比較で日付順になる。
   // created_at が空（main worktree 等）は末尾に回す。
   const sortedTrees = [...filteredTrees].sort((a, b) => {
+    const ap = pinnedPaths.has(a.path) ? 0 : 1;
+    const bp = pinnedPaths.has(b.path) ? 0 : 1;
+    if (ap !== bp) return ap - bp;
     if (!a.created_at && !b.created_at) return 0;
     if (!a.created_at) return 1;
     if (!b.created_at) return -1;
@@ -355,6 +383,16 @@ export function TreesPage() {
 
   const handleBulkExecute = () => {
     if (!someSelected) return;
+    // ピン留め/解除は破壊的でないので確認なしで即適用する。
+    if (bulkAction === "pin" || bulkAction === "unpin") {
+      const pin = bulkAction === "pin";
+      applyPin(selectedInView.map((t) => t.path), pin);
+      toast.success(
+        `${selectedInView.length} 件を${pin ? "ピン留め" : "ピン解除"}しました`
+      );
+      setSelectedPaths(new Set());
+      return;
+    }
     setBulkConfirmInput("");
     setBulkConfirming(true);
   };
@@ -568,8 +606,14 @@ export function TreesPage() {
                     aria-label="アクション選択"
                   >
                     <option value="delete">削除</option>
+                    <option value="pin">ピン留め</option>
+                    <option value="unpin">ピン解除</option>
                   </select>
-                  <Button variant="destructive" size="sm" onClick={handleBulkExecute}>
+                  <Button
+                    variant={bulkAction === "delete" ? "destructive" : "default"}
+                    size="sm"
+                    onClick={handleBulkExecute}
+                  >
                     実行
                   </Button>
                 </div>
@@ -683,7 +727,20 @@ export function TreesPage() {
                           className="text-xs"
                           title={`${t.wt_name}\n${t.branch || "（ブランチなし）"}`}
                         >
-                          <div className="truncate">{t.wt_name}</div>
+                          <div className="flex items-center gap-1">
+                            {pinnedPaths.has(t.path) && (
+                              <button
+                                type="button"
+                                onClick={() => applyPin([t.path], false)}
+                                title="ピンを解除"
+                                aria-label={`${t.repo}/${t.wt_name} のピンを解除`}
+                                className="shrink-0 text-amber-500 hover:text-amber-600"
+                              >
+                                <Pin className="h-3 w-3 fill-current" />
+                              </button>
+                            )}
+                            <span className="truncate">{t.wt_name}</span>
+                          </div>
                           <div className="truncate font-mono text-muted-foreground">
                             {t.branch || "—"}
                           </div>
