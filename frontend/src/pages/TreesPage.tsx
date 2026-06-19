@@ -123,6 +123,15 @@ export function TreesPage() {
     },
     onError: (e: Error) => toast.error("削除に失敗しました", { description: e.message }),
   });
+  const updateMutation = useMutation({
+    mutationFn: ({ repo, wt }: { repo: string; wt: string }) => treesApi.update(repo, wt),
+    onSuccess: (r, v) => {
+      toast.success(`${v.wt} を最新化しました`, { description: r.output });
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+      refetch();
+    },
+    onError: (e: Error) => toast.error("最新化に失敗しました", { description: e.message }),
+  });
 
   // Issue / 親issue / PR 列の表示。既定は非表示。localStorage に永続化。
   const [showCols, setShowCols] = useState<{
@@ -1004,6 +1013,11 @@ export function TreesPage() {
         onShowLogs={() =>
           detailTree && setLogTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
         }
+        onUpdate={() =>
+          detailTree &&
+          updateMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+        }
+        updating={updateMutation.isPending}
         onDelete={(force) =>
           detailTree &&
           deleteMutation.mutate({

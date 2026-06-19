@@ -28,7 +28,9 @@ function renderPanel(tree: TreeItem, onDelete = vi.fn()) {
       onDown={vi.fn()}
       onEditConfig={vi.fn()}
       onShowLogs={vi.fn()}
+      onUpdate={vi.fn()}
       onDelete={onDelete}
+      updating={false}
       deleting={false}
       portBusy={false}
     />,
@@ -66,5 +68,17 @@ describe("WorktreeDetailPanel 削除", () => {
 
     fireEvent.click(forceBtn);
     expect(onDelete).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("WorktreeDetailPanel 最新化", () => {
+  it("dirty な worktree では最新化ボタンが無効", () => {
+    renderPanel(makeTree({ diff_count: 3 }));
+    expect(screen.getByRole("button", { name: "最新化" })).toBeDisabled();
+  });
+
+  it("clean な worktree では最新化ボタンが有効", () => {
+    renderPanel(makeTree({ diff_count: 0 }));
+    expect(screen.getByRole("button", { name: "最新化" })).toBeEnabled();
   });
 });

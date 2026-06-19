@@ -232,6 +232,21 @@ func (h *Handler) DeleteTree(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"output": buf.String()})
 }
 
+// UpdateTree fast-forwards a single worktree to its branch's latest remote
+// commit via `git pull --ff-only`. 未コミット変更がある場合はエラーになる。
+func (h *Handler) UpdateTree(w http.ResponseWriter, r *http.Request) {
+	worktree, _, _, ok := h.resolveWorktree(w, r)
+	if !ok {
+		return
+	}
+	out, err := tree.Update(worktree)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]string{"output": out})
+}
+
 type gcRequest struct {
 	Merged       bool   `json:"merged"`
 	Closed       bool   `json:"closed"`
