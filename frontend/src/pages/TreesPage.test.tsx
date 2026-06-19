@@ -373,6 +373,24 @@ describe("TreesPage - ピン留め", () => {
     expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(path1);
   });
 
+  it("main 行もピン留めできる", async () => {
+    render(<TreesPage />);
+    // main(wt_name=myrepo) にも常時ピンボタンが出る。
+    const pinMain = await waitFor(() =>
+      screen.getByLabelText("myrepo/myrepo をピン留め")
+    );
+    fireEvent.click(pinMain);
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo のピンを解除")
+      ).toBeInTheDocument();
+    });
+    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(
+      "/home/user/Workspace/myrepo"
+    );
+  });
+
   it("起動時に localStorage のピンを復元し、アイコンのクリックで解除できる", async () => {
     localStorage.setItem("wt.trees.pinned", JSON.stringify([path1]));
     render(<TreesPage />);
