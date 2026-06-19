@@ -81,6 +81,14 @@ export function TreesPage() {
     queryKey: ["ports"],
     queryFn: portsApi.list,
     refetchOnWindowFocus: false,
+    // 稼働中の worktree がある間だけ 3 秒間隔でポーリングする。serve 直後は
+    // uvicorn(--reload) のように bind が遅いサービスがあり、起動完了前の 1 回の
+    // 再取得では listening=false のまま固定されてしまう。running 中はポーリングして
+    // 遅れて起動したポートも「稼働」表示に追従させる（idle 時は止めて無駄打ちを避ける）。
+    refetchInterval: (query) =>
+      (query.state.data as PortItem[] | undefined)?.some((p) => p.running)
+        ? 3000
+        : false,
   });
   const portMap = new Map(portItems.map((p) => [`${p.repo}/${p.wt_name}`, p]));
 
@@ -728,17 +736,31 @@ export function TreesPage() {
                           title={`${t.wt_name}\n${t.branch || "（ブランチなし）"}`}
                         >
                           <div className="flex items-center gap-1">
-                            {pinnedPaths.has(t.path) && (
-                              <button
-                                type="button"
-                                onClick={() => applyPin([t.path], false)}
-                                title="ピンを解除"
-                                aria-label={`${t.repo}/${t.wt_name} のピンを解除`}
-                                className="shrink-0 text-amber-500 hover:text-amber-600"
-                              >
-                                <Pin className="h-3 w-3 fill-current" />
-                              </button>
-                            )}
+                            {!t.is_main &&
+                              (() => {
+                                const pinned = pinnedPaths.has(t.path);
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => applyPin([t.path], !pinned)}
+                                    title={pinned ? "ピンを解除" : "ピン留め"}
+                                    aria-label={
+                                      pinned
+                                        ? `${t.repo}/${t.wt_name} のピンを解除`
+                                        : `${t.repo}/${t.wt_name} をピン留め`
+                                    }
+                                    className={`shrink-0 ${
+                                      pinned
+                                        ? "text-amber-500 hover:text-amber-600"
+                                        : "text-muted-foreground/40 hover:text-amber-500"
+                                    }`}
+                                  >
+                                    <Pin
+                                      className={`h-3 w-3 ${pinned ? "fill-current" : ""}`}
+                                    />
+                                  </button>
+                                );
+                              })()}
                             <span className="truncate">{t.wt_name}</span>
                           </div>
                           <div className="truncate font-mono text-muted-foreground">
