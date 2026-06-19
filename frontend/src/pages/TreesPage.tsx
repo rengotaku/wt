@@ -200,6 +200,7 @@ export function TreesPage() {
   const [bulkConfirming, setBulkConfirming] = useState(false);
   const [bulkConfirmInput, setBulkConfirmInput] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
 
   const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
@@ -410,8 +411,46 @@ export function TreesPage() {
       setSelectedPaths(new Set());
       return;
     }
+    // 最新化（git pull --ff-only）も破壊的でないので確認なしで実行。変更ありは
+    // backend がはじくため、ここで事前に除外してスキップ件数を通知する。
+    if (bulkAction === "update") {
+      handleBulkUpdate();
+      return;
+    }
     setBulkConfirmInput("");
     setBulkConfirming(true);
+  };
+
+  const handleBulkUpdate = async () => {
+    const targets = selectedInView.filter((t) => t.diff_count === 0);
+    const skipped = selectedInView.length - targets.length;
+    if (targets.length === 0) {
+      toast.error("最新化できる worktree がありません（変更ありはスキップ）");
+      return;
+    }
+    setBulkUpdating(true);
+    let ok = 0;
+    const fails: string[] = [];
+    for (const t of targets) {
+      try {
+        await treesApi.update(t.repo, t.wt_name);
+        ok++;
+      } catch (e: unknown) {
+        fails.push(`${t.wt_name}: ${(e as Error).message}`);
+      }
+    }
+    setBulkUpdating(false);
+    setSelectedPaths(new Set());
+    queryClient.invalidateQueries({ queryKey: ["ports"] });
+    refetch();
+    if (fails.length) {
+      toast.error(`${fails.length} 件の最新化に失敗`, {
+        description: fails.join("\n"),
+      });
+    }
+    const parts = [`${ok} 件を最新化しました`];
+    if (skipped) parts.push(`${skipped} 件スキップ（変更あり）`);
+    toast.success(parts.join(" / "));
   };
 
   const handleBulkDelete = async () => {
@@ -614,30 +653,32 @@ export function TreesPage() {
             <p className="text-sm text-muted-foreground">Worktree がありません</p>
           ) : (
             <>
-              {someSelected && (
-                <div className="flex items-center gap-2 mb-3 pb-3 border-b">
-                  <span className="text-sm text-muted-foreground">
-                    {selectedInView.length} 件選択中
-                  </span>
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={bulkAction}
-                    onChange={(e) => setBulkAction(e.target.value)}
-                    aria-label="アクション選択"
-                  >
-                    <option value="delete">削除</option>
-                    <option value="pin">ピン留め</option>
-                    <option value="unpin">ピン解除</option>
-                  </select>
-                  <Button
-                    variant={bulkAction === "delete" ? "destructive" : "default"}
-                    size="sm"
-                    onClick={handleBulkExecute}
-                  >
-                    実行
-                  </Button>
-                </div>
-              )}
+              {/* 一括アクションバーは常時表示。選択の有無で出し入れすると一覧が
+                  上下にブレるため、未選択時は実行ボタンを無効化するだけにする。 */}
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b">
+                <span className="text-sm text-muted-foreground">
+                  {selectedInView.length} 件選択中
+                </span>
+                <select
+                  className="border rounded px-2 py-1 text-sm"
+                  value={bulkAction}
+                  onChange={(e) => setBulkAction(e.target.value)}
+                  aria-label="アクション選択"
+                >
+                  <option value="delete">削除</option>
+                  <option value="update">最新化</option>
+                  <option value="pin">ピン留め</option>
+                  <option value="unpin">ピン解除</option>
+                </select>
+                <Button
+                  variant={bulkAction === "delete" ? "destructive" : "default"}
+                  size="sm"
+                  onClick={handleBulkExecute}
+                  disabled={!someSelected || bulkUpdating}
+                >
+                  {bulkUpdating ? "実行中..." : "実行"}
+                </Button>
+              </div>
               <div className="overflow-x-auto">
                 <Table className="table-fixed w-full whitespace-nowrap">
                 <TableHeader>
@@ -711,7 +752,7 @@ export function TreesPage() {
                         </TableCell>
                         <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
                           <button
-                            className="block w-full truncate text-left text-blue-600 hover:underline"
+                            className="inline-block max-w-full truncate text-left text-blue-600 hover:underline align-bottom"
                             title={t.repo}
                             onClick={() => {
                               setRepoFilter(t.repo);
