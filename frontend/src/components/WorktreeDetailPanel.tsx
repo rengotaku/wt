@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, FileCog, ScrollText, Trash2 } from "lucide-react";
+import { X, FileCog, ScrollText, Trash2, ArrowDownToLine } from "lucide-react";
 import type { TreeItem, PortItem, IssueDetail, MergedPRInfo } from "@/api";
 import { Button } from "@/components/ui/button";
 
@@ -19,7 +19,9 @@ interface WorktreeDetailPanelProps {
   onDown: () => void;
   onEditConfig: () => void;
   onShowLogs: () => void;
+  onUpdate: () => void;
   onDelete: (force: boolean) => void;
+  updating: boolean;
   deleting: boolean;
   portBusy: boolean;
 }
@@ -45,7 +47,9 @@ export function WorktreeDetailPanel({
   onDown,
   onEditConfig,
   onShowLogs,
+  onUpdate,
   onDelete,
+  updating,
   deleting,
   portBusy,
 }: WorktreeDetailPanelProps) {
@@ -103,6 +107,16 @@ export function WorktreeDetailPanel({
           <Button variant="outline" size="sm" onClick={onShowLogs}>
             <ScrollText className="h-3 w-3 mr-1" />
             ログ
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onUpdate}
+            disabled={isDirty || updating}
+            title={isDirty ? "未コミット変更があるため最新化できません" : "git pull --ff-only で最新化"}
+          >
+            <ArrowDownToLine className="h-3 w-3 mr-1" />
+            {updating ? "最新化中..." : "最新化"}
           </Button>
         </div>
 
