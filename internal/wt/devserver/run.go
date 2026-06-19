@@ -110,6 +110,17 @@ func Serve(out io.Writer, worktree string, base int) error {
 	if base == 0 {
 		return errors.New("この worktree にはポートが割り当てられていません（wt tree add で作成した worktree が必要）")
 	}
+	// Surface which config layer is in effect. When a committed .wt/dev.toml is
+	// shadowed by a stored override/default, editing the file silently has no
+	// effect — warn so that footgun is visible at serve time.
+	_, _ = fmt.Fprintf(out, "dev 設定ソース: %s\n", sourceLabel(source))
+	if (source == SourceRepo || source == SourceWorktree) && HasConfig(worktree) {
+		if fileCfg, e := Load(worktree); e == nil && !sameServices(fileCfg, cfg) {
+			_, _ = fmt.Fprintf(out, "⚠️  committed .wt/dev.toml は %s に上書きされています。"+
+				"ファイルを編集しても反映されません（上書きをクリアするとファイルが使われます）。\n",
+				sourceLabel(source))
+		}
+	}
 	_ = Down(io.Discard, worktree)
 
 	if err := os.MkdirAll(runDir(worktree), 0o755); err != nil {
