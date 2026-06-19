@@ -79,7 +79,7 @@ describe("TreesPage - checkbox and bulk action", () => {
     vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
   });
 
-  it("renders checkboxes for non-main rows and a header checkbox", async () => {
+  it("全行（main 含む）にチェックボックスとヘッダチェックボックスを表示する", async () => {
     render(<TreesPage />);
     await waitFor(() => {
       expect(screen.getByLabelText("全選択")).toBeInTheDocument();
@@ -90,7 +90,8 @@ describe("TreesPage - checkbox and bulk action", () => {
     expect(
       screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")
     ).toBeInTheDocument();
-    // main row is hidden by default (showMain = false), so no checkbox for it
+    // main 行にもチェックボックスが出る（最新化・ピン留め対象にできる）。
+    expect(screen.getByLabelText("myrepo/myrepo を選択")).toBeInTheDocument();
   });
 
   it("一括アクションバーは常時表示で、選択すると実行が有効になる", async () => {
@@ -111,7 +112,7 @@ describe("TreesPage - checkbox and bulk action", () => {
     expect(screen.getByRole("button", { name: "実行" })).toBeEnabled();
   });
 
-  it("selects all non-main rows via header checkbox", async () => {
+  it("ヘッダチェックボックスで main 含む全行を選択する", async () => {
     render(<TreesPage />);
     await waitFor(() => {
       expect(screen.getByLabelText("全選択")).toBeInTheDocument();
@@ -121,7 +122,8 @@ describe("TreesPage - checkbox and bulk action", () => {
 
     expect(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")).toBeChecked();
     expect(screen.getByLabelText("myrepo/myrepo--feat-issue-2-xyz を選択")).toBeChecked();
-    expect(screen.getByText("2 件選択中")).toBeInTheDocument();
+    expect(screen.getByLabelText("myrepo/myrepo を選択")).toBeChecked();
+    expect(screen.getByText("3 件選択中")).toBeInTheDocument();
   });
 
   it("deselects all when header checkbox clicked while all selected", async () => {
@@ -131,7 +133,7 @@ describe("TreesPage - checkbox and bulk action", () => {
     });
 
     fireEvent.click(screen.getByLabelText("全選択"));
-    expect(screen.getByText("2 件選択中")).toBeInTheDocument();
+    expect(screen.getByText("3 件選択中")).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("全選択"));
     expect(screen.getByText("0 件選択中")).toBeInTheDocument();
@@ -344,6 +346,44 @@ describe("TreesPage - 一括最新化", () => {
         "myrepo--feat-issue-1-abc"
       );
     });
+  });
+});
+
+describe("TreesPage - main は削除対象外", () => {
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+    vi.mocked(treesApi.delete).mockClear();
+  });
+
+  it("main だけ選択して削除を実行すると対象外で確認モーダルが出ない", async () => {
+    render(<TreesPage />);
+    const mainCb = await waitFor(() => screen.getByLabelText("myrepo/myrepo を選択"));
+    fireEvent.click(mainCb);
+    // 削除アクションのまま実行
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
+    // main は削除対象外なので確認モーダルは出ない
+    await waitFor(() => {
+      expect(screen.queryByText("削除確認")).not.toBeInTheDocument();
+    });
+  });
+
+  it("main と非 main を選択して削除すると非 main のみ確認に出る", async () => {
+    render(<TreesPage />);
+    await waitFor(() => screen.getByLabelText("myrepo/myrepo を選択"));
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo を選択"));
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("削除確認")).toBeInTheDocument();
+    });
+    // 非 main は一覧に出る
+    expect(screen.getByText(/myrepo \/ myrepo--feat-issue-1-abc/)).toBeInTheDocument();
+    // main 除外の注記が出る
+    expect(
+      screen.getByText(/main\/master 1 件は削除対象外/)
+    ).toBeInTheDocument();
   });
 });
 
