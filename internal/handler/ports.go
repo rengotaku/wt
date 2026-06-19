@@ -25,6 +25,7 @@ type portItem struct {
 	Ports        []portState `json:"ports"`
 	HasDevConfig bool        `json:"has_dev_config"`
 	Running      bool        `json:"running"`
+	Degraded     bool        `json:"degraded,omitempty"`    // running しているが記録済みサービスの一部が停止している（縮退）
 	Domain       string      `json:"domain,omitempty"`      // <label>.wt.localhost when a domain service exists
 	DomainPort   int         `json:"domain_port,omitempty"` // localhost port of the domain(=user-facing)サービス。「開く」の遷移先
 }
@@ -95,6 +96,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 				break
 			}
 		}
+		alive, total := devserver.RunStatus(r.Path)
 		items = append(items, portItem{
 			Repo:         r.Repo,
 			WtName:       r.WtName,
@@ -103,7 +105,8 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			PortRange:    ports.RangeString(r.PortBase),
 			Ports:        states,
 			HasDevConfig: source != devserver.SourceNone,
-			Running:      devserver.IsRunning(r.Path),
+			Running:      alive > 0,
+			Degraded:     total > 0 && alive < total,
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
 			DomainPort:   domainPort,
 		})

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@/test/test-utils";
 import { WorktreeDetailPanel, type WorktreeDetail } from "./WorktreeDetailPanel";
-import type { TreeItem } from "@/api";
+import type { TreeItem, PortItem } from "@/api";
 
 function makeTree(overrides: Partial<TreeItem> = {}): TreeItem {
   return {
@@ -18,8 +18,8 @@ function makeTree(overrides: Partial<TreeItem> = {}): TreeItem {
   };
 }
 
-function renderPanel(tree: TreeItem, onDelete = vi.fn()) {
-  const detail: WorktreeDetail = { tree, issueURL: null };
+function renderPanel(tree: TreeItem, onDelete = vi.fn(), port?: PortItem) {
+  const detail: WorktreeDetail = { tree, issueURL: null, port };
   render(
     <WorktreeDetailPanel
       detail={detail}
@@ -68,6 +68,25 @@ describe("WorktreeDetailPanel 削除", () => {
 
     fireEvent.click(forceBtn);
     expect(onDelete).toHaveBeenCalledWith(true);
+  });
+});
+
+describe("WorktreeDetailPanel 縮退稼働", () => {
+  it("degraded な port では縮退稼働の警告を表示する", () => {
+    const port: PortItem = {
+      repo: "myrepo",
+      wt_name: "myrepo--feat-1",
+      port_base: 9000,
+      port_range: "9000-9001",
+      ports: [],
+      has_dev_config: true,
+      running: true,
+      degraded: true,
+    };
+    renderPanel(makeTree(), vi.fn(), port);
+    expect(
+      screen.getByText(/一部のサービスが停止しています（縮退稼働）/),
+    ).toBeInTheDocument();
   });
 });
 

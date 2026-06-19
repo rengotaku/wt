@@ -85,6 +85,23 @@ func IsRunning(worktree string) bool {
 	return false
 }
 
+// RunStatus returns how many recorded services are still alive and how many
+// were recorded in total. total==0 means nothing is recorded (never started or
+// fully stopped). A worktree is "degraded" when 0 < alive < total — at least one
+// service that was started has since died while another is still up.
+func RunStatus(worktree string) (alive, total int) {
+	r, err := loadRunning(worktree)
+	if err != nil {
+		return 0, 0
+	}
+	for _, s := range r.Services {
+		if pidAlive(s.PID) {
+			alive++
+		}
+	}
+	return alive, len(r.Services)
+}
+
 // startupGrace is how long Serve waits after spawning before judging whether a
 // service stayed up. A misconfigured command or a port conflict (EADDRINUSE)
 // makes the child exit within milliseconds, so this catches "started but

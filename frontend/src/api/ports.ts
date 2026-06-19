@@ -17,6 +17,7 @@ export interface PortItem {
   ports: PortState[];
   has_dev_config: boolean;
   running: boolean;
+  degraded?: boolean; // running しているが記録済みサービスの一部が停止している（縮退）
   domain?: string; // <label>.wt.localhost when a domain service exists
   domain_port?: number; // localhost port of the domain(=user-facing)サービス
 }
