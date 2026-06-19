@@ -58,6 +58,7 @@ vi.mock("@/api", async (importOriginal) => {
       mergedPRs: vi.fn().mockResolvedValue([]),
       issueDetails: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue({ output: "" }),
+      update: vi.fn().mockResolvedValue({ output: "1 commits pulled" }),
     },
     reposApi: {
       ...actual.reposApi,
@@ -92,20 +93,22 @@ describe("TreesPage - checkbox and bulk action", () => {
     // main row is hidden by default (showMain = false), so no checkbox for it
   });
 
-  it("shows bulk action bar when a row is checked", async () => {
+  it("一括アクションバーは常時表示で、選択すると実行が有効になる", async () => {
     render(<TreesPage />);
     await waitFor(() => {
       expect(
         screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
       ).toBeInTheDocument();
     });
-    expect(screen.queryByLabelText("アクション選択")).not.toBeInTheDocument();
+    // バーは常時表示（出し入れによる画面ブレを避ける）。未選択時は実行が無効。
+    expect(screen.getByLabelText("アクション選択")).toBeInTheDocument();
+    expect(screen.getByText("0 件選択中")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "実行" })).toBeDisabled();
 
     fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
 
-    expect(screen.getByLabelText("アクション選択")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "実行" })).toBeInTheDocument();
     expect(screen.getByText("1 件選択中")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "実行" })).toBeEnabled();
   });
 
   it("selects all non-main rows via header checkbox", async () => {
@@ -131,7 +134,7 @@ describe("TreesPage - checkbox and bulk action", () => {
     expect(screen.getByText("2 件選択中")).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("全選択"));
-    expect(screen.queryByText(/件選択中/)).not.toBeInTheDocument();
+    expect(screen.getByText("0 件選択中")).toBeInTheDocument();
   });
 
   it("shows confirmation modal with selected items when execute is clicked", async () => {
@@ -312,6 +315,37 @@ const newTree = {
   is_main: false,
   branch: "feat/issue-3-new",
 };
+
+describe("TreesPage - 一括最新化", () => {
+  beforeEach(async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+    vi.mocked(treesApi.update).mockClear();
+  });
+
+  it("チェックして『最新化』を実行すると選択行を pull する", async () => {
+    const { treesApi } = await import("@/api");
+    render(<TreesPage />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択")
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc を選択"));
+    fireEvent.change(screen.getByLabelText("アクション選択"), {
+      target: { value: "update" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "実行" }));
+
+    await waitFor(() => {
+      expect(treesApi.update).toHaveBeenCalledWith(
+        "myrepo",
+        "myrepo--feat-issue-1-abc"
+      );
+    });
+  });
+});
 
 describe("TreesPage - ピン留め", () => {
   const path1 = "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc";
