@@ -280,3 +280,76 @@ func TestServe_NoPortBase(t *testing.T) {
 		t.Error("expected error when base is 0 (unallocated)")
 	}
 }
+
+func TestSameServicesAndSourceLabel(t *testing.T) {
+	a := Config{Services: []Service{{Name: "x", Cmd: "c", Domain: true}}}
+	b := Config{Services: []Service{{Name: "x", Cmd: "c", Domain: true}}}
+	if !sameServices(a, b) {
+		t.Error("identical configs should match")
+	}
+	b.Services[0].Cmd = "d"
+	if sameServices(a, b) {
+		t.Error("differing cmd should not match")
+	}
+	if sameServices(a, Config{}) {
+		t.Error("differing length should not match")
+	}
+	for _, src := range []string{SourceFile, SourceRepo, SourceWorktree} {
+		if sourceLabel(src) == "" {
+			t.Errorf("sourceLabel(%q) is empty", src)
+		}
+	}
+}
+
+// TestServe_WarnsWhenFileShadowed verifies the footgun fix: when a stored repo
+// default shadows a divergent committed .wt/dev.toml, Serve prints the source
+// and a warning so editing the file-with-no-effect is no longer invisible.
+func TestServe_WarnsWhenFileShadowed(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	container := t.TempDir()
+	worktree := filepath.Join(container, "feat-x")
+	if err := os.MkdirAll(filepath.Join(worktree, ".wt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Committed file declares "web"...
+	if err := os.WriteFile(ConfigPath(worktree),
+		[]byte("[[services]]\nname = \"web\"\ncmd = \"sleep 30\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// ...but a repo default declares a different service, which wins.
+	if err := core.SaveConfig(container, core.EntryConfig{
+		DevServices: []core.DevService{{Name: "api", Cmd: "sleep 30"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := Serve(&buf, worktree, 9000); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	_ = Down(&buf, worktree)
+	out := buf.String()
+	if !strings.Contains(out, "dev 設定ソース: リポジトリ既定") {
+		t.Errorf("missing source line, got: %q", out)
+	}
+	if !strings.Contains(out, "上書きされています") {
+		t.Errorf("missing shadow warning, got: %q", out)
+	}
+}
+
+// TestServe_NoWarnWhenFileIsSource verifies no false warning when the committed
+// file itself is the effective source.
+func TestServe_NoWarnWhenFileIsSource(t *testing.T) {
+	wt := writeWorktree(t, "[[services]]\nname = \"web\"\ncmd = \"sleep 30\"\n")
+	var buf bytes.Buffer
+	if err := Serve(&buf, wt, 9000); err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	_ = Down(&buf, wt)
+	out := buf.String()
+	if !strings.Contains(out, "dev 設定ソース: committed .wt/dev.toml") {
+		t.Errorf("missing/incorrect source line, got: %q", out)
+	}
+	if strings.Contains(out, "上書きされています") {
+		t.Errorf("unexpected shadow warning when file is the source: %q", out)
+	}
+}

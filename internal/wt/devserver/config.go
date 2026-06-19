@@ -120,6 +120,36 @@ const (
 	SourceFile     = "file"     // committed .wt/dev.toml
 )
 
+// sourceLabel returns a human-readable label for an EffectiveConfig source,
+// so callers can show which layer is actually in effect.
+func sourceLabel(source string) string {
+	switch source {
+	case SourceFile:
+		return "committed .wt/dev.toml"
+	case SourceRepo:
+		return "リポジトリ既定 (_config.dev_services)"
+	case SourceWorktree:
+		return "worktree 上書き"
+	default:
+		return "なし"
+	}
+}
+
+// sameServices reports whether two configs declare identical services (order,
+// name, cmd, domain). Service is comparable (all fields are string/bool), so
+// struct equality is exact.
+func sameServices(a, b Config) bool {
+	if len(a.Services) != len(b.Services) {
+		return false
+	}
+	for i := range a.Services {
+		if a.Services[i] != b.Services[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // fromCore converts stored metadata services into a runtime Config.
 func fromCore(in []core.DevService) Config {
 	out := make([]Service, 0, len(in))
