@@ -148,6 +148,42 @@ cmd = "exit 1"
 	_ = Down(&buf, wt)
 }
 
+func TestRunStatus(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolate run state
+	wt := t.TempDir()
+
+	// 何も記録されていなければ total==0。
+	if alive, total := RunStatus(wt); alive != 0 || total != 0 {
+		t.Fatalf("empty: alive=%d total=%d, want 0/0", alive, total)
+	}
+
+	// 縮退: 生存している PID（自プロセス）と確実に死んでいる PID を 1 つずつ記録する。
+	// 2147483646 は未使用の高 PID なので存在しない＝死んでいる扱いになる。
+	const deadPID = 2147483646
+	degraded := running{Services: []RunningService{
+		{Name: "alive", PID: os.Getpid(), Port: 9000, Cmd: "x"},
+		{Name: "dead", PID: deadPID, Port: 9001, Cmd: "y"},
+	}}
+	if err := saveRunning(wt, degraded); err != nil {
+		t.Fatalf("saveRunning: %v", err)
+	}
+	if alive, total := RunStatus(wt); alive != 1 || total != 2 {
+		t.Errorf("degraded: alive=%d total=%d, want 1/2", alive, total)
+	}
+
+	// 全サービス生存: alive==total。
+	healthy := running{Services: []RunningService{
+		{Name: "a", PID: os.Getpid(), Port: 9000, Cmd: "x"},
+		{Name: "b", PID: os.Getpid(), Port: 9001, Cmd: "y"},
+	}}
+	if err := saveRunning(wt, healthy); err != nil {
+		t.Fatalf("saveRunning: %v", err)
+	}
+	if alive, total := RunStatus(wt); alive != total || total != 2 {
+		t.Errorf("healthy: alive=%d total=%d, want alive==total==2", alive, total)
+	}
+}
+
 func TestConfigValidate(t *testing.T) {
 	tests := []struct {
 		name    string

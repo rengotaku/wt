@@ -876,6 +876,14 @@ export function TreesPage() {
                         <TableCell className="text-xs">
                           {!port?.has_dev_config ? (
                             <span className="text-muted-foreground">—</span>
+                          ) : port.running && port.degraded ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-amber-600"
+                              title="起動したサービスの一部が停止しています"
+                            >
+                              <span className="h-2 w-2 rounded-full bg-amber-500" />
+                              ⚠ 一部停止
+                            </span>
                           ) : (
                             <span
                               className={

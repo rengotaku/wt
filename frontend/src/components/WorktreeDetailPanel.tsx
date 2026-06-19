@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { X, FileCog, ScrollText, Trash2, ArrowDownToLine } from "lucide-react";
+import {
+  X,
+  FileCog,
+  ScrollText,
+  Trash2,
+  ArrowDownToLine,
+  AlertTriangle,
+} from "lucide-react";
 import type { TreeItem, PortItem, IssueDetail, MergedPRInfo } from "@/api";
 import { Button } from "@/components/ui/button";
 
@@ -187,7 +194,16 @@ export function WorktreeDetailPanel({
           <Row label="ポート帯">{port?.port_range || "未割当"}</Row>
           <Row label="稼働">
             {port?.running ? (
-              livePorts.length > 0 ? (
+              <>
+                {port.degraded && (
+                  <div className="mb-1 flex items-center gap-1 text-amber-600">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <span className="text-xs">
+                      一部のサービスが停止しています（縮退稼働）
+                    </span>
+                  </div>
+                )}
+                {livePorts.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {livePorts.map((p) => (
                     <a
@@ -201,9 +217,10 @@ export function WorktreeDetailPanel({
                     </a>
                   ))}
                 </div>
-              ) : (
-                "起動中"
-              )
+                ) : (
+                  "起動中"
+                )}
+              </>
             ) : (
               "停止中"
             )}
