@@ -366,9 +366,11 @@ export function TreesPage() {
     return b.created_at.localeCompare(a.created_at);
   });
 
-  // すべての非 main 行を選択可能にする。
-  const selectableTrees = filteredTrees.filter((t) => !t.is_main);
+  // 全行を選択可能にする（main/master も最新化・ピン留め対象にできる）。
+  // ただし削除だけは main を対象外にするため deletableSelected で別途絞る。
+  const selectableTrees = filteredTrees;
   const selectedInView = selectableTrees.filter((t) => selectedPaths.has(t.path));
+  const deletableSelected = selectedInView.filter((t) => !t.is_main);
   const allSelected =
     selectableTrees.length > 0 && selectedInView.length === selectableTrees.length;
   const someSelected = selectedInView.length > 0;
@@ -417,6 +419,11 @@ export function TreesPage() {
       handleBulkUpdate();
       return;
     }
+    // 削除: main/master は対象外。除外後に対象が無ければ確認に進まない。
+    if (deletableSelected.length === 0) {
+      toast.error("削除できる worktree がありません（main/master は対象外）");
+      return;
+    }
     setBulkConfirmInput("");
     setBulkConfirming(true);
   };
@@ -455,7 +462,7 @@ export function TreesPage() {
 
   const handleBulkDelete = async () => {
     setBulkDeleting(true);
-    const targets = selectedInView;
+    const targets = deletableSelected;
     for (const t of targets) {
       try {
         await treesApi.delete({ repo: t.repo, branch: t.branch || t.wt_name, force: t.diff_count > 0 });
@@ -741,14 +748,12 @@ export function TreesPage() {
                           .join(" ")}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          {!t.is_main && (
-                            <input
-                              type="checkbox"
-                              checked={selectedPaths.has(t.path)}
-                              onChange={() => togglePath(t.path)}
-                              aria-label={`${t.repo}/${t.wt_name} を選択`}
-                            />
-                          )}
+                          <input
+                            type="checkbox"
+                            checked={selectedPaths.has(t.path)}
+                            onChange={() => togglePath(t.path)}
+                            aria-label={`${t.repo}/${t.wt_name} を選択`}
+                          />
                         </TableCell>
                         <TableCell className="text-xs" onClick={(e) => e.stopPropagation()}>
                           <button
@@ -954,7 +959,8 @@ export function TreesPage() {
 
       {/* バルク削除確認モーダル */}
       {bulkConfirming && (() => {
-        const hasDirty = selectedInView.some((t) => t.diff_count > 0);
+        const hasDirty = deletableSelected.some((t) => t.diff_count > 0);
+        const excludedMain = selectedInView.length - deletableSelected.length;
         return (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
             <Card className="w-[32rem]">
@@ -964,7 +970,7 @@ export function TreesPage() {
               <CardContent className="space-y-4">
                 <p className="text-sm">以下の Worktree を削除しますか？</p>
                 <ul className="text-sm font-mono space-y-1 max-h-48 overflow-y-auto border rounded p-2">
-                  {selectedInView.map((t) => (
+                  {deletableSelected.map((t) => (
                     <li key={t.path}>
                       {t.repo} / {t.wt_name}
                       {t.diff_count > 0 && (
@@ -975,6 +981,11 @@ export function TreesPage() {
                     </li>
                   ))}
                 </ul>
+                {excludedMain > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    main/master {excludedMain} 件は削除対象外のため除外しました。
+                  </p>
+                )}
                 {hasDirty ? (
                   <>
                     <p className="text-sm text-amber-600">
