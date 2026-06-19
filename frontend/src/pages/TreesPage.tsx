@@ -736,8 +736,7 @@ export function TreesPage() {
                           title={`${t.wt_name}\n${t.branch || "（ブランチなし）"}`}
                         >
                           <div className="flex items-center gap-1">
-                            {!t.is_main &&
-                              (() => {
+                            {(() => {
                                 const pinned = pinnedPaths.has(t.path);
                                 return (
                                   <button
