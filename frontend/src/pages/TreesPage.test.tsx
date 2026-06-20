@@ -509,7 +509,7 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
     });
 
     // フォームを開く
-    fireEvent.click(screen.getByText("Worktree を追加"));
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
     await waitFor(() => {
       expect(
         screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
@@ -544,7 +544,7 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Worktree を追加"));
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
     await waitFor(() => {
       expect(
         screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
@@ -581,7 +581,7 @@ describe("TreesPage - new row highlight and auto-scroll", () => {
       ).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Worktree を追加"));
+    fireEvent.click(screen.getByRole("button", { name: "追加" }));
     await waitFor(() => {
       expect(
         screen.getByPlaceholderText("https://github.com/owner/repo/issues/123")
