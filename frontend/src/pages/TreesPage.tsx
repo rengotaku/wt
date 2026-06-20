@@ -6,9 +6,9 @@ import {
   RefreshCw,
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
   Pin,
+  Plus,
+  X,
 } from "lucide-react";
 import {
   treesApi,
@@ -292,6 +292,7 @@ export function TreesPage() {
       refetch();
       setForm({ repo: "", branch: "", type: "feature" });
       setAddError("");
+      setFormOpen(false);
     },
     onError: (e: Error) => setAddError(e.message),
   });
@@ -479,99 +480,23 @@ export function TreesPage() {
 
   return (
     <div className="space-y-6">
-      {/* 追加フォーム（折りたたみ） */}
-      <Card>
-        <CardHeader
-          className="cursor-pointer select-none"
-          onClick={() => setFormOpen(!formOpen)}
-        >
-          <CardTitle className="flex items-center gap-2">
-            {formOpen ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-            Worktree を追加
-          </CardTitle>
-        </CardHeader>
-        {formOpen && (
-          <CardContent className="space-y-3">
-            <div className="flex gap-2">
-              <Button
-                variant={issueMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIssueMode(true)}
-              >
-                Issue URL モード
-              </Button>
-              <Button
-                variant={!issueMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => setIssueMode(false)}
-              >
-                Branch モード
-              </Button>
-            </div>
-
-            {issueMode ? (
-              <Input
-                placeholder="https://github.com/owner/repo/issues/123"
-                value={form.issue_url ?? ""}
-                onChange={(e) => setForm({ ...form, issue_url: e.target.value })}
-              />
-            ) : (
-              <div className="flex gap-2">
-                <select
-                  className="border rounded px-2 py-1 text-sm"
-                  value={form.repo ?? ""}
-                  onChange={(e) => setForm({ ...form, repo: e.target.value })}
-                >
-                  <option value="">リポジトリを選択</option>
-                  {repos.map((r) => (
-                    <option key={r.name} value={r.name}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  placeholder="branch 名 (e.g. issue155)"
-                  value={form.branch ?? ""}
-                  onChange={(e) => setForm({ ...form, branch: e.target.value })}
-                />
-                <select
-                  className="border rounded px-2 py-1 text-sm"
-                  value={form.type ?? "feature"}
-                  onChange={(e) => setForm({ ...form, type: e.target.value })}
-                >
-                  {["feature", "fix", "chore", "docs", "refactor", "test", "ci"].map(
-                    (t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    )
-                  )}
-                </select>
-              </div>
-            )}
-
-            {addError && (
-              <Alert variant="destructive">
-                <AlertDescription>{addError}</AlertDescription>
-              </Alert>
-            )}
-            <Button onClick={handleAdd} disabled={addMutation.isPending}>
-              {addMutation.isPending ? "作成中..." : "作成"}
-            </Button>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Worktree 一覧 */}
+      {/* Worktree 一覧（追加はヘッダの「追加」ボタン→モーダル） */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Worktree 一覧</CardTitle>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setAddError("");
+                  setFormOpen(true);
+                }}
+                title="Worktree を追加"
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                追加
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -956,6 +881,107 @@ export function TreesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Worktree 追加モーダル */}
+      {formOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setFormOpen(false)}
+        >
+          <Card
+            className="w-[36rem] max-w-[92vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Worktree を追加</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFormOpen(false)}
+                  aria-label="閉じる"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex gap-2">
+                <Button
+                  variant={issueMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIssueMode(true)}
+                >
+                  Issue URL モード
+                </Button>
+                <Button
+                  variant={!issueMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIssueMode(false)}
+                >
+                  Branch モード
+                </Button>
+              </div>
+
+              {issueMode ? (
+                <Input
+                  placeholder="https://github.com/owner/repo/issues/123"
+                  value={form.issue_url ?? ""}
+                  onChange={(e) => setForm({ ...form, issue_url: e.target.value })}
+                  autoFocus
+                />
+              ) : (
+                <div className="flex gap-2">
+                  <select
+                    className="border rounded px-2 py-1 text-sm"
+                    value={form.repo ?? ""}
+                    onChange={(e) => setForm({ ...form, repo: e.target.value })}
+                  >
+                    <option value="">リポジトリを選択</option>
+                    {repos.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Input
+                    placeholder="branch 名 (e.g. issue155)"
+                    value={form.branch ?? ""}
+                    onChange={(e) => setForm({ ...form, branch: e.target.value })}
+                  />
+                  <select
+                    className="border rounded px-2 py-1 text-sm"
+                    value={form.type ?? "feature"}
+                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                  >
+                    {["feature", "fix", "chore", "docs", "refactor", "test", "ci"].map(
+                      (t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+              )}
+
+              {addError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{addError}</AlertDescription>
+                </Alert>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setFormOpen(false)}>
+                  キャンセル
+                </Button>
+                <Button onClick={handleAdd} disabled={addMutation.isPending}>
+                  {addMutation.isPending ? "作成中..." : "作成"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* バルク削除確認モーダル */}
       {bulkConfirming && (() => {
