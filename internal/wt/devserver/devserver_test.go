@@ -331,8 +331,8 @@ func TestSameServicesAndSourceLabel(t *testing.T) {
 		t.Error("differing length should not match")
 	}
 	for _, src := range []string{SourceFile, SourceRepo, SourceWorktree} {
-		if sourceLabel(src) == "" {
-			t.Errorf("sourceLabel(%q) is empty", src)
+		if SourceLabel(src) == "" {
+			t.Errorf("SourceLabel(%q) is empty", src)
 		}
 	}
 }

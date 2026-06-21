@@ -130,12 +130,12 @@ func Serve(out io.Writer, worktree string, base int) error {
 	// Surface which config layer is in effect. When a committed .wt/dev.toml is
 	// shadowed by a stored override/default, editing the file silently has no
 	// effect — warn so that footgun is visible at serve time.
-	_, _ = fmt.Fprintf(out, "dev 設定ソース: %s\n", sourceLabel(source))
+	_, _ = fmt.Fprintf(out, "dev 設定ソース: %s\n", SourceLabel(source))
 	if (source == SourceRepo || source == SourceWorktree) && HasConfig(worktree) {
 		if fileCfg, e := Load(worktree); e == nil && !sameServices(fileCfg, cfg) {
 			_, _ = fmt.Fprintf(out, "⚠️  committed .wt/dev.toml は %s に上書きされています。"+
 				"ファイルを編集しても反映されません（上書きをクリアするとファイルが使われます）。\n",
-				sourceLabel(source))
+				SourceLabel(source))
 		}
 	}
 	_ = Down(io.Discard, worktree)
