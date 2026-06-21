@@ -81,7 +81,13 @@ export function WorktreeDetailPanel({
             <h2 className="text-lg font-semibold truncate">{t.wt_name}</h2>
             <p className="text-xs font-mono text-muted-foreground truncate">{t.repo}</p>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="閉じる">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-10 w-10 md:h-8 md:w-8"
+            onClick={onClose}
+            aria-label="閉じる"
+          >
             <X className="h-4 w-4" />
           </Button>
         </header>

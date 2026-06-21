@@ -343,8 +343,8 @@ export function ReposPage() {
 
       {/* 削除確認モーダル */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <Card className="w-96">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <Card className="w-96 max-w-[92vw]">
             <CardHeader>
               <CardTitle>削除確認</CardTitle>
             </CardHeader>

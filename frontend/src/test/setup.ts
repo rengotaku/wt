@@ -24,6 +24,27 @@ Object.defineProperty(window, "localStorage", {
   writable: true,
 });
 
+// jsdom は matchMedia を実装しないため、useIsMobile が参照できるようモックする。
+// 既定は matches:false（= デスクトップ）。テーブル前提の既存テストがそのまま通る。
+// モバイル描画を検証するテストは window.matchMedia を上書きして matches:true にする。
+if (!window.matchMedia) {
+  Object.defineProperty(window, "matchMedia", {
+    writable: true,
+    configurable: true,
+    value: (query: string): MediaQueryList =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList,
+  });
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
