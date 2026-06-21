@@ -24,6 +24,8 @@ import { filterTrees } from "./treesFilter";
 import { DevConfigPanel, type DevConfigTarget } from "@/components/DevConfigPanel";
 import { LogPanel, type LogTarget } from "@/components/LogPanel";
 import { WorktreeDetailPanel } from "@/components/WorktreeDetailPanel";
+import { WorktreeCard } from "@/components/WorktreeCard";
+import { useIsMobile } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -60,6 +62,8 @@ function fallbackCopy(text: string): boolean {
 
 export function TreesPage() {
   const [searchParams] = useSearchParams();
+  // md(768px) 未満ではテーブルの代わりにカード一覧を描画する（デスクトップは現状維持）。
+  const isMobile = useIsMobile();
 
   const {
     data: trees = [],
@@ -202,9 +206,12 @@ export function TreesPage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  // モバイルの全選択 checkbox（アクションバー側）。indeterminate 表示に使う。
+  const mobileSelectAllRef = useRef<HTMLInputElement>(null);
 
   const [newlyAddedPath, setNewlyAddedPath] = useState<string | null>(null);
-  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  // テーブル行(tr)／モバイルのカード(div)どちらの DOM も登録できるよう HTMLElement で保持。
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   // コピー直後にボタンを ✓ 表示へ切り替えるための状態（行ごと、1.5秒で戻す）
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
@@ -377,8 +384,12 @@ export function TreesPage() {
   const someSelected = selectedInView.length > 0;
 
   useEffect(() => {
+    const indeterminate = someSelected && !allSelected;
     if (headerCheckboxRef.current) {
-      headerCheckboxRef.current.indeterminate = someSelected && !allSelected;
+      headerCheckboxRef.current.indeterminate = indeterminate;
+    }
+    if (mobileSelectAllRef.current) {
+      mobileSelectAllRef.current.indeterminate = indeterminate;
     }
   }, [allSelected, someSelected]);
 
@@ -483,9 +494,9 @@ export function TreesPage() {
       {/* Worktree 一覧（追加はヘッダの「追加」ボタン→モーダル） */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Worktree 一覧</CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 onClick={() => {
@@ -525,7 +536,7 @@ export function TreesPage() {
           </div>
           <div className="flex items-center gap-x-4 gap-y-2 mt-2 flex-wrap text-sm">
             <Input
-              className="h-8 w-48"
+              className="h-8 w-full sm:w-48"
               placeholder="フリーワードで絞り込み..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
@@ -587,7 +598,22 @@ export function TreesPage() {
             <>
               {/* 一括アクションバーは常時表示。選択の有無で出し入れすると一覧が
                   上下にブレるため、未選択時は実行ボタンを無効化するだけにする。 */}
-              <div className="flex items-center gap-2 mb-3 pb-3 border-b">
+              <div className="flex flex-wrap items-center gap-2 mb-3 pb-3 border-b">
+                {/* モバイルは全選択ヘッダ checkbox（テーブル側）が無いので、アクションバーに置く。 */}
+                {isMobile && (
+                  <label className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <input
+                      ref={mobileSelectAllRef}
+                      type="checkbox"
+                      className="size-5"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      disabled={selectableTrees.length === 0}
+                      aria-label="全選択"
+                    />
+                    全選択
+                  </label>
+                )}
                 <span className="text-sm text-muted-foreground">
                   {selectedInView.length} 件選択中
                 </span>
@@ -611,6 +637,33 @@ export function TreesPage() {
                   {bulkUpdating ? "実行中..." : "実行"}
                 </Button>
               </div>
+              {isMobile ? (
+                <div className="space-y-2">
+                  {sortedTrees.map((t) => (
+                    <WorktreeCard
+                      key={t.path}
+                      tree={t}
+                      port={portMap.get(`${t.repo}/${t.wt_name}`)}
+                      pinned={pinnedPaths.has(t.path)}
+                      selected={selectedPaths.has(t.path)}
+                      copied={copiedPath === t.path}
+                      isNew={t.path === newlyAddedPath}
+                      onToggleSelect={() => togglePath(t.path)}
+                      onTogglePin={() => applyPin([t.path], !pinnedPaths.has(t.path))}
+                      onCopy={() => handleCopyPath(t.path)}
+                      onRepoClick={() => {
+                        setRepoFilter(t.repo);
+                        setShowMain(true);
+                      }}
+                      onOpenDetail={() => setDetailTree(t)}
+                      registerRef={(el) => {
+                        if (el) rowRefs.current.set(t.path, el);
+                        else rowRefs.current.delete(t.path);
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <Table className="table-fixed w-full whitespace-nowrap">
                 <TableHeader>
@@ -877,6 +930,7 @@ export function TreesPage() {
                 </TableBody>
               </Table>
             </div>
+            )}
             </>
           )}
         </CardContent>
@@ -988,8 +1042,8 @@ export function TreesPage() {
         const hasDirty = deletableSelected.some((t) => t.diff_count > 0);
         const excludedMain = selectedInView.length - deletableSelected.length;
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <Card className="w-[32rem]">
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <Card className="w-[32rem] max-w-[92vw]">
               <CardHeader>
                 <CardTitle>削除確認</CardTitle>
               </CardHeader>
