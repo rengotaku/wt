@@ -120,9 +120,9 @@ const (
 	SourceFile     = "file"     // committed .wt/dev.toml
 )
 
-// sourceLabel returns a human-readable label for an EffectiveConfig source,
+// SourceLabel returns a human-readable label for an EffectiveConfig source,
 // so callers can show which layer is actually in effect.
-func sourceLabel(source string) string {
+func SourceLabel(source string) string {
 	switch source {
 	case SourceFile:
 		return "committed .wt/dev.toml"

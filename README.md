@@ -15,7 +15,49 @@ wt tree add <repo> <issue>  worktree を作成
 wt tree ls                  worktree 一覧
 wt tree rm                  worktree を削除
 wt tree gc                  マージ済み worktree を一括削除
+
+wt serve                    .wt/dev.toml のサーバーを割当ポートで起動
+wt down                     wt serve で起動したサーバーを停止
+
+wt dev add <name> --cmd <cmd> [--domain]  dev サービスを追加/更新（repo 既定）
+wt dev rm <name>            dev サービスを削除
+wt dev show [--json]        実効 dev 設定とソース・警告を表示
+wt dev validate             repo 既定 dev 設定を検証
+wt dev clear                repo 既定 dev サービスを全削除
 ```
+
+## dev サービス設定（`wt dev`）
+
+worktree の dev サーバ（`wt serve` / Web の「起動」で使う）を CLI から設定できます。
+`wt serve` と同じく **cwd ベース**で、現在の worktree が属するリポジトリの
+**repo 既定 dev サービス**（`<container>/.worktrees.json` の `_config.dev_services`）を編集します。
+ここで定義したサービスは、専用の上書きを持たない全 worktree に継承されます
+（メタデータ管理のためリポジトリにはコミットされません）。
+
+```bash
+# 例: API と Vite フロントを定義
+wt dev add api --cmd 'go run . web -p ${port}'
+wt dev add web --cmd 'npm run dev -- --port ${port} --strictPort' --domain
+wt dev show          # 実効設定・ソース・警告（AI は --json で機械可読出力）
+wt dev validate
+```
+
+### スキーマ
+
+- 各 service は宣言順に割当ブロックの `base+i` ポートを受け取り、`cmd` 内の `${port}` に置換されます。
+- 全 service のポートは `WT_PORT_<NAME>`（例: `WT_PORT_API`）環境変数で相互参照できます。
+- `--domain` を付けた service は `wt proxy` 経由の名前アクセス対象になります。
+
+### 設定レイヤと優先順位
+
+dev 設定は次の優先順で実効化されます（`wt dev show` が実効ソースと警告を表示）:
+
+1. **worktree 上書き**（その worktree 専用・Web UI で設定）
+2. **repo 既定**（`_config.dev_services` ＝ `wt dev` が編集する層）
+3. **コミット済み `.wt/dev.toml`**（リポジトリにコミットされたファイル）
+
+上位レイヤがあると下位は使われません（例: worktree 上書きがあると `wt dev` の repo 既定は
+その worktree には反映されません）。`wt dev show` はこの状況を警告します。
 
 ## git-crypt 対応
 

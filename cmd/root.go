@@ -60,6 +60,7 @@ func init() {
 	registerPortsCmd(rootCmd)
 	registerServeCmd(rootCmd)
 	registerProxyCmd(rootCmd)
+	registerDevCmd(rootCmd)
 }
 
 // Execute runs the root command with a background context.
