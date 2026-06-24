@@ -3,13 +3,34 @@ package devserver
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"wt/internal/wt/core"
 )
+
+// spawnGroupLeader starts a long-lived child in its own process group and
+// returns its PID (== pgid). serviceAlive probes the process group, so a live
+// PID for tests must lead a group — mirroring how Serve launches services. The
+// child is killed and reaped when the test ends.
+func spawnGroupLeader(t *testing.T) int {
+	t.Helper()
+	c := exec.Command("sleep", "60")
+	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := c.Start(); err != nil {
+		t.Fatalf("spawn group leader: %v", err)
+	}
+	pid := c.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = c.Process.Wait()
+	})
+	return pid
+}
 
 func TestSharedEnv(t *testing.T) {
 	svcs := []Service{{Name: "api"}, {Name: "web-ui"}}
@@ -157,11 +178,12 @@ func TestRunStatus(t *testing.T) {
 		t.Fatalf("empty: alive=%d total=%d, want 0/0", alive, total)
 	}
 
-	// 縮退: 生存している PID（自プロセス）と確実に死んでいる PID を 1 つずつ記録する。
+	// 縮退: 生存しているプロセスグループ leader と確実に死んでいる PID を 1 つずつ記録する。
 	// 2147483646 は未使用の高 PID なので存在しない＝死んでいる扱いになる。
 	const deadPID = 2147483646
+	live1 := spawnGroupLeader(t)
 	degraded := running{Services: []RunningService{
-		{Name: "alive", PID: os.Getpid(), Port: 9000, Cmd: "x"},
+		{Name: "alive", PID: live1, Port: 9000, Cmd: "x"},
 		{Name: "dead", PID: deadPID, Port: 9001, Cmd: "y"},
 	}}
 	if err := saveRunning(wt, degraded); err != nil {
@@ -172,15 +194,50 @@ func TestRunStatus(t *testing.T) {
 	}
 
 	// 全サービス生存: alive==total。
+	live2 := spawnGroupLeader(t)
 	healthy := running{Services: []RunningService{
-		{Name: "a", PID: os.Getpid(), Port: 9000, Cmd: "x"},
-		{Name: "b", PID: os.Getpid(), Port: 9001, Cmd: "y"},
+		{Name: "a", PID: live1, Port: 9000, Cmd: "x"},
+		{Name: "b", PID: live2, Port: 9001, Cmd: "y"},
 	}}
 	if err := saveRunning(wt, healthy); err != nil {
 		t.Fatalf("saveRunning: %v", err)
 	}
 	if alive, total := RunStatus(wt); alive != total || total != 2 {
 		t.Errorf("healthy: alive=%d total=%d, want alive==total==2", alive, total)
+	}
+}
+
+func TestAliveByPort(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolate run state
+	wt := t.TempDir()
+
+	// 何も記録されていなければ空マップ（nil でないこと）。
+	if m := AliveByPort(wt); len(m) != 0 {
+		t.Fatalf("empty: got %d entries, want 0", len(m))
+	}
+
+	// 生存グループ leader と死んだ PID を記録。生存分だけ port で引ける。
+	const deadPID = 2147483646
+	rec := running{Services: []RunningService{
+		{Name: "worker", PID: spawnGroupLeader(t), Port: 9161, Cmd: "x"},
+		{Name: "dead", PID: deadPID, Port: 9160, Cmd: "y"},
+	}}
+	if err := saveRunning(wt, rec); err != nil {
+		t.Fatalf("saveRunning: %v", err)
+	}
+	m := AliveByPort(wt)
+	if len(m) != 1 {
+		t.Fatalf("got %d alive entries, want 1", len(m))
+	}
+	s, ok := m[9161]
+	if !ok {
+		t.Fatal("port 9161 (alive worker) should be present")
+	}
+	if s.Name != "worker" {
+		t.Errorf("name = %q, want worker", s.Name)
+	}
+	if _, ok := m[9160]; ok {
+		t.Error("port 9160 (dead) must be absent")
 	}
 }
 

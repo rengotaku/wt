@@ -3,6 +3,7 @@ import { apiClient } from "./client";
 export interface PortState {
   port: number;
   listening: boolean;
+  running?: boolean; // 記録済みサービスの PID が生存（ポート未bindの headless worker でも true）
   pid?: number;
   proc?: string;
   service?: string; // dev service名 (api/web/admin 等)

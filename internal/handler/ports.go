@@ -11,6 +11,7 @@ import (
 type portState struct {
 	Port      int    `json:"port"`
 	Listening bool   `json:"listening"`
+	Running   bool   `json:"running,omitempty"` // 記録済みサービスの PID が生存（ポート未bindの headless でも true）
 	PID       int    `json:"pid,omitempty"`
 	Proc      string `json:"proc,omitempty"`
 	Service   string `json:"service,omitempty"` // dev service名（service i = base+i）
@@ -81,7 +82,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 		cfg, source, _ := devserver.EffectiveConfig(r.Path)
 		states := make([]portState, 0, len(r.Ports))
 		for i, p := range r.Ports {
-			st := portState{Port: p.Port, Listening: p.Listening, PID: p.PID, Proc: p.Proc}
+			st := portState{Port: p.Port, Listening: p.Listening, Running: p.Running, PID: p.PID, Proc: p.Proc}
 			if i < len(cfg.Services) {
 				st.Service = cfg.Services[i].Name
 			}
