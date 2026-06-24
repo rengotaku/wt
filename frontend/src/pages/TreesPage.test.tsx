@@ -59,6 +59,7 @@ vi.mock("@/api", async (importOriginal) => {
       issueDetails: vi.fn().mockResolvedValue([]),
       delete: vi.fn().mockResolvedValue({ output: "" }),
       update: vi.fn().mockResolvedValue({ output: "1 commits pulled" }),
+      pin: vi.fn(),
     },
     reposApi: {
       ...actual.reposApi,
@@ -390,16 +391,26 @@ describe("TreesPage - main は削除対象外", () => {
 describe("TreesPage - ピン留め", () => {
   const path1 = "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc";
 
+  // pin はサーバ(.worktrees.json)に永続化される。テストでは pin 状態を保持し、
+  // list は pinned を反映し、pin はその状態を書き換える（= 実サーバの代役）。
+  let pinnedByPath: Record<string, boolean>;
+
   beforeEach(async () => {
-    localStorage.removeItem("wt.trees.pinned");
+    pinnedByPath = {};
     const { treesApi } = await import("@/api");
-    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
-  });
-  afterEach(() => {
-    localStorage.removeItem("wt.trees.pinned");
+    vi.mocked(treesApi.list).mockImplementation(
+      async () =>
+        mockTrees.map((t) => ({ ...t, pinned: !!pinnedByPath[t.path] })) as never
+    );
+    vi.mocked(treesApi.pin).mockImplementation(async (repo, wt, pinned) => {
+      const t = mockTrees.find((x) => x.repo === repo && x.wt_name === wt);
+      if (t) pinnedByPath[t.path] = pinned;
+      return { pinned };
+    });
   });
 
   it("チェックして『ピン留め』を実行するとピンが付き先頭に並ぶ", async () => {
+    const { treesApi } = await import("@/api");
     render(<TreesPage />);
     await waitFor(() => {
       expect(
@@ -418,13 +429,13 @@ describe("TreesPage - ピン留め", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "実行" }));
 
-    // ピン解除ボタン（=ピン付与の証跡）が出て、localStorage に保存される。
+    // サーバへ pin 永続化が呼ばれ、再取得後にピン解除ボタン（=付与の証跡）が出る。
     await waitFor(() => {
       expect(
         screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
       ).toBeInTheDocument();
     });
-    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(path1);
+    expect(treesApi.pin).toHaveBeenCalledWith("myrepo", "myrepo--feat-issue-1-abc", true);
 
     // ピン留めにより issue-1 が先頭へ。
     const after = screen.getAllByRole("row");
@@ -432,6 +443,7 @@ describe("TreesPage - ピン留め", () => {
   });
 
   it("各行の常時表示ピンボタンのクリックで直接ピン留めできる", async () => {
+    const { treesApi } = await import("@/api");
     render(<TreesPage />);
     // 未ピン行にも「ピン留め」ボタンが常時出ている（チェック不要）。
     const pinBtn = await waitFor(() =>
@@ -444,10 +456,11 @@ describe("TreesPage - ピン留め", () => {
         screen.getByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
       ).toBeInTheDocument();
     });
-    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(path1);
+    expect(treesApi.pin).toHaveBeenCalledWith("myrepo", "myrepo--feat-issue-1-abc", true);
   });
 
   it("main 行もピン留めできる", async () => {
+    const { treesApi } = await import("@/api");
     render(<TreesPage />);
     // main(wt_name=myrepo) にも常時ピンボタンが出る。
     const pinMain = await waitFor(() =>
@@ -460,13 +473,12 @@ describe("TreesPage - ピン留め", () => {
         screen.getByLabelText("myrepo/myrepo のピンを解除")
       ).toBeInTheDocument();
     });
-    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).toContain(
-      "/home/user/Workspace/myrepo"
-    );
+    expect(treesApi.pin).toHaveBeenCalledWith("myrepo", "myrepo", true);
   });
 
-  it("起動時に localStorage のピンを復元し、アイコンのクリックで解除できる", async () => {
-    localStorage.setItem("wt.trees.pinned", JSON.stringify([path1]));
+  it("サーバ側で既にピンされた worktree を先頭固定し、アイコンのクリックで解除できる", async () => {
+    const { treesApi } = await import("@/api");
+    pinnedByPath[path1] = true; // サーバが pinned 状態で返す
     render(<TreesPage />);
 
     const unpin = await waitFor(() =>
@@ -479,7 +491,11 @@ describe("TreesPage - ピン留め", () => {
         screen.queryByLabelText("myrepo/myrepo--feat-issue-1-abc のピンを解除")
       ).not.toBeInTheDocument();
     });
-    expect(JSON.parse(localStorage.getItem("wt.trees.pinned")!)).not.toContain(path1);
+    expect(treesApi.pin).toHaveBeenCalledWith(
+      "myrepo",
+      "myrepo--feat-issue-1-abc",
+      false
+    );
   });
 });
 

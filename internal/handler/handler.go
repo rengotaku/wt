@@ -32,6 +32,7 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/trees", h.AddTree)
 	mux.HandleFunc("DELETE /api/trees", h.DeleteTree)
 	mux.HandleFunc("POST /api/trees/{repo}/{wt}/update", h.UpdateTree)
+	mux.HandleFunc("PUT /api/trees/{repo}/{wt}/pin", h.SetTreePin)
 	mux.HandleFunc("POST /api/trees/gc", h.GcTrees)
 	mux.HandleFunc("GET /api/trees/merged-prs", h.GetMergedPRs)
 	mux.HandleFunc("GET /api/trees/issue-details", h.GetIssueDetails)

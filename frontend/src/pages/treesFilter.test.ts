@@ -12,6 +12,7 @@ const makeTree = (overrides: Partial<TreeItem>): TreeItem => ({
   has_tmux: false,
   is_main: false,
   branch: "feat/issue-1-abc",
+  pinned: false,
   ...overrides,
 });
 

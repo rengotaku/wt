@@ -21,6 +21,7 @@ type ListEntry struct {
 	Created string // .worktrees.json の Created フィールド値
 	Issue   string // .worktrees.json の Issue フィールド値（例: "#168"）
 	IsMain  bool   // wtName == "main" || wtName == "master" || entry.Type == "main"
+	Pinned  bool   // .worktrees.json の Pinned フラグ（起動時 auto-serve + 一覧先頭固定）
 }
 
 // Entries scans all containers and returns every existing worktree entry.
@@ -76,6 +77,7 @@ func Entries() []ListEntry {
 					Created: info.Created,
 					Issue:   info.Issue,
 					IsMain:  wtName == "main" || wtName == "master" || info.Type == "main",
+					Pinned:  info.Pinned,
 				})
 			}
 		}

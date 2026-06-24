@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -162,28 +162,28 @@ export function TreesPage() {
       return next;
     });
 
-  // ピン留めした worktree の path 集合。一覧の先頭に固定表示する。localStorage に永続化。
-  const [pinnedPaths, setPinnedPaths] = useState<Set<string>>(() => {
+  // ピン留めは .worktrees.json に永続化され、サーバから tree.pinned として返る。
+  // wt web 起動時の auto-serve もこのフラグを参照する。一覧の先頭固定はこの
+  // path 集合で行う（サーバ状態から導出）。
+  const pinnedPaths = useMemo(
+    () => new Set(trees.filter((t) => t.pinned).map((t) => t.path)),
+    [trees]
+  );
+  // 指定 path 群のピンを付与/解除し、サーバへ永続化してから一覧を再取得する。
+  const applyPin = async (paths: string[], pin: boolean) => {
+    const byPath = new Map(trees.map((t) => [t.path, t]));
     try {
-      const saved = localStorage.getItem("wt.trees.pinned");
-      if (saved) return new Set<string>(JSON.parse(saved));
+      await Promise.all(
+        paths.map((p) => {
+          const t = byPath.get(p);
+          return t ? treesApi.pin(t.repo, t.wt_name, pin) : Promise.resolve();
+        })
+      );
     } catch {
-      /* ignore */
+      toast.error("ピンの更新に失敗しました");
     }
-    return new Set<string>();
-  });
-  // 指定 path 群のピンを付与/解除し、localStorage に反映する。
-  const applyPin = (paths: string[], pin: boolean) =>
-    setPinnedPaths((prev) => {
-      const next = new Set(prev);
-      paths.forEach((p) => (pin ? next.add(p) : next.delete(p)));
-      try {
-        localStorage.setItem("wt.trees.pinned", JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    refetch();
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
