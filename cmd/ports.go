@@ -44,5 +44,43 @@ func registerPortsCmd(parent *cobra.Command) {
 	}
 	c.AddCommand(allocCmd)
 
+	var pruneYes bool
+	pruneCmd := &cobra.Command{
+		Use:   "prune",
+		Short: "worktree ディレクトリが消えた幽霊エントリを削除しポートブロックを回収する",
+		Long: `削除済み worktree の残骸（.worktrees.json に port_base だけ残ったエントリ）を
+掃除し、握られていたポートブロックを解放します。既定は候補の表示のみ。
+実際に削除するには --yes を指定してください。`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			out := cmd.OutOrStdout()
+			stale, err := ports.Prune(!pruneYes)
+			if err != nil {
+				return err
+			}
+			if len(stale) == 0 {
+				_, _ = fmt.Fprintln(out, "回収対象の幽霊エントリはありません")
+				return nil
+			}
+			for _, a := range stale {
+				_, _ = fmt.Fprintf(out, "%s %s/%s (%s)\n", pruneMark(pruneYes), a.Repo, a.WtName, ports.RangeString(a.PortBase))
+			}
+			if pruneYes {
+				_, _ = fmt.Fprintf(out, "%d 件の幽霊エントリを削除し、%d ブロックを回収しました\n", len(stale), len(stale))
+			} else {
+				_, _ = fmt.Fprintf(out, "🔍 %d 件の幽霊エントリ（%d ブロック）が回収可能です。削除するには --yes を指定してください\n", len(stale), len(stale))
+			}
+			return nil
+		},
+	}
+	pruneCmd.Flags().BoolVarP(&pruneYes, "yes", "y", false, "候補表示ではなく実際に削除する")
+	c.AddCommand(pruneCmd)
+
 	parent.AddCommand(c)
+}
+
+func pruneMark(done bool) string {
+	if done {
+		return "🗑️ 削除:"
+	}
+	return "•"
 }
