@@ -33,9 +33,19 @@ func List(out io.Writer) error {
 	_, _ = fmt.Fprintf(out, "%-*s  %-*s  %-*s  %s\n", wRepo, hRepo, wWt, hWt, wPort, hPort, hLive)
 	for _, r := range rows {
 		_, _ = fmt.Fprintf(out, "%-*s  %-*s  %-*s  %s\n",
-			wRepo, r.Repo, wWt, r.WtName, wPort, rangeCell(r.PortBase), liveCell(r.Ports))
+			wRepo, r.Repo, wWt, r.WtName, wPort, rangeCell(r.PortBase), statusCell(&r))
 	}
 	return nil
+}
+
+// statusCell renders the 稼働 column: live listeners, "idle", "—", or a "stale"
+// marker for a ghost row whose worktree directory is gone but whose port block
+// is still reserved (reclaim with `wt ports prune`).
+func statusCell(r *Row) string {
+	if !r.Exists && r.PortBase != 0 {
+		return "stale (dir無 → wt ports prune)"
+	}
+	return liveCell(r.Ports)
 }
 
 func rangeCell(base int) string {

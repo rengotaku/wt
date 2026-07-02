@@ -19,6 +19,7 @@ type Row struct {
 	Path     string
 	PortBase int
 	Ports    []PortState
+	Exists   bool // whether the worktree directory still exists on disk
 }
 
 // Status returns one Row per worktree across all containers, with live
@@ -39,6 +40,7 @@ func Status() ([]Row, error) {
 			Branch:   a.Branch,
 			Path:     a.Path,
 			PortBase: a.PortBase,
+			Exists:   a.Exists,
 		}
 		for _, p := range PortsForBase(a.PortBase) {
 			st := PortState{Port: p}
