@@ -28,6 +28,29 @@ type portItem struct {
 	Degraded     bool        `json:"degraded,omitempty"`    // running しているが記録済みサービスの一部が停止している（縮退）
 	Domain       string      `json:"domain,omitempty"`      // <label>.wt.localhost when a domain service exists
 	DomainPort   int         `json:"domain_port,omitempty"` // localhost port of the domain(=user-facing)サービス。「開く」の遷移先
+	Stale        bool        `json:"stale,omitempty"`       // worktree ディレクトリが消えた幽霊エントリ（port を死蔵）
+}
+
+// staleItem is one ghost registry entry (worktree dir gone, port_base lingering)
+// as reported by the prune preview / delete endpoints.
+type staleItem struct {
+	Repo      string `json:"repo"`
+	WtName    string `json:"wt_name"`
+	PortBase  int    `json:"port_base"`
+	PortRange string `json:"port_range,omitempty"`
+}
+
+func toStaleItems(allocs []ports.Allocation) []staleItem {
+	out := make([]staleItem, 0, len(allocs))
+	for _, a := range allocs {
+		out = append(out, staleItem{
+			Repo:      a.Repo,
+			WtName:    a.WtName,
+			PortBase:  a.PortBase,
+			PortRange: ports.RangeString(a.PortBase),
+		})
+	}
+	return out
 }
 
 type doctorRow struct {
@@ -109,7 +132,34 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			Degraded:     total > 0 && alive < total,
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
 			DomainPort:   domainPort,
+			Stale:        !r.Exists && r.PortBase != 0,
 		})
 	}
 	jsonOK(w, items)
+}
+
+// ListStalePorts returns the ghost registry entries (worktree directory gone,
+// port_base still reserved) that `PrunePorts` would delete. Non-destructive
+// preview backing the「幽霊を掃除」UI.
+func (h *Handler) ListStalePorts(w http.ResponseWriter, _ *http.Request) {
+	stale, err := ports.Stale()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, toStaleItems(stale))
+}
+
+// PrunePorts deletes the ghost registry entries and releases their port blocks,
+// returning the entries it removed.
+func (h *Handler) PrunePorts(w http.ResponseWriter, _ *http.Request) {
+	removed, err := ports.Prune(false)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]any{
+		"removed": toStaleItems(removed),
+		"count":   len(removed),
+	})
 }
