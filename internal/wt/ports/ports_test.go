@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -112,6 +113,8 @@ func TestFreeBase_RespectsConfiguredBand(t *testing.T) {
 }
 
 // writeContainer creates a temp container with the given worktree→base mapping.
+// Each worktree's directory is created on disk so allocations count as live
+// (dirExists true). Use removeWtDir to simulate a ghost (deleted) worktree.
 func writeContainer(t *testing.T, repo string, bases map[string]int) string {
 	t.Helper()
 	home := os.Getenv("HOME")
@@ -120,6 +123,9 @@ func writeContainer(t *testing.T, repo string, bases map[string]int) string {
 		t.Fatal(err)
 	}
 	for name, base := range bases {
+		if err := os.MkdirAll(filepath.Join(container, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		e := core.Entry{Branch: name}
 		e.PortBase = base
 		if err := core.PutEntry(container, name, &e); err != nil {
@@ -127,6 +133,15 @@ func writeContainer(t *testing.T, repo string, bases map[string]int) string {
 		}
 	}
 	return container
+}
+
+// removeWtDir deletes a worktree's directory while leaving its registry entry
+// intact, reproducing a ghost entry (removed outside `wt tree rm`).
+func removeWtDir(t *testing.T, container, name string) {
+	t.Helper()
+	if err := os.RemoveAll(filepath.Join(container, name)); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestEnsureBase_AllocatesWhenUnset_ReusesWhenSet(t *testing.T) {
@@ -245,6 +260,98 @@ func TestAllocate_SkipsBlockWithLiveListener(t *testing.T) {
 	}
 	if got != 9005 {
 		t.Errorf("Allocate = %d, want 9005 (9000 block occupied by live :9002)", got)
+	}
+}
+
+func TestAllocate_IgnoresGhostEntryBlock(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
+	// wt1 owns 9000 but its directory is gone (ghost); wt2 owns 9005 and is live.
+	container := writeContainer(t, "repo-a", map[string]int{"wt1": 9000, "wt2": 9005})
+	removeWtDir(t, container, "wt1")
+
+	got, err := Allocate()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 9000 {
+		t.Errorf("Allocate = %d, want 9000 (ghost wt1's block reclaimed)", got)
+	}
+}
+
+func TestAllocate_FullOfGhosts_StillAllocates(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
+	// Fill the whole band with ghost entries: without reclaiming, this would
+	// exhaust 9000-9999 and fail — the real bug this fixes.
+	bases := map[string]int{}
+	for i, base := 0, 9000; base+BlockSize-1 <= 9999; i, base = i+1, base+BlockSize {
+		bases[fmt.Sprintf("ghost%d", i)] = base
+	}
+	container := writeContainer(t, "repo-a", bases)
+	for name := range bases {
+		removeWtDir(t, container, name)
+	}
+
+	got, err := Allocate()
+	if err != nil {
+		t.Fatalf("expected allocation to succeed once ghosts are ignored, got: %v", err)
+	}
+	if got != 9000 {
+		t.Errorf("Allocate = %d, want 9000 (all blocks were ghosts)", got)
+	}
+}
+
+func TestStale_ReportsGhostPortHoldersOnly(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	container := writeContainer(t, "repo-a", map[string]int{"live": 9000, "ghost": 9005, "noport": 0})
+	removeWtDir(t, container, "ghost")
+	removeWtDir(t, container, "noport") // dir gone but no port → not a reclaim target
+
+	stale, err := Stale()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(stale) != 1 {
+		t.Fatalf("got %d stale, want 1 (only the port-holding ghost)", len(stale))
+	}
+	if stale[0].WtName != "ghost" || stale[0].PortBase != 9005 {
+		t.Errorf("stale[0] = %+v, want ghost/9005", stale[0])
+	}
+}
+
+func TestPrune_DryRunKeepsEntries_YesDeletes(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	stubNoListeners(t)
+	container := writeContainer(t, "repo-a", map[string]int{"live": 9000, "ghost": 9005})
+	removeWtDir(t, container, "ghost")
+
+	// Dry run: report the ghost but leave the registry untouched.
+	preview, err := Prune(true)
+	if err != nil {
+		t.Fatalf("Prune(dry): %v", err)
+	}
+	if len(preview) != 1 || preview[0].WtName != "ghost" {
+		t.Fatalf("dry-run preview = %+v, want [ghost]", preview)
+	}
+	if entries, _ := core.LoadEntries(container); len(entries) != 2 {
+		t.Errorf("dry-run mutated registry: %d entries, want 2", len(entries))
+	}
+
+	// Real prune: the ghost entry is removed, live entry stays.
+	removed, err := Prune(false)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if len(removed) != 1 || removed[0].WtName != "ghost" {
+		t.Fatalf("removed = %+v, want [ghost]", removed)
+	}
+	entries, _ := core.LoadEntries(container)
+	if _, ok := entries["ghost"]; ok {
+		t.Error("ghost entry still present after prune")
+	}
+	if _, ok := entries["live"]; !ok {
+		t.Error("live entry was wrongly pruned")
 	}
 }
 

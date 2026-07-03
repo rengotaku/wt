@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { portsApi, type ListenerRow } from "@/api";
+import { portsApi, type ListenerRow, type StaleItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -11,6 +11,99 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+function StalePortsCard() {
+  const queryClient = useQueryClient();
+  const { data: stale = [], isFetching } = useQuery<StaleItem[]>({
+    queryKey: ["port-stale"],
+    queryFn: portsApi.stale,
+  });
+
+  const prune = useMutation({
+    mutationFn: portsApi.prune,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["port-stale"] });
+      queryClient.invalidateQueries({ queryKey: ["ports"] });
+      queryClient.invalidateQueries({ queryKey: ["port-listeners"] });
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>幽霊ポート（削除済み worktree の残骸）</CardTitle>
+          {stale.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={prune.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `${stale.length} 件の幽霊エントリを削除し、ポートブロックを回収します。よろしいですか？`,
+                  )
+                ) {
+                  prune.mutate();
+                }
+              }}
+            >
+              {prune.isPending
+                ? "掃除中..."
+                : `掃除して回収（${stale.length}件）`}
+            </Button>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">
+          <code>wt tree rm</code> を経由せず消された worktree が{" "}
+          <code>.worktrees.json</code> に <code>port_base</code>{" "}
+          だけ残した残骸です。ポート帯を死蔵し、割当枯渇の原因になります。掃除すると
+          該当ブロックが回収されます（登録の削除のみ・ファイルは触りません）。
+        </p>
+      </CardHeader>
+      <CardContent>
+        {prune.isError && (
+          <p className="mb-3 text-sm text-red-600">
+            {(prune.error as Error).message}
+          </p>
+        )}
+        {prune.isSuccess && (
+          <p className="mb-3 text-sm text-green-700">
+            {prune.data.count} 件を掃除し、{prune.data.count} ブロックを回収しました。
+          </p>
+        )}
+        {isFetching && stale.length === 0 ? (
+          <p className="text-sm text-muted-foreground">確認中...</p>
+        ) : stale.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            幽霊エントリはありません。
+          </p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>リポジトリ</TableHead>
+                <TableHead>worktree</TableHead>
+                <TableHead>ポート</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {stale.map((s) => (
+                <TableRow key={`${s.repo}/${s.wt_name}`}>
+                  <TableCell>{s.repo}</TableCell>
+                  <TableCell className="text-xs">{s.wt_name}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {s.port_range || "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export function PortsPage() {
   const {
@@ -24,6 +117,7 @@ export function PortsPage() {
 
   return (
     <div className="space-y-6">
+      <StalePortsCard />
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

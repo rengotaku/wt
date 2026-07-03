@@ -8,6 +8,7 @@ package ports
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 
@@ -26,6 +27,13 @@ type Allocation struct {
 	Branch   string
 	Path     string // absolute worktree path
 	PortBase int    // 0 when unallocated
+	Exists   bool   // whether the worktree directory still exists on disk
+}
+
+// dirExists reports whether path is an existing directory.
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // PortsForBase returns the BlockSize ports owned by a base port.
@@ -82,12 +90,14 @@ func Allocations() ([]Allocation, error) {
 		}
 		for name := range entries {
 			e := entries[name]
+			path := filepath.Join(container, name)
 			out = append(out, Allocation{
 				Repo:     repo,
 				WtName:   name,
 				Branch:   e.Branch,
-				Path:     filepath.Join(container, name),
+				Path:     path,
 				PortBase: e.PortBase,
+				Exists:   dirExists(path),
 			})
 		}
 	}
@@ -120,6 +130,12 @@ func occupiedPorts(start, end int) (map[int]bool, error) {
 	}
 	occ := map[int]bool{}
 	for _, a := range allocs {
+		// Ghost entries (worktree directory deleted, but the registry row and its
+		// port_base linger) must not reserve a block — otherwise removed worktrees
+		// permanently exhaust the band. `wt ports prune` clears the stale rows.
+		if !a.Exists {
+			continue
+		}
 		for _, p := range PortsForBase(a.PortBase) {
 			occ[p] = true
 		}
@@ -214,4 +230,44 @@ func EnsureBase(container, wtName string) (int, error) {
 		return 0, err
 	}
 	return base, nil
+}
+
+// Stale returns allocations that still reserve a port block in the registry but
+// whose worktree directory no longer exists — orphans left behind when a
+// worktree is removed outside `wt tree rm` (a manual `git worktree remove`, a
+// deleted directory, an interrupted create). A port is only assigned after the
+// directory is created, so a directory-less entry that still owns a port_base is
+// unambiguously a post-deletion remnant.
+func Stale() ([]Allocation, error) {
+	allocs, err := Allocations()
+	if err != nil {
+		return nil, err
+	}
+	var out []Allocation
+	for _, a := range allocs {
+		if !a.Exists && a.PortBase != 0 {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+// Prune deletes the stale registry entries reported by Stale, releasing their
+// port blocks. When dryRun is true nothing is deleted; the candidates are
+// returned for preview. It returns the entries it removed (or would remove).
+func Prune(dryRun bool) ([]Allocation, error) {
+	stale, err := Stale()
+	if err != nil {
+		return nil, err
+	}
+	if dryRun {
+		return stale, nil
+	}
+	for _, a := range stale {
+		container := filepath.Dir(a.Path)
+		if err := core.DeleteEntry(container, a.WtName); err != nil {
+			return nil, err
+		}
+	}
+	return stale, nil
 }

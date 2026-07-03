@@ -38,6 +38,8 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("GET /api/trees/issue-details", h.GetIssueDetails)
 	mux.HandleFunc("GET /api/ports", h.ListPorts)
 	mux.HandleFunc("GET /api/ports/listeners", h.ListListeners)
+	mux.HandleFunc("GET /api/ports/stale", h.ListStalePorts)
+	mux.HandleFunc("POST /api/ports/prune", h.PrunePorts)
 	mux.HandleFunc("POST /api/ports/{repo}/{wt}/serve", h.ServeWorktree)
 	mux.HandleFunc("POST /api/ports/{repo}/{wt}/down", h.DownWorktree)
 	mux.HandleFunc("GET /api/ports/{repo}/{wt}/devconfig", h.GetDevConfig)
