@@ -27,6 +27,7 @@ type Row struct {
 	Path     string
 	PortBase int
 	Ports    []PortState
+	Exists   bool // whether the worktree directory still exists on disk
 }
 
 // Status returns one Row per worktree across all containers, with live status
@@ -49,6 +50,7 @@ func Status() ([]Row, error) {
 			Branch:   a.Branch,
 			Path:     a.Path,
 			PortBase: a.PortBase,
+			Exists:   a.Exists,
 		}
 		// Recorded services with a live PID, keyed by port. Lets a headless
 		// service that binds no port still register as running.

@@ -7,6 +7,8 @@ export type {
   PortState,
   ListenerRow,
   ServeResult,
+  StaleItem,
+  PruneResult,
   DevService,
   DevConfig,
   ServiceLog,

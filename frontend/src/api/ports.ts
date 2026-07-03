@@ -28,6 +28,18 @@ export interface ServeResult {
   running: boolean;
 }
 
+export interface StaleItem {
+  repo: string;
+  wt_name: string;
+  port_base: number;
+  port_range?: string; // "9000-9004"
+}
+
+export interface PruneResult {
+  removed: StaleItem[];
+  count: number;
+}
+
 export interface ListenerRow {
   port: number;
   pid?: number;
@@ -64,6 +76,11 @@ export const portsApi = {
 
   listeners: (): Promise<ListenerRow[]> =>
     apiClient.get("api/ports/listeners").json(),
+
+  stale: (): Promise<StaleItem[]> => apiClient.get("api/ports/stale").json(),
+
+  prune: (): Promise<PruneResult> =>
+    apiClient.post("api/ports/prune").json(),
 
   serve: (repo: string, wtName: string): Promise<ServeResult> =>
     apiClient
