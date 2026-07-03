@@ -194,6 +194,25 @@ func killTmuxSession(out io.Writer, name string, force bool) error {
 	return nil
 }
 
+// eligibleForMerged returns the entries the --merged workflow should consider:
+// it skips main/master and, when repoFilter is non-empty, keeps only that repo.
+// RmEntries() enumerates every container, so without this filter `--repo <name>
+// --merged` would delete merged worktrees of *all* repos (issue #88).
+func eligibleForMerged(items []RmEntry, repoFilter string) []RmEntry {
+	out := make([]RmEntry, 0, len(items))
+	for i := range items {
+		it := items[i]
+		if it.WtName == "main" || it.WtName == "master" {
+			continue
+		}
+		if repoFilter != "" && it.Repo != repoFilter {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
+}
+
 // rmMerged drives the --merged workflow.
 // 候補をリスト表示し、--yes 指定時のみ全削除する。
 func rmMerged(out io.Writer, opts RmOptions) error {
@@ -212,11 +231,9 @@ func rmMerged(out io.Writer, opts RmOptions) error {
 
 	_, _ = fmt.Fprintln(out, "🧹 マージ済み worktree を検出中...")
 
+	items = eligibleForMerged(items, opts.Repo)
 	for i := range items {
 		it := &items[i]
-		if it.WtName == "main" || it.WtName == "master" {
-			continue
-		}
 		prs, ok := prCache[it.MainDir]
 		if !ok {
 			prs = fetchMergedPRs(it.MainDir)

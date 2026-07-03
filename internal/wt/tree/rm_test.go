@@ -129,3 +129,31 @@ func TestPerformDelete_CleanWorktree_NoError(t *testing.T) {
 		t.Errorf("unexpected error for clean worktree: %v", err)
 	}
 }
+
+// TestEligibleForMerged_RepoFilter は issue #88 の回帰テスト。
+// --repo 指定時、他リポの worktree が --merged の対象に混入しないことを保証する。
+func TestEligibleForMerged_RepoFilter(t *testing.T) {
+	items := []RmEntry{
+		{Repo: "stock-dashboard", WtName: "stock-dashboard--feat-1"},
+		{Repo: "stock-dashboard", WtName: "main"},
+		{Repo: "saas-readiness", WtName: "saas-readiness--feat-issue-81"},
+		{Repo: "saas-readiness", WtName: "saas-readiness--fix-issue-69"},
+	}
+
+	// --repo 指定: 対象リポの非 main のみ。
+	got := eligibleForMerged(items, "stock-dashboard")
+	if len(got) != 1 || got[0].WtName != "stock-dashboard--feat-1" {
+		t.Fatalf("repo filter = %+v, want [stock-dashboard--feat-1]", got)
+	}
+	for _, e := range got {
+		if e.Repo != "stock-dashboard" {
+			t.Errorf("他リポが混入: %s/%s", e.Repo, e.WtName)
+		}
+	}
+
+	// --repo 無し: 全リポの非 main/master。
+	all := eligibleForMerged(items, "")
+	if len(all) != 3 {
+		t.Errorf("no filter = %d 件, want 3 (main を除く全て)", len(all))
+	}
+}
