@@ -9,6 +9,7 @@ import (
 
 	"wt/internal/handler"
 	"wt/internal/static"
+	"wt/internal/wt/autostart"
 )
 
 func registerWebCmd(parent *cobra.Command) {
@@ -25,6 +26,13 @@ func registerWebCmd(parent *cobra.Command) {
 			}
 			slog.Info("wt web listening", "addr", "http://"+addr)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "http://%s\n", addr)
+			// Auto-serve pinned worktrees in the background so the UI is
+			// available immediately while pinned dev servers spin up.
+			go func() {
+				if n := autostart.ServePinned(cmd.OutOrStdout()); n > 0 {
+					slog.Info("pinned worktrees auto-served", "count", n)
+				}
+			}()
 			return srv.ListenAndServe()
 		},
 	}

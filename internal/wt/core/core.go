@@ -166,6 +166,9 @@ type Entry struct {
 	// DevServices is a per-worktree dev config override. When set it takes
 	// precedence over the repository default. Stored in metadata (not committed).
 	DevServices []DevService `json:"dev_services,omitempty"`
+	// Pinned marks the worktree for auto-serve when `wt web` starts, and floats
+	// it to the top of the list. Stored in metadata (not committed).
+	Pinned bool `json:"pinned,omitempty"`
 }
 
 // LoadEntries reads worktree entries (skipping _config).

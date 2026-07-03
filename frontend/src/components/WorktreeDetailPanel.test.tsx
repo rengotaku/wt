@@ -14,6 +14,7 @@ function makeTree(overrides: Partial<TreeItem> = {}): TreeItem {
     has_tmux: false,
     is_main: false,
     branch: "feat/1",
+    pinned: false,
     ...overrides,
   };
 }

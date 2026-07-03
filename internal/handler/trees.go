@@ -37,6 +37,7 @@ type treeItem struct {
 	IsMain    bool   `json:"is_main"`
 	Branch    string `json:"branch"`
 	Issue     string `json:"issue,omitempty"`
+	Pinned    bool   `json:"pinned"`
 }
 
 func (h *Handler) getTmuxSessions() map[string]bool {
@@ -98,6 +99,7 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 			CreatedAt: entries[i].Created,
 			IsMain:    entries[i].IsMain,
 			Issue:     entries[i].Issue,
+			Pinned:    entries[i].Pinned,
 		}
 	}
 
@@ -114,6 +116,48 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 	wg.Wait()
 
 	jsonOK(w, items)
+}
+
+type pinTreeRequest struct {
+	Pinned bool `json:"pinned"`
+}
+
+// SetTreePin sets or clears the pinned flag on a worktree in .worktrees.json.
+// Pinned worktrees are auto-served when `wt web` starts and float to the top of
+// the list. The body is {"pinned": bool}; the call is idempotent.
+func (h *Handler) SetTreePin(w http.ResponseWriter, r *http.Request) {
+	repo := r.PathValue("repo")
+	wtName := r.PathValue("wt")
+	if !isKnownRepo(repo) {
+		jsonErr(w, http.StatusBadRequest, "unknown repo: "+repo)
+		return
+	}
+	var req pinTreeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	container, err := core.FindContainer(repo)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	entries, err := core.LoadEntries(container)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	entry, ok := entries[wtName]
+	if !ok {
+		jsonErr(w, http.StatusNotFound, "worktree が見つかりません: "+wtName)
+		return
+	}
+	entry.Pinned = req.Pinned
+	if err := core.PutEntry(container, wtName, &entry); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]any{"pinned": req.Pinned})
 }
 
 type addTreeRequest struct {
