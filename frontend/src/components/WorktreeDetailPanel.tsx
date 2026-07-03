@@ -67,7 +67,9 @@ export function WorktreeDetailPanel({
 
   if (detail === null) return null;
   const { tree: t, port, issueURL, issueDetail, pr, repoURL } = detail;
-  const livePorts = (port?.ports ?? []).filter((p) => p.listening);
+  // listening = reachable on the port; running = process alive but no port
+  // (headless worker). Both count as "up" so the worker is not shown as idle.
+  const livePorts = (port?.ports ?? []).filter((p) => p.listening || p.running);
   const isDirty = t.diff_count > 0;
   // dirty な worktree は名前の一致入力を必須にして強制削除する（AWS 風）。
   const canDelete = !isDirty || confirmInput === t.wt_name;
@@ -211,17 +213,29 @@ export function WorktreeDetailPanel({
                 )}
                 {livePorts.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {livePorts.map((p) => (
-                    <a
-                      key={p.port}
-                      href={`http://localhost:${p.port}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs text-blue-600 hover:underline"
-                    >
-                      {p.service ? `${p.service}:${p.port}` : `:${p.port}`}
-                    </a>
-                  ))}
+                  {livePorts.map((p) =>
+                    // A running service that binds no port (headless worker) has
+                    // nothing to open — show it as plain text, not a link.
+                    p.listening ? (
+                      <a
+                        key={p.port}
+                        href={`http://localhost:${p.port}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-blue-600 hover:underline"
+                      >
+                        {p.service ? `${p.service}:${p.port}` : `:${p.port}`}
+                      </a>
+                    ) : (
+                      <span
+                        key={p.port}
+                        className="font-mono text-xs text-muted-foreground"
+                        title="ポートを開かないサービス（worker 等）"
+                      >
+                        {p.service ? `${p.service} (no port)` : `:${p.port} (no port)`}
+                      </span>
+                    ),
+                  )}
                 </div>
                 ) : (
                   "起動中"

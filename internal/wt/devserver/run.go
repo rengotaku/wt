@@ -62,13 +62,22 @@ func saveRunning(worktree string, r running) error {
 	return os.WriteFile(statePath(worktree), data, 0o644)
 }
 
-// pidAlive reports whether the process is still running.
-func pidAlive(pid int) bool {
-	if pid <= 0 {
+// serviceAlive reports whether a recorded service is still running. Services
+// are started with Setpgid, so the recorded PID is the leader of a process
+// group. We probe the whole group with kill(-pgid, 0) instead of the single PID:
+// the immediate child (a `sh -c`, a `uv run`, or a `--reload` parent) often
+// exits or re-exec's while the durable worker/server keeps running as another
+// member of the same group. Checking only the leader PID would then report a
+// live service as dead. A nil error means at least one group member exists;
+// ESRCH (empty group) means the service has stopped.
+func serviceAlive(pid int) bool {
+	// Guard pid <= 1: kill(-1, …) broadcasts and kill(0, …) targets the
+	// caller's own group — neither is a recorded service.
+	if pid <= 1 {
 		return false
 	}
-	// signal 0 probes existence without affecting the process.
-	return syscall.Kill(pid, 0) == nil
+	// Negative target = process group. Signal 0 probes existence only.
+	return syscall.Kill(-pid, 0) == nil
 }
 
 // IsRunning reports whether any service recorded for the worktree is alive.
@@ -78,7 +87,7 @@ func IsRunning(worktree string) bool {
 		return false
 	}
 	for _, s := range r.Services {
-		if pidAlive(s.PID) {
+		if serviceAlive(s.PID) {
 			return true
 		}
 	}
@@ -95,11 +104,30 @@ func RunStatus(worktree string) (alive, total int) {
 		return 0, 0
 	}
 	for _, s := range r.Services {
-		if pidAlive(s.PID) {
+		if serviceAlive(s.PID) {
 			alive++
 		}
 	}
 	return alive, len(r.Services)
+}
+
+// AliveByPort returns the recorded services whose process is still alive, keyed
+// by their allocated port. This lets the ports view mark a service "up" via its
+// live PID even when it binds no TCP port (e.g. a headless worker/scheduler that
+// never appears in `ss` LISTEN output). Returns an empty map when nothing is
+// recorded.
+func AliveByPort(worktree string) map[int]RunningService {
+	m := map[int]RunningService{}
+	r, err := loadRunning(worktree)
+	if err != nil {
+		return m
+	}
+	for _, s := range r.Services {
+		if serviceAlive(s.PID) {
+			m[s.Port] = s
+		}
+	}
+	return m
 }
 
 // startupGrace is how long Serve waits after spawning before judging whether a
@@ -279,7 +307,7 @@ func Down(out io.Writer, worktree string) error {
 		return nil //nolint:nilerr // no state → nothing to stop
 	}
 	for _, s := range r.Services {
-		if !pidAlive(s.PID) {
+		if !serviceAlive(s.PID) {
 			continue
 		}
 		// Negative PID targets the whole process group started with Setpgid.

@@ -55,15 +55,17 @@ func rangeCell(base int) string {
 	return RangeString(base)
 }
 
-// liveCell renders the listening ports as "9000 air(123), 9001 vite(456)" or
-// "idle" when nothing is up, "—" when the worktree is unallocated.
+// liveCell renders the up ports as "9000 air(123), 9001 vite(456)" or "idle"
+// when nothing is up, "—" when the worktree is unallocated. A service that is
+// running but binds no port (a headless worker) is shown with a trailing "*" so
+// it is not mistaken for something reachable on that port.
 func liveCell(states []PortState) string {
 	if len(states) == 0 {
 		return "—"
 	}
 	var up []string
 	for _, s := range states {
-		if !s.Listening {
+		if !s.Listening && !s.Running {
 			continue
 		}
 		label := fmt.Sprintf("%d", s.Port)
@@ -72,6 +74,10 @@ func liveCell(states []PortState) string {
 			label += fmt.Sprintf(" %s(%d)", s.Proc, s.PID)
 		case s.Proc != "":
 			label += " " + s.Proc
+		}
+		// Running without a LISTEN socket = headless service, no port to reach.
+		if !s.Listening {
+			label += "*"
 		}
 		up = append(up, label)
 	}

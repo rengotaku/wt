@@ -90,6 +90,31 @@ describe("WorktreeDetailPanel 縮退稼働", () => {
   });
 });
 
+describe("WorktreeDetailPanel 稼働ポート表示", () => {
+  it("listening は開くリンク、headless worker (running のみ) は no port テキストで表示する", () => {
+    const port: PortItem = {
+      repo: "myrepo",
+      wt_name: "myrepo--feat-1",
+      port_base: 9000,
+      port_range: "9000-9001",
+      ports: [
+        { port: 9000, listening: true, service: "api" },
+        { port: 9001, listening: false, running: true, service: "worker" },
+      ],
+      has_dev_config: true,
+      running: true,
+    };
+    renderPanel(makeTree(), vi.fn(), port);
+
+    const apiLink = screen.getByRole("link", { name: "api:9000" });
+    expect(apiLink).toHaveAttribute("href", "http://localhost:9000");
+
+    // worker は開けないのでリンクではなくテキスト。
+    expect(screen.queryByRole("link", { name: /worker/ })).toBeNull();
+    expect(screen.getByText("worker (no port)")).toBeInTheDocument();
+  });
+});
+
 describe("WorktreeDetailPanel 最新化", () => {
   it("dirty な worktree では最新化ボタンが無効", () => {
     renderPanel(makeTree({ diff_count: 3 }));
