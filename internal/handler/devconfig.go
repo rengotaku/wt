@@ -95,7 +95,7 @@ func toCoreServices(in []devserver.Service) []core.DevService {
 	}
 	out := make([]core.DevService, 0, len(in))
 	for _, s := range in {
-		out = append(out, core.DevService{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+		out = append(out, core.DevService{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain, Headless: s.Headless})
 	}
 	return out
 }

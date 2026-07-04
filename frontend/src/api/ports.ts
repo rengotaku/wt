@@ -4,6 +4,8 @@ export interface PortState {
   port: number;
   listening: boolean;
   running?: boolean; // 記録済みサービスの PID が生存（ポート未bindの headless worker でも true）
+  headless?: boolean; // ポートを張らない宣言のサービス（worker/scheduler）
+  unhealthy?: boolean; // LISTEN すべきなのに PID 生存のまま未 LISTEN（起動失敗の疑い）
   pid?: number;
   proc?: string;
   service?: string; // dev service名 (api/web/admin 等)
@@ -52,6 +54,7 @@ export interface DevService {
   name: string;
   cmd: string;
   domain: boolean;
+  headless?: boolean; // ポートを張らない worker/scheduler（既定は LISTEN する想定）
 }
 
 export interface DevConfig {

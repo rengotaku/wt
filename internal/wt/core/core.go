@@ -109,6 +109,10 @@ type DevService struct {
 	Name   string `json:"name"`
 	Cmd    string `json:"cmd"`
 	Domain bool   `json:"domain,omitempty"`
+	// Headless marks a service that binds no TCP port by design (a worker or
+	// scheduler). Default false means the service is expected to LISTEN, so a
+	// running-but-not-listening state is reported as unhealthy rather than benign.
+	Headless bool `json:"headless,omitempty"`
 }
 
 // EntryConfig holds the _config sub-object of .worktrees.json.

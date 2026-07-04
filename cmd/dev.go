@@ -43,12 +43,15 @@ Web の「起動」で使われる（メタデータ管理なのでリポジト�
 func devAddCmd() *cobra.Command {
 	var cmdStr string
 	var domain bool
+	var headless bool
 	c := &cobra.Command{
 		Use:   "add <name>",
 		Short: "dev サービスを追加/更新（name 単位の upsert）",
-		Long: `repo 既定に dev サービスを 1 件追加する。同名があれば cmd/domain を更新する。
+		Long: `repo 既定に dev サービスを 1 件追加する。同名があれば cmd/domain/headless を更新する。
 --cmd を省略すると既存サービスの cmd を引き継ぐ（--domain だけ変更する等）。新規サービスでは
---cmd が必須。同様に --domain を省略すると既存値を引き継ぐ（新規では false）。`,
+--cmd が必須。同様に --domain / --headless を省略すると既存値を引き継ぐ（新規では false）。
+--headless はポートを張らない worker/scheduler 用。既定(false)は LISTEN する想定として扱われ、
+PID 生存のまま未 LISTEN のサービスは異常(未LISTEN)として表示される。`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			_, container, _, err := currentWorktree()
@@ -81,6 +84,12 @@ func devAddCmd() *cobra.Command {
 			case found:
 				svc.Domain = existing.Domain
 			}
+			switch {
+			case cmd.Flags().Changed("headless"):
+				svc.Headless = headless
+			case found:
+				svc.Headless = existing.Headless
+			}
 			updated, err := devserver.UpsertRepoService(container, svc)
 			if err != nil {
 				return err
@@ -95,6 +104,7 @@ func devAddCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&cmdStr, "cmd", "", "起動コマンド（${port} が割当ポートに置換される）")
 	c.Flags().BoolVar(&domain, "domain", false, "wt proxy 経由の名前アクセス対象にする")
+	c.Flags().BoolVar(&headless, "headless", false, "ポートを張らない worker/scheduler として扱う")
 	return c
 }
 
@@ -220,11 +230,14 @@ func printDevShowText(w io.Writer, name, container string, repoDefault devserver
 		b.WriteString("  (なし)\n")
 	} else {
 		for i, s := range repoDefault.Services {
-			dom := ""
+			tags := ""
 			if s.Domain {
-				dom = "  [domain]"
+				tags += "  [domain]"
 			}
-			fmt.Fprintf(&b, "  [%d] %s%s\n      cmd: %s\n", i, s.Name, dom, s.Cmd)
+			if s.Headless {
+				tags += "  [headless]"
+			}
+			fmt.Fprintf(&b, "  [%d] %s%s\n      cmd: %s\n", i, s.Name, tags, s.Cmd)
 		}
 	}
 	fmt.Fprintf(&b, "この worktree (%s) の実効ソース: %s\n", name, devserver.SourceLabel(source))

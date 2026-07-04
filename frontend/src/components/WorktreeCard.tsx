@@ -26,9 +26,9 @@ function PortBadge({ port }: { port?: PortItem }) {
     return (
       <span
         className="inline-flex items-center gap-1 text-amber-600"
-        title="起動したサービスの一部が停止しています"
+        title="一部のサービスが正常に稼働していません（停止または未LISTEN）"
       >
-        <span className="h-2 w-2 rounded-full bg-amber-500" />⚠ 一部停止
+        <span className="h-2 w-2 rounded-full bg-amber-500" />⚠ 縮退
       </span>
     );
   }

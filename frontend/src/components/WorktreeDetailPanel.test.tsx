@@ -86,13 +86,13 @@ describe("WorktreeDetailPanel 縮退稼働", () => {
     };
     renderPanel(makeTree(), vi.fn(), port);
     expect(
-      screen.getByText(/一部のサービスが停止しています（縮退稼働）/),
+      screen.getByText(/一部のサービスが正常に稼働していません（縮退稼働）/),
     ).toBeInTheDocument();
   });
 });
 
 describe("WorktreeDetailPanel 稼働ポート表示", () => {
-  it("listening は開くリンク、headless worker (running のみ) は no port テキストで表示する", () => {
+  it("listening は開くリンク、headless worker (headless 宣言) は no port テキストで表示する", () => {
     const port: PortItem = {
       repo: "myrepo",
       wt_name: "myrepo--feat-1",
@@ -100,7 +100,7 @@ describe("WorktreeDetailPanel 稼働ポート表示", () => {
       port_range: "9000-9001",
       ports: [
         { port: 9000, listening: true, service: "api" },
-        { port: 9001, listening: false, running: true, service: "worker" },
+        { port: 9001, listening: false, running: true, headless: true, service: "worker" },
       ],
       has_dev_config: true,
       running: true,
@@ -113,6 +113,29 @@ describe("WorktreeDetailPanel 稼働ポート表示", () => {
     // worker は開けないのでリンクではなくテキスト。
     expect(screen.queryByRole("link", { name: /worker/ })).toBeNull();
     expect(screen.getByText("worker (no port)")).toBeInTheDocument();
+  });
+
+  it("LISTEN すべきなのに未 LISTEN のサービス (unhealthy) は警告表示にし、no port と混同しない", () => {
+    const port: PortItem = {
+      repo: "myrepo",
+      wt_name: "myrepo--feat-1",
+      port_base: 9000,
+      port_range: "9000-9001",
+      ports: [{ port: 9000, listening: false, running: true, unhealthy: true, service: "go" }],
+      has_dev_config: true,
+      running: true,
+      degraded: true,
+    };
+    renderPanel(makeTree(), vi.fn(), port);
+
+    // 開けないのでリンクではない。良性の「(no port)」でもない。
+    expect(screen.queryByRole("link", { name: /go/ })).toBeNull();
+    expect(screen.queryByText("go (no port)")).toBeNull();
+    expect(screen.getByText("go ⚠ 未LISTEN")).toBeInTheDocument();
+    // 縮退稼働の warning banner も出る。
+    expect(
+      screen.getByText(/一部のサービスが正常に稼働していません（縮退稼働）/),
+    ).toBeInTheDocument();
   });
 });
 
