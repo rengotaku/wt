@@ -25,6 +25,10 @@ type Service struct {
 	Name   string `toml:"name" json:"name"`
 	Cmd    string `toml:"cmd" json:"cmd"`
 	Domain bool   `toml:"domain" json:"domain"` // expose via reverse proxy (used by #29)
+	// Headless marks a service that binds no port by design (worker/scheduler).
+	// Default false = expected to LISTEN; a running-but-not-listening service is
+	// then flagged unhealthy instead of shown as a benign "(no port)" worker.
+	Headless bool `toml:"headless" json:"headless,omitempty"`
 }
 
 // Config is the parsed .wt/dev.toml.
@@ -154,7 +158,7 @@ func sameServices(a, b Config) bool {
 func fromCore(in []core.DevService) Config {
 	out := make([]Service, 0, len(in))
 	for _, s := range in {
-		out = append(out, Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+		out = append(out, Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain, Headless: s.Headless})
 	}
 	return Config{Services: out}
 }

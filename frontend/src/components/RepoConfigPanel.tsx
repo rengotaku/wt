@@ -68,7 +68,8 @@ function PanelBody({ repoName, onClose }: { repoName: string; onClose: () => voi
     setDevServices(next);
     setSaved(false);
   };
-  const handleDevAdd = () => updateDev([...effectiveDev, { name: "", cmd: "", domain: false }]);
+  const handleDevAdd = () =>
+    updateDev([...effectiveDev, { name: "", cmd: "", domain: false, headless: false }]);
   const handleDevRemove = (idx: number) => updateDev(effectiveDev.filter((_, i) => i !== idx));
   const handleDevField = (idx: number, patch: Partial<DevService>) =>
     updateDev(effectiveDev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
@@ -186,6 +187,14 @@ function PanelBody({ repoName, onClose }: { repoName: string; onClose: () => voi
                       onChange={(e) => handleDevField(idx, { domain: e.target.checked })}
                     />
                     ドメイン公開（wt proxy）
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={svc.headless ?? false}
+                      onChange={(e) => handleDevField(idx, { headless: e.target.checked })}
+                    />
+                    ポートを張らない（worker/scheduler）
                   </label>
                 </div>
               ))}

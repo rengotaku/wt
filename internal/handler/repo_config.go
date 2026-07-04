@@ -86,7 +86,7 @@ func (h *Handler) UpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
 func toDevServices(in []core.DevService) []devserver.Service {
 	out := make([]devserver.Service, 0, len(in))
 	for _, s := range in {
-		out = append(out, devserver.Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+		out = append(out, devserver.Service{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain, Headless: s.Headless})
 	}
 	return out
 }

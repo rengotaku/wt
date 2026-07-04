@@ -14,8 +14,20 @@ type PortState struct {
 	// Running without being Listening — that is exactly the case where the
 	// port-only view used to show it as idle.
 	Running bool
-	PID     int
-	Proc    string
+	// Headless reports that the dev service for this port is declared headless
+	// (binds no port by design). It distinguishes a genuine worker/scheduler from
+	// a port-binding service that failed to come up.
+	Headless bool
+	PID      int
+	Proc     string
+}
+
+// Unhealthy reports a service that is expected to LISTEN but isn't: its process
+// is alive yet it holds no LISTEN socket and was not declared headless. This is
+// the build-failed / crashed-on-startup case, distinct from a genuine headless
+// worker (Running && !Listening && Headless), which is benign.
+func (p PortState) Unhealthy() bool {
+	return p.Running && !p.Listening && !p.Headless
 }
 
 // Row combines a worktree's allocation with the live status of each of its
@@ -55,8 +67,18 @@ func Status() ([]Row, error) {
 		// Recorded services with a live PID, keyed by port. Lets a headless
 		// service that binds no port still register as running.
 		alive := devserver.AliveByPort(a.Path)
-		for _, p := range PortsForBase(a.PortBase) {
+		// Effective dev config maps service i → port base+i, so its Headless
+		// declaration tells apart a genuine worker from a failed-to-listen server.
+		// Caveat: this reads the *current* config, not the one in effect when the
+		// services were last started. Editing .wt/dev.toml (reordering/toggling
+		// headless) while old processes are still running can momentarily mislabel
+		// a service's Headless/health until the next `wt serve`; restart to resync.
+		cfg, _, _ := devserver.EffectiveConfig(a.Path)
+		for i, p := range PortsForBase(a.PortBase) {
 			st := PortState{Port: p}
+			if i < len(cfg.Services) {
+				st.Headless = cfg.Services[i].Headless
+			}
 			if l, ok := listeners[p]; ok {
 				st.Listening = true
 				st.PID = l.PID

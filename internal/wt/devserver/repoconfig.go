@@ -10,7 +10,7 @@ import "wt/internal/wt/core"
 func toCore(services []Service) []core.DevService {
 	out := make([]core.DevService, 0, len(services))
 	for _, s := range services {
-		out = append(out, core.DevService{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain})
+		out = append(out, core.DevService{Name: s.Name, Cmd: s.Cmd, Domain: s.Domain, Headless: s.Headless})
 	}
 	return out
 }

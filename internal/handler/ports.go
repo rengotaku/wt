@@ -11,7 +11,9 @@ import (
 type portState struct {
 	Port      int    `json:"port"`
 	Listening bool   `json:"listening"`
-	Running   bool   `json:"running,omitempty"` // 記録済みサービスの PID が生存（ポート未bindの headless でも true）
+	Running   bool   `json:"running,omitempty"`   // 記録済みサービスの PID が生存（ポート未bindの headless でも true）
+	Headless  bool   `json:"headless,omitempty"`  // ポートを張らない宣言のサービス（worker/scheduler）
+	Unhealthy bool   `json:"unhealthy,omitempty"` // LISTEN すべきなのに PID 生存のまま未 LISTEN（起動失敗）
 	PID       int    `json:"pid,omitempty"`
 	Proc      string `json:"proc,omitempty"`
 	Service   string `json:"service,omitempty"` // dev service名（service i = base+i）
@@ -104,10 +106,14 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 		// base+i → service i, used to label each port (api/web/admin).
 		cfg, source, _ := devserver.EffectiveConfig(r.Path)
 		states := make([]portState, 0, len(r.Ports))
+		unhealthy := false
 		for i, p := range r.Ports {
-			st := portState{Port: p.Port, Listening: p.Listening, Running: p.Running, PID: p.PID, Proc: p.Proc}
+			st := portState{Port: p.Port, Listening: p.Listening, Running: p.Running, Headless: p.Headless, Unhealthy: p.Unhealthy(), PID: p.PID, Proc: p.Proc}
 			if i < len(cfg.Services) {
 				st.Service = cfg.Services[i].Name
+			}
+			if st.Unhealthy {
+				unhealthy = true
 			}
 			states = append(states, st)
 		}
@@ -130,7 +136,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			Ports:        states,
 			HasDevConfig: source != devserver.SourceNone,
 			Running:      alive > 0,
-			Degraded:     total > 0 && alive < total,
+			Degraded:     (total > 0 && alive < total) || unhealthy,
 			Domain:       domainOf[r.Repo+"/"+r.WtName],
 			DomainPort:   domainPort,
 			Stale:        !r.Exists && r.PortBase != 0,

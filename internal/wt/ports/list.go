@@ -56,9 +56,10 @@ func rangeCell(base int) string {
 }
 
 // liveCell renders the up ports as "9000 air(123), 9001 vite(456)" or "idle"
-// when nothing is up, "—" when the worktree is unallocated. A service that is
-// running but binds no port (a headless worker) is shown with a trailing "*" so
-// it is not mistaken for something reachable on that port.
+// when nothing is up, "—" when the worktree is unallocated. A headless worker
+// (running, binds no port by design) gets a trailing "*"; a service that should
+// LISTEN but isn't (running yet no socket) gets a trailing "!" to flag it as
+// unhealthy rather than reachable.
 func liveCell(states []PortState) string {
 	if len(states) == 0 {
 		return "—"
@@ -75,9 +76,14 @@ func liveCell(states []PortState) string {
 		case s.Proc != "":
 			label += " " + s.Proc
 		}
-		// Running without a LISTEN socket = headless service, no port to reach.
+		// Running without a LISTEN socket: "*" if headless by design, "!" if it
+		// was expected to listen (build failed / crashed before binding).
 		if !s.Listening {
-			label += "*"
+			if s.Unhealthy() {
+				label += "!"
+			} else {
+				label += "*"
+			}
 		}
 		up = append(up, label)
 	}

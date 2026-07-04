@@ -207,15 +207,16 @@ export function WorktreeDetailPanel({
                   <div className="mb-1 flex items-center gap-1 text-amber-600">
                     <AlertTriangle className="h-3.5 w-3.5" />
                     <span className="text-xs">
-                      一部のサービスが停止しています（縮退稼働）
+                      一部のサービスが正常に稼働していません（縮退稼働）
                     </span>
                   </div>
                 )}
                 {livePorts.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {livePorts.map((p) =>
-                    // A running service that binds no port (headless worker) has
-                    // nothing to open — show it as plain text, not a link.
+                    // listening → 開くリンク。未 LISTEN のうち headless は良性
+                    // テキスト、そうでなければ「LISTEN すべきなのに開いていない」
+                    // 起動失敗として警告表示する。
                     p.listening ? (
                       <a
                         key={p.port}
@@ -226,6 +227,14 @@ export function WorktreeDetailPanel({
                       >
                         {p.service ? `${p.service}:${p.port}` : `:${p.port}`}
                       </a>
+                    ) : p.unhealthy ? (
+                      <span
+                        key={p.port}
+                        className="font-mono text-xs text-amber-600"
+                        title="LISTEN すべきサービスがポートを開いていません（ビルド失敗・クラッシュの可能性）。ログを確認してください。"
+                      >
+                        {p.service ? `${p.service} ⚠ 未LISTEN` : `:${p.port} ⚠ 未LISTEN`}
+                      </span>
                     ) : (
                       <span
                         key={p.port}
