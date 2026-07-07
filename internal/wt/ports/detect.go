@@ -82,3 +82,35 @@ func portFromLocalAddr(addr string) (int, bool) {
 	}
 	return port, true
 }
+
+// Established returns band ports [start,end] that appear as the local OR peer
+// endpoint of an ESTABLISHED TCP socket. ss 不在時は空 map(degrade, nil err)。
+func Established(start, end int) (map[int]bool, error) {
+	out, err := exec.Command("ss", "-tnH", "state", "established").Output()
+	if err != nil {
+		return map[int]bool{}, nil //nolint:nilerr // ss missing → degrade
+	}
+	return parseEstablished(string(out), start, end), nil
+}
+
+// parseEstablished parses `ss -tnH state established` output, returning ports
+// in [start, end] that appear as either local or peer endpoints.
+func parseEstablished(out string, start, end int) map[int]bool {
+	res := map[int]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		n := len(fields)
+		if n < 2 {
+			continue
+		}
+		local := fields[n-2]
+		peer := fields[n-1]
+		if port, ok := portFromLocalAddr(local); ok && port >= start && port <= end {
+			res[port] = true
+		}
+		if port, ok := portFromLocalAddr(peer); ok && port >= start && port <= end {
+			res[port] = true
+		}
+	}
+	return res
+}

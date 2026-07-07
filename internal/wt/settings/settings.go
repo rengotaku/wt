@@ -28,14 +28,25 @@ type DevPorts struct {
 	End   int `toml:"end"`
 }
 
+// IdleReaper configures the idle worktree reaper.
+type IdleReaper struct {
+	Enabled         bool `toml:"enabled"`
+	TTLMinutes      int  `toml:"ttl_minutes"`
+	IntervalMinutes int  `toml:"interval_minutes"`
+}
+
 // Settings is the full wt settings document.
 type Settings struct {
-	DevPorts DevPorts `toml:"dev_ports"`
+	DevPorts   DevPorts   `toml:"dev_ports"`
+	IdleReaper IdleReaper `toml:"idle_reaper"`
 }
 
 // Default returns the built-in settings.
 func Default() Settings {
-	return Settings{DevPorts: DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd}}
+	return Settings{
+		DevPorts:   DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd},
+		IdleReaper: IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
+	}
 }
 
 // Path returns the settings file location. Honors WT_CONFIG_DIR (used in tests).
@@ -58,7 +69,7 @@ func Load() Settings {
 	if err != nil {
 		return def
 	}
-	var loaded Settings
+	loaded := Default()
 	if _, err := toml.Decode(string(data), &loaded); err != nil {
 		return def
 	}
@@ -68,6 +79,12 @@ func Load() Settings {
 	}
 	if loaded.DevPorts.End == 0 {
 		loaded.DevPorts.End = def.DevPorts.End
+	}
+	if loaded.IdleReaper.TTLMinutes <= 0 {
+		loaded.IdleReaper.TTLMinutes = 30
+	}
+	if loaded.IdleReaper.IntervalMinutes <= 0 {
+		loaded.IdleReaper.IntervalMinutes = 2
 	}
 	if err := loaded.Validate(); err != nil {
 		return def

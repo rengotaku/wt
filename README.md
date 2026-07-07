@@ -59,6 +59,14 @@ dev 設定は次の優先順で実効化されます（`wt dev show` が実効�
 上位レイヤがあると下位は使われません（例: worktree 上書きがあると `wt dev` の repo 既定は
 その worktree には反映されません）。`wt dev show` はこの状況を警告します。
 
+## アイドル停止 (idle reaper)
+
+`wt web` は、pin されて自動 serve された dev サービスが一定時間アイドル状態（ブラウザ等から dev ポートへの通信がない状態）になった場合、自動で `down` しメモリを解放します。
+
+- 既定の挙動は `enabled=true`、TTL は 30分、監視間隔は 2分です（`~/.config/wt/settings.toml` の `[idle_reaper]` セクションで設定可能）。
+- **手動で serve した worktree は対象外**です（pin された worktree のみが自動 down します）。
+- **注意**: vite の HMR websocket のようにブラウザタブが開きっぱなしでコネクションが維持されている場合や、兄弟サービス間での通信（ポート間の ESTABLISHED 接続）がある場合は「活動中」と見なされ、停止しません。
+
 ## git-crypt 対応
 
 ### 概要
