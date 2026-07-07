@@ -49,3 +49,29 @@ LISTEN 0 128 127.0.0.1:5174 0.0.0.0:* users:(("vite",pid=999,fd=3))`
 		t.Errorf("9001 = %+v, want pid=678 proc=node", l)
 	}
 }
+
+func TestParseEstablished(t *testing.T) {
+	out := `0      0      127.0.0.1:9000     127.0.0.1:45321
+0      0      127.0.0.1:45321    127.0.0.1:9001
+0      0      192.168.1.2:8000   10.0.0.1:54321
+0      0      [::1]:9002         [::1]:33333
+just_one_column
+`
+	got := parseEstablished(out, 9000, 9999)
+
+	if len(got) != 3 {
+		t.Fatalf("got %d in-band ports, want 3: %+v", len(got), got)
+	}
+	if !got[9000] {
+		t.Error("missing 9000 (local side)")
+	}
+	if !got[9001] {
+		t.Error("missing 9001 (peer side)")
+	}
+	if !got[9002] {
+		t.Error("missing 9002 (IPv6 local)")
+	}
+	if got[8000] {
+		t.Error("included 8000 (out of band)")
+	}
+}
