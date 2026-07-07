@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"wt/internal/handler"
 	"wt/internal/static"
 	"wt/internal/wt/autostart"
+	"wt/internal/wt/settings"
 )
 
 func registerWebCmd(parent *cobra.Command) {
@@ -33,6 +35,12 @@ func registerWebCmd(parent *cobra.Command) {
 					slog.Info("pinned worktrees auto-served", "count", n)
 				}
 			}()
+
+			if rc := settings.Load().IdleReaper; rc.Enabled {
+				r := autostart.NewReaper(time.Duration(rc.TTLMinutes)*time.Minute, time.Duration(rc.IntervalMinutes)*time.Minute)
+				go r.Run(cmd.Context(), cmd.OutOrStdout())
+			}
+
 			return srv.ListenAndServe()
 		},
 	}

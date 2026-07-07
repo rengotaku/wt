@@ -96,7 +96,7 @@ func (r *Reaper) Tick(out io.Writer) {
 			if r.Now().Sub(r.last[worktree]) > r.TTL {
 				_ = r.Down(out, worktree)
 				delete(r.last, worktree)
-				fmt.Fprintf(out, "⏸ idle stop: %s\n", name)
+				_, _ = fmt.Fprintf(out, "⏸ idle stop: %s\n", name)
 			}
 		}
 	}
