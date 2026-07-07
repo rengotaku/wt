@@ -43,6 +43,48 @@ func TestLoad_InvalidFileFallsBackToDefault(t *testing.T) {
 	}
 }
 
+func TestLoad_IdleReaper(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. 未記載 -> default (enabled=true, ttl=30, interval=2)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load()
+	if !got.IdleReaper.Enabled || got.IdleReaper.TTLMinutes != 30 || got.IdleReaper.IntervalMinutes != 2 {
+		t.Errorf("empty file: got %+v, want default enabled=true, ttl=30, interval=2", got.IdleReaper)
+	}
+
+	// 2. 明示値 -> 尊重
+	content := `
+[idle_reaper]
+enabled = false
+ttl_minutes = 60
+interval_minutes = 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.IdleReaper.Enabled || got.IdleReaper.TTLMinutes != 60 || got.IdleReaper.IntervalMinutes != 5 {
+		t.Errorf("explicit file: got %+v, want enabled=false, ttl=60, interval=5", got.IdleReaper)
+	}
+
+	// 3. enabled=false 以外未記載 -> 補完されること
+	contentPart := `
+[idle_reaper]
+enabled = false
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentPart), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.IdleReaper.Enabled || got.IdleReaper.TTLMinutes != 30 || got.IdleReaper.IntervalMinutes != 2 {
+		t.Errorf("partial file: got %+v, want enabled=false, ttl=30, interval=2", got.IdleReaper)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
