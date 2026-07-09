@@ -73,7 +73,7 @@ func (h *Handler) GetProcessStats(w http.ResponseWriter, r *http.Request) {
 
 		wtStats := WorktreeProcessStats{
 			Repo:     entry.Repo,
-			WtName:   entry.Name,
+			WtName:   entry.WtName,
 			Services: []ServiceProcessStat{}, // initialize to []
 		}
 
