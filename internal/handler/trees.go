@@ -279,7 +279,7 @@ func (h *Handler) DeleteTree(w http.ResponseWriter, r *http.Request) {
 // UpdateTree fast-forwards a single worktree to its branch's latest remote
 // commit via `git pull --ff-only`. 未コミット変更がある場合はエラーになる。
 func (h *Handler) UpdateTree(w http.ResponseWriter, r *http.Request) {
-	worktree, _, _, ok := h.resolveWorktree(w, r)
+	worktree, container, wtName, ok := h.resolveWorktree(w, r)
 	if !ok {
 		return
 	}
@@ -288,7 +288,17 @@ func (h *Handler) UpdateTree(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	jsonOK(w, map[string]string{"output": out})
+
+	restarted := false
+	if out != "Already up to date" {
+		if ok, err := restartDevIfRunning(container, wtName, worktree); err != nil {
+			out += fmt.Sprintf("（dev 再起動に失敗: %v）", err)
+		} else {
+			restarted = ok
+		}
+	}
+
+	jsonOK(w, map[string]any{"output": out, "restarted": restarted})
 }
 
 type gcRequest struct {

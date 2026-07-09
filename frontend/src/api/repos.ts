@@ -30,7 +30,7 @@ export const reposApi = {
   refresh: (name: string): Promise<{ output: string }> =>
     apiClient.post("api/repos/refresh", { json: { name } }).json(),
 
-  sync: (name: string): Promise<{ output: string }> =>
+  sync: (name: string): Promise<{ output: string; restarted?: boolean }> =>
     apiClient.post("api/repos/sync", { json: { name } }).json(),
 
   syncAll: (): Promise<{ message: string }> =>
