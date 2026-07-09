@@ -1,10 +1,12 @@
 import { Copy, Check, Pin } from "lucide-react";
-import type { TreeItem, PortItem } from "@/api";
+import type { TreeItem, PortItem, WorktreeProcessStats } from "@/api";
+import { formatBytes } from "@/api/stats";
 import { Button } from "@/components/ui/button";
 
 interface WorktreeCardProps {
   tree: TreeItem;
   port?: PortItem;
+  stats?: WorktreeProcessStats;
   pinned: boolean;
   selected: boolean;
   copied: boolean;
@@ -14,6 +16,7 @@ interface WorktreeCardProps {
   onCopy: () => void;
   onRepoClick: () => void;
   onOpenDetail: () => void;
+  onOpenStats?: () => void;
   registerRef: (el: HTMLElement | null) => void;
 }
 
@@ -57,6 +60,7 @@ function PortBadge({ port }: { port?: PortItem }) {
 export function WorktreeCard({
   tree: t,
   port,
+  stats,
   pinned,
   selected,
   copied,
@@ -66,6 +70,7 @@ export function WorktreeCard({
   onCopy,
   onRepoClick,
   onOpenDetail,
+  onOpenStats,
   registerRef,
 }: WorktreeCardProps) {
   return (
@@ -77,7 +82,8 @@ export function WorktreeCard({
         onOpenDetail();
       }}
       className={[
-        "rounded-lg border bg-card p-3 text-sm shadow-sm active:bg-muted/50",
+        "rounded-lg border p-3 text-sm shadow-sm active:bg-muted/50",
+        stats?.level === "danger" ? "border-red-500/50 bg-red-500/10" : "bg-card",
         t.is_main ? "opacity-70" : "",
         isNew ? "row-highlight" : "",
       ]
@@ -154,6 +160,26 @@ export function WorktreeCard({
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           ポート: <PortBadge port={port} />
+        </span>
+        <span>
+          状態:{" "}
+          {stats ? (
+            <button
+              className={`hover:underline ${
+                stats.level === "danger" ? "text-red-600 font-medium" :
+                stats.level === "warn" ? "text-amber-600" :
+                "text-muted-foreground"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenStats) onOpenStats();
+              }}
+            >
+              {formatBytes(stats.total_rss_bytes)}
+            </button>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </span>
         <span>
           変更:{" "}

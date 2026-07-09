@@ -28,3 +28,9 @@ export type {
   MergedPRInfo,
   IssueDetail,
 } from "./trees";
+export { statsApi, formatBytes } from "./stats";
+export type {
+  ProcessStatsResponse,
+  WorktreeProcessStats,
+  ServiceProcessStat,
+} from "./stats";

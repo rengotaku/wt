@@ -71,6 +71,10 @@ vi.mock("@/api", async (importOriginal) => {
       serve: vi.fn(),
       down: vi.fn(),
     },
+    statsApi: {
+      ...actual.statsApi,
+      list: vi.fn().mockResolvedValue({ items: [], warn_bytes: 2048 * 1024 * 1024, danger_bytes: 4096 * 1024 * 1024 }),
+    },
   };
 });
 
@@ -729,5 +733,67 @@ describe("TreesPage - copy path toast", () => {
         description: "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc",
       });
     });
+  });
+});
+
+describe("TreesPage - process stats", () => {
+  beforeEach(async () => {
+    const { treesApi, statsApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockResolvedValue(mockTrees as never);
+    vi.mocked(statsApi.list).mockResolvedValue({
+      warn_bytes: 2 * 1024 * 1024 * 1024,
+      danger_bytes: 4 * 1024 * 1024 * 1024,
+      items: [
+        {
+          repo: "myrepo",
+          wt_name: "myrepo--feat-issue-1-abc",
+          level: "ok",
+          total_rss_bytes: 1024 * 1024 * 500, // 500MB -> 500M
+          services: [
+            { name: "web", pid: 1234, port: 9000, alive: true, procs: 1, rss_bytes: 1024 * 1024 * 500, uptime_sec: 100 },
+          ],
+        },
+        {
+          repo: "myrepo",
+          wt_name: "myrepo--feat-issue-2-xyz",
+          level: "danger",
+          total_rss_bytes: 1024 * 1024 * 5000, // 5000MB -> 4.9G
+          services: [
+            { name: "db", pid: 5678, port: 9001, alive: true, procs: 2, rss_bytes: 1024 * 1024 * 5000, uptime_sec: 200 },
+          ],
+        },
+      ],
+    } as never);
+  });
+
+  it("状態列に合計メモリが表示され、danger 行には背景色が付く", async () => {
+    render(<TreesPage />);
+    
+    // ①状態列に合計メモリが表示される
+    const okBtn = await waitFor(() => screen.getByText("500M"));
+    expect(okBtn).toBeInTheDocument();
+    
+    // formatBytes(5000 * 1024 * 1024) is 5000 / 1024 = 4.88 -> 4.9G
+    const dangerBtn = screen.getByText("4.9G");
+    expect(dangerBtn).toBeInTheDocument();
+
+    // ②danger の行に bg-red-500/10 が付く
+    const dangerRow = dangerBtn.closest("tr");
+    expect(dangerRow).toHaveClass("bg-red-500/10");
+  });
+
+  it("状態リンククリックでオーバーレイが開きサービス名と RSS が見える", async () => {
+    render(<TreesPage />);
+    
+    const okBtn = await waitFor(() => screen.getByText("500M"));
+    fireEvent.click(okBtn);
+
+    // ③状態リンククリックでオーバーレイが開きサービス名と RSS が見える
+    await waitFor(() => {
+      expect(screen.getByText("myrepo/myrepo--feat-issue-1-abc")).toBeInTheDocument();
+    });
+    
+    expect(screen.getByText("web")).toBeInTheDocument();
+    expect(screen.getAllByText("500M").length).toBeGreaterThan(0);
   });
 });
