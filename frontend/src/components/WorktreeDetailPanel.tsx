@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   X,
   FileCog,
@@ -8,6 +9,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import type { TreeItem, PortItem, IssueDetail, MergedPRInfo } from "@/api";
+import { proxyApi } from "@/api";
 import { Button } from "@/components/ui/button";
 
 export interface WorktreeDetail {
@@ -64,6 +66,11 @@ export function WorktreeDetailPanel({
   // 別の worktree を開く / 閉じるたびにコンポーネントが再マウントされリセットされる。
   const [confirming, setConfirming] = useState(false);
   const [confirmInput, setConfirmInput] = useState("");
+  // ドメインリンクは内蔵 proxy 稼働中のみ到達できる。停止中は「—」にする。
+  const { data: proxyStatus } = useQuery({
+    queryKey: ["proxy"],
+    queryFn: proxyApi.status,
+  });
 
   if (detail === null) return null;
   const { tree: t, port, issueURL, issueDetail, pr, repoURL } = detail;
@@ -256,17 +263,23 @@ export function WorktreeDetailPanel({
           </Row>
           {port?.running && port.domain && (
             <Row label="ドメイン">
-              <a
-                href={`http://${port.domain}:8088`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-xs text-blue-600 hover:underline"
-              >
-                {port.domain}:8088
-              </a>
-              <span className="ml-2 text-xs text-muted-foreground">
-                （要 proxy 起動）
-              </span>
+              {proxyStatus?.running ? (
+                <a
+                  href={`http://${port.domain}:${proxyStatus.port}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-blue-600 hover:underline"
+                >
+                  {port.domain}:{proxyStatus.port}
+                </a>
+              ) : (
+                <span
+                  className="text-muted-foreground"
+                  title="内蔵 proxy が停止中のためドメインアクセスできません（設定から proxy を起動）"
+                >
+                  —
+                </span>
+              )}
             </Row>
           )}
           <Row label="変更ファイル">
