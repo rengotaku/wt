@@ -29,7 +29,7 @@ type portItem struct {
 	HasDevConfig bool        `json:"has_dev_config"`
 	Running      bool        `json:"running"`
 	Degraded     bool        `json:"degraded,omitempty"`    // running しているが記録済みサービスの一部が停止している（縮退）
-	Domain       string      `json:"domain,omitempty"`      // <label>.wt.localhost when a domain service exists
+	Domain       string      `json:"domain,omitempty"`      // <label>.<repo>.wt.localhost when a domain service exists
 	DomainPort   int         `json:"domain_port,omitempty"` // localhost port of the domain(=user-facing)サービス。「開く」の遷移先
 	Stale        bool        `json:"stale,omitempty"`       // worktree ディレクトリが消えた幽霊エントリ（port を死蔵）
 }

@@ -30,20 +30,29 @@ func TestLabel(t *testing.T) {
 	}
 }
 
-func TestLabelFromHost(t *testing.T) {
+func TestHostParts(t *testing.T) {
 	tests := []struct {
-		host, want string
-		ok         bool
+		host, label, repo string
+		ok                bool
 	}{
-		{"issue10.wt.localhost", "issue10", true},
-		{"main.wt.localhost:8088", "main", true},
-		{"example.com", "", false},
+		{"issue10.myrepo.wt.localhost", "issue10", "myrepo", true},
+		{"main.wt.wt.localhost:8088", "main", "wt", true},
+		{"main.my.app.wt.localhost", "main", "my.app", true}, // repo name with dots
+		{"main.wt.localhost", "", "", false},                 // missing repo segment
+		{"example.com", "", "", false},
 	}
 	for _, tt := range tests {
-		got, ok := labelFromHost(tt.host)
-		if ok != tt.ok || (ok && got != tt.want) {
-			t.Errorf("labelFromHost(%q) = (%q,%v), want (%q,%v)", tt.host, got, ok, tt.want, tt.ok)
+		label, repo, ok := hostParts(tt.host)
+		if ok != tt.ok || (ok && (label != tt.label || repo != tt.repo)) {
+			t.Errorf("hostParts(%q) = (%q,%q,%v), want (%q,%q,%v)", tt.host, label, repo, ok, tt.label, tt.repo, tt.ok)
 		}
+	}
+}
+
+func TestRouteDomain(t *testing.T) {
+	r := Route{Label: "issue10", Repo: "myrepo"}
+	if got, want := r.Domain(), "issue10.myrepo.wt.localhost"; got != want {
+		t.Errorf("Domain() = %q, want %q", got, want)
 	}
 }
 
@@ -98,27 +107,41 @@ func TestHandler_RoutesByHost(t *testing.T) {
 	port, _ := strconv.Atoi(u.Port())
 
 	h := Handler(func() ([]Route, error) {
-		return []Route{{Label: "issue10", Port: port}}, nil
+		return []Route{{Label: "issue10", Repo: "myrepo", Port: port}}, nil
 	})
 
-	// matching host → proxied to backend
+	// matching host (label + repo) → proxied to backend
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://issue10.wt.localhost/", http.NoBody))
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://issue10.myrepo.wt.localhost/", http.NoBody))
 	if rec.Code != http.StatusOK || rec.Body.String() != "hello from backend" {
 		t.Errorf("matching host: code=%d body=%q", rec.Code, rec.Body.String())
 	}
 
-	// unknown label → 502
+	// same label but different repo → 502 (no collision across repos)
 	rec2 := httptest.NewRecorder()
-	h.ServeHTTP(rec2, httptest.NewRequest("GET", "http://nope.wt.localhost/", http.NoBody))
+	h.ServeHTTP(rec2, httptest.NewRequest("GET", "http://issue10.otherrepo.wt.localhost/", http.NoBody))
 	if rec2.Code != http.StatusBadGateway {
-		t.Errorf("unknown label: code=%d, want 502", rec2.Code)
+		t.Errorf("repo mismatch: code=%d, want 502", rec2.Code)
+	}
+
+	// unknown label → 502
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, httptest.NewRequest("GET", "http://nope.myrepo.wt.localhost/", http.NoBody))
+	if rec3.Code != http.StatusBadGateway {
+		t.Errorf("unknown label: code=%d, want 502", rec3.Code)
+	}
+
+	// missing repo segment (old single-level form) → 404
+	rec4 := httptest.NewRecorder()
+	h.ServeHTTP(rec4, httptest.NewRequest("GET", "http://issue10.wt.localhost/", http.NoBody))
+	if rec4.Code != http.StatusNotFound {
+		t.Errorf("missing repo: code=%d, want 404", rec4.Code)
 	}
 
 	// non-wt host → 404
-	rec3 := httptest.NewRecorder()
-	h.ServeHTTP(rec3, httptest.NewRequest("GET", "http://example.com/", http.NoBody))
-	if rec3.Code != http.StatusNotFound {
-		t.Errorf("non-wt host: code=%d, want 404", rec3.Code)
+	rec5 := httptest.NewRecorder()
+	h.ServeHTTP(rec5, httptest.NewRequest("GET", "http://example.com/", http.NoBody))
+	if rec5.Code != http.StatusNotFound {
+		t.Errorf("non-wt host: code=%d, want 404", rec5.Code)
 	}
 }

@@ -1,7 +1,9 @@
 // Package proxy implements wt's built-in reverse proxy. It listens on a single
-// port and routes requests by Host header (<label>.wt.localhost) to the
+// port and routes requests by Host header (<label>.<repo>.wt.localhost) to the
 // allocated port of each worktree's domain-exposed dev service, so worktree
-// servers can be reached by name instead of remembering port numbers.
+// servers can be reached by name instead of remembering port numbers. Including
+// the repo name keeps labels from colliding across repos (every repo has a
+// "main" worktree).
 package proxy
 
 import (
@@ -50,8 +52,8 @@ type Route struct {
 	WtName string
 }
 
-// Domain returns the full host for a label (e.g. "issue10.wt.localhost").
-func (r Route) Domain() string { return r.Label + DomainSuffix }
+// Domain returns the full host for a route (e.g. "issue10.myrepo.wt.localhost").
+func (r Route) Domain() string { return r.Label + "." + r.Repo + DomainSuffix }
 
 // Routes scans every allocated worktree and returns a route for each one whose
 // .wt/dev.toml declares a domain-exposed service. The route port is the
@@ -88,22 +90,30 @@ func Routes() ([]Route, error) {
 	return routes, nil
 }
 
-// labelFromHost extracts the "<label>" from "<label>.wt.localhost[:port]".
-func labelFromHost(host string) (string, bool) {
+// hostParts extracts "<label>" and "<repo>" from
+// "<label>.<repo>.wt.localhost[:port]". The label is sanitized and never
+// contains a ".", so the first dot separates it from the repo name (which may
+// itself contain dots). Returns ok=false for hosts missing the repo segment.
+func hostParts(host string) (label, repo string, ok bool) {
 	host = strings.SplitN(host, ":", 2)[0]
 	if !strings.HasSuffix(host, DomainSuffix) {
-		return "", false
+		return "", "", false
 	}
-	return strings.TrimSuffix(host, DomainSuffix), true
+	rest := strings.TrimSuffix(host, DomainSuffix)
+	label, repo, found := strings.Cut(rest, ".")
+	if !found || label == "" || repo == "" {
+		return "", "", false
+	}
+	return label, repo, true
 }
 
 // Handler reverse-proxies by Host. routesFn supplies the current routing table
 // (re-evaluated per request so newly started worktrees are picked up live).
 func Handler(routesFn func() ([]Route, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		label, ok := labelFromHost(r.Host)
+		label, repo, ok := hostParts(r.Host)
 		if !ok {
-			http.Error(w, "アクセスは <label>"+DomainSuffix+" で行ってください", http.StatusNotFound)
+			http.Error(w, "アクセスは <label>.<repo>"+DomainSuffix+" で行ってください", http.StatusNotFound)
 			return
 		}
 		routes, err := routesFn()
@@ -112,12 +122,12 @@ func Handler(routesFn func() ([]Route, error)) http.Handler {
 			return
 		}
 		for _, rt := range routes {
-			if rt.Label == label {
+			if rt.Label == label && rt.Repo == repo {
 				target := &url.URL{Scheme: "http", Host: fmt.Sprintf("127.0.0.1:%d", rt.Port)}
 				httputil.NewSingleHostReverseProxy(target).ServeHTTP(w, r)
 				return
 			}
 		}
-		http.Error(w, fmt.Sprintf("'%s' に対応する worktree がありません（wt serve で起動済みか確認してください）", label), http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("'%s.%s' に対応する worktree がありません（wt serve で起動済みか確認してください）", label, repo), http.StatusBadGateway)
 	})
 }
