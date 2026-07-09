@@ -51,6 +51,16 @@ func loadRunning(worktree string) (running, error) {
 	return r, err
 }
 
+// Recorded returns the services recorded in running.json, dead or alive.
+// Empty when nothing is recorded.
+func Recorded(worktree string) []RunningService {
+	r, err := loadRunning(worktree)
+	if err != nil {
+		return nil
+	}
+	return r.Services
+}
+
 func saveRunning(worktree string, r running) error {
 	if err := os.MkdirAll(runDir(worktree), 0o755); err != nil {
 		return err

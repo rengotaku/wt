@@ -85,6 +85,48 @@ enabled = false
 	}
 }
 
+func TestLoad_ProcessStats(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. 未記載 -> 既定 2048/4096
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load()
+	if got.ProcessStats.WarnMB != 2048 || got.ProcessStats.DangerMB != 4096 {
+		t.Errorf("empty file: got %+v, want 2048/4096", got.ProcessStats)
+	}
+
+	// 2. 明示値 -> 尊重
+	content := `
+[process_stats]
+warn_mb = 100
+danger_mb = 500
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.ProcessStats.WarnMB != 100 || got.ProcessStats.DangerMB != 500 {
+		t.Errorf("explicit file: got %+v, want 100/500", got.ProcessStats)
+	}
+
+	// 3. warn>=danger -> 既定に戻る
+	contentInv := `
+[process_stats]
+warn_mb = 1000
+danger_mb = 500
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentInv), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.ProcessStats.WarnMB != 2048 || got.ProcessStats.DangerMB != 4096 {
+		t.Errorf("invalid warn>=danger file: got %+v, want 2048/4096", got.ProcessStats)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
