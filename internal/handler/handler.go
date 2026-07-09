@@ -36,6 +36,7 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/trees/gc", h.GcTrees)
 	mux.HandleFunc("GET /api/trees/merged-prs", h.GetMergedPRs)
 	mux.HandleFunc("GET /api/trees/issue-details", h.GetIssueDetails)
+	mux.HandleFunc("GET /api/process-stats", h.GetProcessStats)
 	mux.HandleFunc("GET /api/ports", h.ListPorts)
 	mux.HandleFunc("GET /api/ports/listeners", h.ListListeners)
 	mux.HandleFunc("GET /api/ports/stale", h.ListStalePorts)

@@ -35,17 +35,25 @@ type IdleReaper struct {
 	IntervalMinutes int  `toml:"interval_minutes"`
 }
 
+// ProcessStats configures memory thresholds for the process-stats view.
+type ProcessStats struct {
+	WarnMB   int `toml:"warn_mb"`
+	DangerMB int `toml:"danger_mb"`
+}
+
 // Settings is the full wt settings document.
 type Settings struct {
-	DevPorts   DevPorts   `toml:"dev_ports"`
-	IdleReaper IdleReaper `toml:"idle_reaper"`
+	DevPorts     DevPorts     `toml:"dev_ports"`
+	IdleReaper   IdleReaper   `toml:"idle_reaper"`
+	ProcessStats ProcessStats `toml:"process_stats"`
 }
 
 // Default returns the built-in settings.
 func Default() Settings {
 	return Settings{
-		DevPorts:   DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd},
-		IdleReaper: IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
+		DevPorts:     DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd},
+		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
+		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
 	}
 }
 
@@ -85,6 +93,16 @@ func Load() Settings {
 	}
 	if loaded.IdleReaper.IntervalMinutes <= 0 {
 		loaded.IdleReaper.IntervalMinutes = 2
+	}
+	if loaded.ProcessStats.WarnMB <= 0 {
+		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
+	}
+	if loaded.ProcessStats.DangerMB <= 0 {
+		loaded.ProcessStats.DangerMB = def.ProcessStats.DangerMB
+	}
+	if loaded.ProcessStats.WarnMB >= loaded.ProcessStats.DangerMB {
+		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
+		loaded.ProcessStats.DangerMB = def.ProcessStats.DangerMB
 	}
 	if err := loaded.Validate(); err != nil {
 		return def

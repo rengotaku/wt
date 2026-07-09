@@ -5,3 +5,4 @@ export { DevConfigPanel, type DevConfigTarget } from "./DevConfigPanel";
 export { LogPanel, type LogTarget } from "./LogPanel";
 export { WorktreeDetailPanel, type WorktreeDetail } from "./WorktreeDetailPanel";
 export { WorktreeCard } from "./WorktreeCard";
+export { ProcessStatsOverlay } from "./ProcessStatsOverlay";

@@ -14,17 +14,22 @@ import {
   treesApi,
   reposApi,
   portsApi,
+  statsApi,
+  formatBytes,
   type AddTreeRequest,
   type TreeItem,
   type MergedPRInfo,
   type IssueDetail,
   type PortItem,
+  type ProcessStatsResponse,
+  type WorktreeProcessStats,
 } from "@/api";
 import { filterTrees } from "./treesFilter";
 import { DevConfigPanel, type DevConfigTarget } from "@/components/DevConfigPanel";
 import { LogPanel, type LogTarget } from "@/components/LogPanel";
 import { WorktreeDetailPanel } from "@/components/WorktreeDetailPanel";
 import { WorktreeCard } from "@/components/WorktreeCard";
+import { ProcessStatsOverlay } from "@/components/ProcessStatsOverlay";
 import { useIsMobile } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +101,23 @@ export function TreesPage() {
   });
   const portMap = new Map(portItems.map((p) => [`${p.repo}/${p.wt_name}`, p]));
 
+  const { data: statsData } = useQuery<ProcessStatsResponse>({
+    queryKey: ["process-stats"],
+    queryFn: statsApi.list,
+    refetchOnWindowFocus: false,
+    refetchInterval: () => (portItems.some((p) => p.running) ? 10000 : false),
+  });
+
+  const statsMap = useMemo(() => {
+    const map = new Map<string, WorktreeProcessStats>();
+    if (statsData?.items) {
+      for (const item of statsData.items) {
+        map.set(`${item.repo}/${item.wt_name}`, item);
+      }
+    }
+    return map;
+  }, [statsData]);
+
   const queryClient = useQueryClient();
   const serveMutation = useMutation({
     mutationFn: ({ repo, wt }: { repo: string; wt: string }) => portsApi.serve(repo, wt),
@@ -116,6 +138,7 @@ export function TreesPage() {
   const portBusy = serveMutation.isPending || downMutation.isPending;
   const [devConfigTarget, setDevConfigTarget] = useState<DevConfigTarget | null>(null);
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
+  const [overlayStats, setOverlayStats] = useState<WorktreeProcessStats | null>(null);
   const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
   const deleteMutation = useMutation({
     mutationFn: ({ repo, branch, force }: { repo: string; branch: string; force: boolean }) =>
@@ -645,6 +668,7 @@ export function TreesPage() {
                       key={t.path}
                       tree={t}
                       port={portMap.get(`${t.repo}/${t.wt_name}`)}
+                      stats={statsMap.get(`${t.repo}/${t.wt_name}`)}
                       pinned={pinnedPaths.has(t.path)}
                       selected={selectedPaths.has(t.path)}
                       copied={copiedPath === t.path}
@@ -657,6 +681,10 @@ export function TreesPage() {
                         setShowMain(true);
                       }}
                       onOpenDetail={() => setDetailTree(t)}
+                      onOpenStats={() => {
+                        const s = statsMap.get(`${t.repo}/${t.wt_name}`);
+                        if (s) setOverlayStats(s);
+                      }}
                       registerRef={(el) => {
                         if (el) rowRefs.current.set(t.path, el);
                         else rowRefs.current.delete(t.path);
@@ -691,6 +719,7 @@ export function TreesPage() {
                     </TableHead>
                     <TableHead className="w-24">作成日</TableHead>
                     <TableHead className="w-40" title="稼働状況と起動/停止">ポート</TableHead>
+                    <TableHead className="w-24" title="dev サービスのメモリ使用量">状態</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -722,6 +751,7 @@ export function TreesPage() {
                           "cursor-pointer",
                           t.is_main ? "opacity-60" : "",
                           t.path === newlyAddedPath ? "row-highlight" : "",
+                          statsMap.get(`${t.repo}/${t.wt_name}`)?.level === "danger" ? "bg-red-500/10 hover:bg-red-500/15" : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}
@@ -925,6 +955,29 @@ export function TreesPage() {
                             </span>
                           )}
                         </TableCell>
+                        <TableCell className="text-xs">
+                          {(() => {
+                            const stats = statsMap.get(`${t.repo}/${t.wt_name}`);
+                            if (!stats) return <span className="text-muted-foreground">—</span>;
+                            
+                            const colorClass = 
+                              stats.level === "danger" ? "text-red-600 font-medium" :
+                              stats.level === "warn" ? "text-amber-600" :
+                              "text-muted-foreground";
+
+                            return (
+                              <button
+                                className={`hover:underline ${colorClass}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOverlayStats(stats);
+                                }}
+                              >
+                                {formatBytes(stats.total_rss_bytes)}
+                              </button>
+                            );
+                          })()}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -1119,6 +1172,16 @@ export function TreesPage() {
           </div>
         );
       })()}
+
+      {overlayStats && statsData && (
+        <ProcessStatsOverlay
+          stats={overlayStats}
+          warnBytes={statsData.warn_bytes}
+          dangerBytes={statsData.danger_bytes}
+          onClose={() => setOverlayStats(null)}
+        />
+      )}
+
       <DevConfigPanel
         target={devConfigTarget}
         onClose={() => setDevConfigTarget(null)}
