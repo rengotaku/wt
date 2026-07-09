@@ -249,7 +249,7 @@ func (h *Handler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	mainDir, _ := core.ResolveMain(container)
+	mainDir, mainName := core.ResolveMain(container)
 	if mainDir == "" {
 		jsonErr(w, http.StatusInternalServerError, "main worktree not found")
 		return
@@ -262,14 +262,25 @@ func (h *Handler) SyncRepo(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, http.StatusInternalServerError, "fetch failed: "+strings.TrimSpace(string(out)))
 		return
 	}
-	out, err := exec.Command("git", "-C", mainDir, "pull", "--ff-only").CombinedOutput()
+	outBytes, err := exec.Command("git", "-C", mainDir, "pull", "--ff-only").CombinedOutput()
 	if err != nil {
-		jsonErr(w, http.StatusConflict, strings.TrimSpace(string(out)))
+		jsonErr(w, http.StatusConflict, strings.TrimSpace(string(outBytes)))
 		return
 	}
+
+	outStr := strings.TrimSpace(string(outBytes))
+	restarted := false
+	if !strings.Contains(outStr, "Already up to date") {
+		if ok, err := restartDevIfRunning(container, mainName, mainDir); err != nil {
+			outStr += fmt.Sprintf("（dev 再起動に失敗: %v）", err)
+		} else {
+			restarted = ok
+		}
+	}
+
 	h.cache.del("ahead_behind:" + mainDir)
 	h.cache.del("main_dirty:" + mainDir)
-	jsonOK(w, map[string]string{"output": strings.TrimSpace(string(out))})
+	jsonOK(w, map[string]any{"output": outStr, "restarted": restarted})
 }
 
 func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
@@ -277,7 +288,7 @@ func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
 
 	go func() {
 		for _, c := range containers {
-			mainDir, _ := core.ResolveMain(c)
+			mainDir, mainName := core.ResolveMain(c)
 			if mainDir == "" {
 				continue
 			}
@@ -287,9 +298,15 @@ func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
 			if _, err := exec.Command("git", "-C", mainDir, "fetch", "origin").CombinedOutput(); err != nil {
 				continue
 			}
-			if _, err := exec.Command("git", "-C", mainDir, "pull", "--ff-only").CombinedOutput(); err != nil {
+			outBytes, err := exec.Command("git", "-C", mainDir, "pull", "--ff-only").CombinedOutput()
+			if err != nil {
 				continue
 			}
+
+			if !strings.Contains(string(outBytes), "Already up to date") {
+				_, _ = restartDevIfRunning(c, mainName, mainDir)
+			}
+
 			h.cache.del("ahead_behind:" + mainDir)
 			h.cache.del("main_dirty:" + mainDir)
 		}

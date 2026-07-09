@@ -130,7 +130,8 @@ export function TreesPage() {
   const updateMutation = useMutation({
     mutationFn: ({ repo, wt }: { repo: string; wt: string }) => treesApi.update(repo, wt),
     onSuccess: (r, v) => {
-      toast.success(`${v.wt} を最新化しました`, { description: r.output });
+      const desc = r.restarted ? `${r.output}\n\ndev サービスを再起動しました` : r.output;
+      toast.success(`${v.wt} を最新化しました`, { description: desc });
       queryClient.invalidateQueries({ queryKey: ["ports"] });
       refetch();
     },

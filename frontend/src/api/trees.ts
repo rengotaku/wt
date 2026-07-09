@@ -71,7 +71,7 @@ export const treesApi = {
   delete: (body: DeleteTreeRequest): Promise<{ output: string }> =>
     apiClient.delete("api/trees", { json: body }).json(),
 
-  update: (repo: string, wtName: string): Promise<{ output: string }> =>
+  update: (repo: string, wtName: string): Promise<{ output: string; restarted?: boolean }> =>
     apiClient
       .post(`api/trees/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/update`)
       .json(),

@@ -93,7 +93,8 @@ export function ReposPage() {
     setSyncingRepo(name);
     try {
       const res = await reposApi.sync(name);
-      setSyncRepoMsg((prev) => ({ ...prev, [name]: { ok: true, msg: res.output } }));
+      const finalMsg = res.restarted ? `${res.output}（dev 再起動）` : res.output;
+      setSyncRepoMsg((prev) => ({ ...prev, [name]: { ok: true, msg: finalMsg } }));
       refetch();
     } catch (e) {
       setSyncRepoMsg((prev) => ({
