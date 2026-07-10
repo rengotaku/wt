@@ -11,6 +11,7 @@ export interface Repo {
   main_dirty: boolean;
   main_ahead: number;
   main_behind: number;
+  hidden: boolean;
 }
 
 export interface RepoConfig {
@@ -35,6 +36,9 @@ export const reposApi = {
 
   syncAll: (): Promise<{ message: string }> =>
     apiClient.post("api/repos/sync-all").json(),
+
+  setHidden: (name: string, hidden: boolean): Promise<{ hidden: boolean }> =>
+    apiClient.put(`api/repos/${encodeURIComponent(name)}/hidden`, { json: { hidden } }).json(),
 
   getConfig: (name: string): Promise<RepoConfig> =>
     apiClient.get(`api/repos/${encodeURIComponent(name)}/config`).json(),

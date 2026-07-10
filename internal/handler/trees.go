@@ -90,9 +90,20 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 	entries := tree.Entries()
 	tmuxSessions := h.getTmuxSessions()
 
-	items := make([]treeItem, len(entries))
+	hiddenRepos := make(map[string]bool)
+	for _, c := range core.ListContainers() {
+		cfg, _ := core.LoadConfig(c)
+		if cfg.Hidden {
+			hiddenRepos[filepath.Base(c)] = true
+		}
+	}
+
+	items := make([]treeItem, 0, len(entries))
 	for i := range entries {
-		items[i] = treeItem{
+		if hiddenRepos[entries[i].Repo] {
+			continue
+		}
+		items = append(items, treeItem{
 			WtName:    entries[i].WtName,
 			Repo:      entries[i].Repo,
 			Label:     entries[i].Label,
@@ -102,7 +113,7 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 			Issue:     entries[i].Issue,
 			Pinned:    entries[i].Pinned,
 			AutoStart: entries[i].AutoStart,
-		}
+		})
 	}
 
 	var wg sync.WaitGroup

@@ -84,3 +84,46 @@ func TestUpdateTree_RestartLogic(t *testing.T) {
 		})
 	}
 }
+
+func TestListTrees_HiddenRepo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	containerVisible := filepath.Join(home, "Workspace", "visible-repo")
+	containerHidden := filepath.Join(home, "Workspace", "hidden-repo")
+
+	for _, c := range []string{containerVisible, containerHidden} {
+		if err := os.MkdirAll(filepath.Join(c, "wt1"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := core.PutEntry(c, "wt1", &core.Entry{Type: "feature"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Hide the hidden-repo
+	cfg := core.EntryConfig{Hidden: true}
+	if err := core.SaveConfig(containerHidden, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	h := New()
+	r := httptest.NewRequest(http.MethodGet, "/api/trees", http.NoBody)
+	w := httptest.NewRecorder()
+	h.ListTrees(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var items []treeItem
+	if err := json.Unmarshal(w.Body.Bytes(), &items); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(items) != 1 {
+		t.Errorf("expected 1 item, got %d", len(items))
+	}
+	if len(items) > 0 && items[0].Repo != "visible-repo" {
+		t.Errorf("expected visible-repo, got %s", items[0].Repo)
+	}
+}

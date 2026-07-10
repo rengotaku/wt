@@ -123,6 +123,8 @@ type EntryConfig struct {
 	// worktree that has no per-worktree override. Stored here (outside the repo)
 	// so it is never committed.
 	DevServices []DevService `json:"dev_services,omitempty"`
+	// Hidden marks the repository as hidden in the UI.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // LoadConfig returns the _config block, defaulting to empty when missing.

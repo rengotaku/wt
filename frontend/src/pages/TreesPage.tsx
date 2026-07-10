@@ -591,7 +591,7 @@ export function TreesPage() {
               title="リポジトリで絞り込み"
             >
               <option value="">全 repo</option>
-              {repos.map((r) => (
+              {repos.filter(r => !r.hidden).map((r) => (
                 <option key={r.name} value={r.name}>
                   {r.name}
                 </option>

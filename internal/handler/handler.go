@@ -26,6 +26,7 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/repos/refresh", h.RefreshRepo)
 	mux.HandleFunc("POST /api/repos/sync", h.SyncRepo)
 	mux.HandleFunc("POST /api/repos/sync-all", h.SyncAll)
+	mux.HandleFunc("PUT /api/repos/{name}/hidden", h.SetRepoHidden)
 	mux.HandleFunc("GET /api/repos/{name}/config", h.GetRepoConfig)
 	mux.HandleFunc("PUT /api/repos/{name}/config", h.UpdateRepoConfig)
 	mux.HandleFunc("GET /api/trees", h.ListTrees)
