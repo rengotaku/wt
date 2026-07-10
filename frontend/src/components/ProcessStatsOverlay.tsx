@@ -60,7 +60,7 @@ export function ProcessStatsOverlay({
         </CardHeader>
         <CardContent className="overflow-y-auto pt-4">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-10 bg-background">
               <TableRow>
                 <TableHead>サービス</TableHead>
                 <TableHead>PID</TableHead>
