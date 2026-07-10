@@ -24,7 +24,7 @@ wt (cobra CLI)
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
 | `internal/wt/procstats/` | `/proc` スキャンによるプロセスグループ単位のメモリ計測 |
-| `internal/wt/autostart/` | pin 自動 serve（`ServePinned`）と idle reaper |
+| `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
 | `internal/wt/settings/` | `~/.config/wt/settings.toml` の読み書き |
 | `frontend/` | React + vite + Tailwind の SPA（`src/pages/TreesPage.tsx` が worktree 一覧） |
@@ -33,8 +33,9 @@ wt (cobra CLI)
 
 | ファイル | 内容 |
 |---|---|
-| `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / port_base / `_config.dev_services` 等） |
-| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[process_stats]` |
+| `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / auto_start / port_base / `_config.dev_services` 等） |
+| `<base>/<repo>/.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` | repo 単位の表示/非表示フラグ（ローカル設定、コミットしない） |
+| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[process_stats]` |
 | `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
@@ -44,15 +45,43 @@ wt (cobra CLI)
 2. **ポート割当**: worktree ごとに band から `BlockSize=5` の連続ブロックを確保し `port_base` を `.worktrees.json` に永続化。service i は `base+i` を使う
 3. **起動**: `devserver.Serve` が `sh -c` + `Setpgid` で各サービスを起動（leader PID = PGID）。`PORT` と全サービス分の `WT_PORT_<NAME>` を環境変数で共有。600ms の起動グレース後に生存確認し、`running.json` へ記録
 4. **停止**: `devserver.Down` がプロセスグループごと SIGTERM
-5. **pin 自動 serve**: `wt web` 起動時に pinned かつ未稼働の worktree を `autostart.ServePinned` が serve
-6. **idle reaper**: pinned かつ稼働中で、dev ポート帯に ESTABLISHED 接続が TTL（既定30分）以上無い worktree を自動 down（手動 serve は対象外、#92/#93）
+5. **AutoStart 自動 serve**: `wt web` 起動時に `auto_start=true` かつ未稼働の worktree を `autostart.ServeAutoStart` が serve。既に稼働中の worktree は再起動しない
+6. **idle reaper**: `auto_start=true` かつ稼働中で、dev ポート帯に ESTABLISHED 接続が TTL（既定30分）以上無い worktree を自動 down（手動 serve は対象外、#92/#93）
+7. **幽霊ポート reaper**: 削除済み worktree の残骸（port_base だけ残る registry エントリ）を定期 prune（既定 1 日 1 回、`autostart.PortReaper`）。起動時と定期スケジュールで実行
+
+## ピン留めと自動起動の分離（#103）
+
+worktree 一覧の先頭固定（ピン留め）と `wt web` 起動時の自動 serve を独立したフラグで制御する。
+
+| フラグ | 役割 | 格納先 |
+|---|---|---|
+| `pinned` | 一覧を先頭固定（UI 表示順のみ） | `.worktrees.json::pinned` |
+| `auto_start` | `wt web` 起動時に自動 serve、idle reaper の対象 | `.worktrees.json::auto_start` |
+
+- worktree 詳細パネル（`WorktreeDetailPanel`）で「自動起動 ON/OFF」スイッチで個別トグル
+- API: `PUT /api/trees/{repo}/{wt}/autostart`（body: `{"auto_start": bool}`）
+- 起動時に `autostart.ServeAutoStart` が `auto_start=true` の全 worktree を確認し、未稼働なら serve（既稼働は再起動しない）
+- idle reaper は `auto_start=true` の worktree のみ対象
+
+## repo 単位の表示/非表示（#104）
+
+repos ページで repo ごとに表示/非表示をトグル。非表示 repo 配下の worktree は worktree 一覧から除外。
+
+- 非表示状態は `.worktrees.json` の `_config.hidden（core.EntryConfig.Hidden）` にサーバ側で永続化（ローカル設定のため `.gitignore` で除外）
+- ListRepos レスポンスに `hidden` フィールド追加
+- ListTrees は `hidden=true` の repo を事前に除外してから worktree を返す
+- API: `PUT /api/repos/{name}/hidden`（body: `{"hidden": bool}`）
 
 ## Web API（`internal/handler/handler.go`）
 
-- `GET/POST/DELETE /api/trees`、`/api/trees/{repo}/{wt}/update|pin`、`/api/trees/gc|merged-prs|issue-details`
+- `GET/POST/DELETE /api/trees`、`/api/trees/{repo}/{wt}/update|pin|autostart`、`/api/trees/gc|merged-prs|issue-details`
+  - `/api/trees/{repo}/{wt}/autostart`: `PUT` で worktree 単位の AutoStart フラグ設定（`wt web` 起動時の自動 serve と idle reaper の対象）
+- `GET /api/repos`、`PUT /api/repos/{name}/hidden`
+  - `/api/repos/{name}/hidden`: repo 単位の表示/非表示をトグル。非表示 repo 配下の worktree は ListTrees から除外
+  - ListRepos レスポンスに `hidden` フィールド追加
 - `GET /api/ports`（worktree 別の稼働/縮退/ドメイン）、`/api/ports/listeners|stale`、`POST /api/ports/prune`、`/api/ports/{repo}/{wt}/serve|down|devconfig|logs`
 - `GET /api/process-stats`（後述）
-- `GET/POST /api/proxy`、`GET/PUT /api/settings`、`GET/POST /api/repos` 系
+- `GET/POST /api/proxy`、`GET/PUT /api/settings`
 
 ## プロセス状態可視化（process-stats）仕様（#99 / PR #100）
 
@@ -102,16 +131,29 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 - 状態リンククリックでオーバーレイ: サービス別の PID / ポート / 稼働・停止 / プロセス数 / メモリ / 稼働時間 + しきい値の注記
 - 10秒間隔でポーリング（稼働 worktree が無い間は停止）
 
+### テーブル UI 刷新（#106）
+
+`TreesPage.tsx` のテーブル レイアウト改善:
+
+- **sticky header**: `TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]"` で行リストのみ縦スクロール可能に
+- **wrapperClassName**: `Table` コンポーネントに `max-h-[calc(100vh-250px)]` を指定し、ビューポート内での高さ制限
+- **列トグルドロップダウン**: 「表示列 ▾」ドロップダウンに Issue / PR 列の表示/非表示を集約
+- **表示変更**: tmux 列・親 issue 列は UI から削除（バックエンド配線 `has_tmux` / `issueDetail` は維持して将来対応を残す）
+
 ## どこを触れば何が変わるか
 
 | 変えたいこと | 触る場所 |
 |---|---|
 | dev サービスの起動・記録の仕組み | `internal/wt/devserver/run.go` |
 | ポート帯・割当ロジック | `internal/wt/ports/` + `settings.toml [dev_ports]` |
-| pin 自動 serve / idle 停止の方針 | `internal/wt/autostart/` + `[idle_reaper]` |
+| AutoStart 自動 serve / idle 停止の方針 | `internal/wt/autostart/` + `[idle_reaper]` |
+| 幽霊ポート自動 prune | `internal/wt/autostart/port_reaper.go` + `[port_reaper]` |
+| worktree の AutoStart フラグ（起動時自動 serve）| `.worktrees.json::auto_start` + `internal/handler/trees.go::SetTreeAutoStart` |
+| repo 単位の表示/非表示 | `.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` + `internal/handler/repos.go::SetRepoHidden` |
 | メモリ計測・危険判定 | `internal/wt/procstats/` + `internal/handler/stats.go` + `[process_stats]` |
-| 一覧の列・行の表示 | `frontend/src/pages/TreesPage.tsx`（カードは `WorktreeCard.tsx`） |
-| API の追加 | `internal/handler/`（ルートは `handler.go`）+ `frontend/src/api/` |
+| テーブル header sticky 化・列トグル | `frontend/src/pages/TreesPage.tsx` の `Table` コンポーネント + `wrapperClassName` |
+| worktree 一覧の非表示フィルタ | `frontend/src/pages/TreesPage.tsx::ListTrees` の hidden repos チェック |
+| API の追加 | `internal/handler/` + `frontend/src/api/` |
 
 ## 検証ゲート
 
