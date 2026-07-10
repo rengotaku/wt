@@ -140,6 +140,15 @@ export function TreesPage() {
   const [logTarget, setLogTarget] = useState<LogTarget | null>(null);
   const [overlayStats, setOverlayStats] = useState<WorktreeProcessStats | null>(null);
   const [detailTree, setDetailTree] = useState<TreeItem | null>(null);
+  // detailTree は開いた時点のスナップショットだが、trees クエリが再取得されたら
+  // 同じ path のエントリで上書きして最新状態（auto_start 等）を反映する。これにより
+  // パネルを開いたままトグル操作しても表示が即座に更新される（port は portMap を毎回
+  // 引き直しているのと同じ考え方）。trees 側から消えていたら（削除直後等）
+  // 直前のスナップショットのまま表示を保つ。
+  const liveDetailTree = useMemo(
+    () => (detailTree ? (trees.find((t) => t.path === detailTree.path) ?? detailTree) : null),
+    [trees, detailTree]
+  );
   const deleteMutation = useMutation({
     mutationFn: ({ repo, branch, force }: { repo: string; branch: string; force: boolean }) =>
       treesApi.delete({ repo, branch, force }),
@@ -187,8 +196,8 @@ export function TreesPage() {
     });
 
   // ピン留めは .worktrees.json に永続化され、サーバから tree.pinned として返る。
-  // wt web 起動時の auto-serve もこのフラグを参照する。一覧の先頭固定はこの
-  // path 集合で行う（サーバ状態から導出）。
+  // 一覧の先頭固定はこの path 集合で行う（サーバ状態から導出）。自動起動
+  // (auto_start) とは独立したフラグで、ピンだけでは auto-serve されない。
   const pinnedPaths = useMemo(
     () => new Set(trees.filter((t) => t.pinned).map((t) => t.path)),
     [trees]
@@ -208,6 +217,16 @@ export function TreesPage() {
     }
     refetch();
   };
+
+  const autoStartMutation = useMutation({
+    mutationFn: ({ repo, wt, autoStart }: { repo: string; wt: string; autoStart: boolean }) =>
+      treesApi.setAutoStart(repo, wt, autoStart),
+    onSuccess: (r, v) => {
+      toast.success(`${v.wt} の自動起動を${r.auto_start ? "ON" : "OFF"}にしました`);
+      refetch();
+    },
+    onError: (e: Error) => toast.error("自動起動の更新に失敗しました", { description: e.message }),
+  });
 
   const [formOpen, setFormOpen] = useState(false);
   const [issueMode, setIssueMode] = useState(true);
@@ -815,14 +834,14 @@ export function TreesPage() {
                                         ? `${t.repo}/${t.wt_name} のピンを解除`
                                         : `${t.repo}/${t.wt_name} をピン留め`
                                     }
-                                    className={`shrink-0 ${
+                                    className={`shrink-0 -m-1 p-1 ${
                                       pinned
                                         ? "text-amber-500 hover:text-amber-600"
                                         : "text-muted-foreground/40 hover:text-amber-500"
                                     }`}
                                   >
                                     <Pin
-                                      className={`h-3 w-3 ${pinned ? "fill-current" : ""}`}
+                                      className={`h-4 w-4 ${pinned ? "fill-current" : ""}`}
                                     />
                                   </button>
                                 );
@@ -1188,45 +1207,55 @@ export function TreesPage() {
       />
       <LogPanel target={logTarget} onClose={() => setLogTarget(null)} />
       <WorktreeDetailPanel
-        key={detailTree?.path ?? "none"}
+        key={liveDetailTree?.path ?? "none"}
         detail={
-          detailTree
+          liveDetailTree
             ? {
-                tree: detailTree,
-                port: portMap.get(`${detailTree.repo}/${detailTree.wt_name}`),
-                issueURL: getIssueURL(detailTree),
-                issueDetail: getIssueDetail(detailTree),
-                pr: getPR(detailTree),
-                repoURL: repoURLMap[detailTree.repo],
+                tree: liveDetailTree,
+                port: portMap.get(`${liveDetailTree.repo}/${liveDetailTree.wt_name}`),
+                issueURL: getIssueURL(liveDetailTree),
+                issueDetail: getIssueDetail(liveDetailTree),
+                pr: getPR(liveDetailTree),
+                repoURL: repoURLMap[liveDetailTree.repo],
               }
             : null
         }
         portBusy={portBusy}
         onServe={() =>
-          detailTree &&
-          serveMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+          liveDetailTree &&
+          serveMutation.mutate({ repo: liveDetailTree.repo, wt: liveDetailTree.wt_name })
         }
         onDown={() =>
-          detailTree &&
-          downMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+          liveDetailTree &&
+          downMutation.mutate({ repo: liveDetailTree.repo, wt: liveDetailTree.wt_name })
         }
+        autoStart={liveDetailTree?.auto_start ?? false}
+        onToggleAutoStart={() =>
+          liveDetailTree &&
+          autoStartMutation.mutate({
+            repo: liveDetailTree.repo,
+            wt: liveDetailTree.wt_name,
+            autoStart: !liveDetailTree.auto_start,
+          })
+        }
+        autoStartBusy={autoStartMutation.isPending}
         onEditConfig={() =>
-          detailTree &&
-          setDevConfigTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
+          liveDetailTree &&
+          setDevConfigTarget({ repo: liveDetailTree.repo, wt: liveDetailTree.wt_name })
         }
         onShowLogs={() =>
-          detailTree && setLogTarget({ repo: detailTree.repo, wt: detailTree.wt_name })
+          liveDetailTree && setLogTarget({ repo: liveDetailTree.repo, wt: liveDetailTree.wt_name })
         }
         onUpdate={() =>
-          detailTree &&
-          updateMutation.mutate({ repo: detailTree.repo, wt: detailTree.wt_name })
+          liveDetailTree &&
+          updateMutation.mutate({ repo: liveDetailTree.repo, wt: liveDetailTree.wt_name })
         }
         updating={updateMutation.isPending}
         onDelete={(force) =>
-          detailTree &&
+          liveDetailTree &&
           deleteMutation.mutate({
-            repo: detailTree.repo,
-            branch: detailTree.branch || detailTree.wt_name,
+            repo: liveDetailTree.repo,
+            branch: liveDetailTree.branch || liveDetailTree.wt_name,
             force,
           })
         }

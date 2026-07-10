@@ -119,7 +119,7 @@ export function WorktreeCard({
             pinned ? "text-amber-500" : "text-muted-foreground/50"
           }`}
         >
-          <Pin className={`h-4 w-4 ${pinned ? "fill-current" : ""}`} />
+          <Pin className={`h-5 w-5 ${pinned ? "fill-current" : ""}`} />
         </button>
         <div className="min-w-0 flex-1">
           <button

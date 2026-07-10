@@ -60,6 +60,7 @@ vi.mock("@/api", async (importOriginal) => {
       delete: vi.fn().mockResolvedValue({ output: "" }),
       update: vi.fn().mockResolvedValue({ output: "1 commits pulled" }),
       pin: vi.fn(),
+      setAutoStart: vi.fn(),
     },
     reposApi: {
       ...actual.reposApi,
@@ -500,6 +501,79 @@ describe("TreesPage - ピン留め", () => {
       "myrepo--feat-issue-1-abc",
       false
     );
+  });
+});
+
+describe("TreesPage - 詳細パネルの自動起動トグル即時反映", () => {
+  const path1 = "/home/user/Workspace/myrepo/myrepo--feat-issue-1-abc";
+
+  // setAutoStart はサーバ(.worktrees.json)に永続化される。テストでは pin と同じ
+  // 「サーバの代役」パターンで auto_start 状態を保持し、list がそれを反映する。
+  let autoStartByPath: Record<string, boolean>;
+
+  beforeEach(async () => {
+    autoStartByPath = {};
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.list).mockImplementation(
+      async () =>
+        mockTrees.map((t) => ({ ...t, auto_start: !!autoStartByPath[t.path] })) as never
+    );
+    vi.mocked(treesApi.setAutoStart).mockImplementation(async (repo, wt, autoStart) => {
+      const t = mockTrees.find((x) => x.repo === repo && x.wt_name === wt);
+      if (t) autoStartByPath[t.path] = autoStart;
+      return { auto_start: autoStart };
+    });
+  });
+
+  it("パネルを開いたままトグルを押すと閉じ開き不要で ON/OFF 表示が即時反映される", async () => {
+    const { treesApi } = await import("@/api");
+    render(<TreesPage />);
+
+    // 行のインタラクティブ要素以外をクリックして詳細パネルを開く。
+    const nameCell = await waitFor(() =>
+      screen.getByText("myrepo--feat-issue-1-abc")
+    );
+    fireEvent.click(nameCell);
+
+    const toggle = await waitFor(() =>
+      screen.getByRole("switch", { name: "自動起動の ON/OFF" })
+    );
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+
+    // パネルを閉じずにトグルを押す。
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(treesApi.setAutoStart).toHaveBeenCalledWith(
+        "myrepo",
+        "myrepo--feat-issue-1-abc",
+        true
+      );
+    });
+
+    // 閉じ開きせず、同じパネルの表示が ON に切り替わること。
+    await waitFor(() => {
+      expect(
+        screen.getByRole("switch", { name: "自動起動の ON/OFF" })
+      ).toHaveAttribute("aria-checked", "true");
+    });
+    // パネル自体が閉じていない（詳細ヘッダがまだ見える）ことも確認する。
+    expect(screen.getByRole("heading", { name: "myrepo--feat-issue-1-abc" })).toBeInTheDocument();
+  });
+
+  it("サーバ側で既に auto_start な worktree はパネルを開くと ON 表示になる", async () => {
+    autoStartByPath[path1] = true;
+    render(<TreesPage />);
+
+    const nameCell = await waitFor(() =>
+      screen.getByText("myrepo--feat-issue-1-abc")
+    );
+    fireEvent.click(nameCell);
+
+    const toggle = await waitFor(() =>
+      screen.getByRole("switch", { name: "自動起動の ON/OFF" })
+    );
+    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 });
 

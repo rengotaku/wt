@@ -33,6 +33,10 @@ interface WorktreeDetailPanelProps {
   updating: boolean;
   deleting: boolean;
   portBusy: boolean;
+  /** 自動起動 (auto_start) の現在値。ピンとは独立したフラグ。 */
+  autoStart: boolean;
+  onToggleAutoStart: () => void;
+  autoStartBusy: boolean;
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -61,6 +65,9 @@ export function WorktreeDetailPanel({
   updating,
   deleting,
   portBusy,
+  autoStart,
+  onToggleAutoStart,
+  autoStartBusy,
 }: WorktreeDetailPanelProps) {
   // 削除確認 UI の状態。呼び出し側が worktree の path を key にしているため、
   // 別の worktree を開く / 閉じるたびにコンポーネントが再マウントされリセットされる。
@@ -121,6 +128,26 @@ export function WorktreeDetailPanel({
               />
             </button>
             <span className="text-sm">{port?.running ? "稼働中" : "停止中"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoStart}
+              aria-label="自動起動の ON/OFF"
+              disabled={autoStartBusy}
+              onClick={onToggleAutoStart}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                autoStart ? "bg-green-600" : "bg-muted-foreground/30"
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  autoStart ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+            <span className="text-sm">自動起動{autoStart ? " ON" : " OFF"}</span>
           </div>
           <Button variant="outline" size="sm" onClick={onEditConfig}>
             <FileCog className="h-3 w-3 mr-1" />

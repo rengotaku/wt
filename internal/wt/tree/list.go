@@ -12,16 +12,17 @@ import (
 
 // ListEntry is a single worktree row used by list/interactive commands.
 type ListEntry struct {
-	Repo    string
-	WtName  string // 生の worktree 名（main, issue155 など）
-	Name    string // "[wtName - repo]" (CLI 表示用)
-	Label   string // pre-padded "[type] info" string
-	Path    string
-	Branch  string // 現在の git ブランチ名
-	Created string // .worktrees.json の Created フィールド値
-	Issue   string // .worktrees.json の Issue フィールド値（例: "#168"）
-	IsMain  bool   // wtName == "main" || wtName == "master" || entry.Type == "main"
-	Pinned  bool   // .worktrees.json の Pinned フラグ（起動時 auto-serve + 一覧先頭固定）
+	Repo      string
+	WtName    string // 生の worktree 名（main, issue155 など）
+	Name      string // "[wtName - repo]" (CLI 表示用)
+	Label     string // pre-padded "[type] info" string
+	Path      string
+	Branch    string // 現在の git ブランチ名
+	Created   string // .worktrees.json の Created フィールド値
+	Issue     string // .worktrees.json の Issue フィールド値（例: "#168"）
+	IsMain    bool   // wtName == "main" || wtName == "master" || entry.Type == "main"
+	Pinned    bool   // .worktrees.json の Pinned フラグ（一覧先頭固定のみ）
+	AutoStart bool   // .worktrees.json の AutoStart フラグ（起動時 auto-serve + アイドルリーパ対象）
 }
 
 // Entries scans all containers and returns every existing worktree entry.
@@ -68,16 +69,17 @@ func Entries() []ListEntry {
 				label := typeStr + strings.Join(parts, " ")
 				name := "[" + wtName + " - " + repo + "]"
 				lines = append(lines, ListEntry{
-					Repo:    repo,
-					WtName:  wtName,
-					Name:    name,
-					Label:   label,
-					Path:    wtPath,
-					Branch:  branch,
-					Created: info.Created,
-					Issue:   info.Issue,
-					IsMain:  wtName == "main" || wtName == "master" || info.Type == "main",
-					Pinned:  info.Pinned,
+					Repo:      repo,
+					WtName:    wtName,
+					Name:      name,
+					Label:     label,
+					Path:      wtPath,
+					Branch:    branch,
+					Created:   info.Created,
+					Issue:     info.Issue,
+					IsMain:    wtName == "main" || wtName == "master" || info.Type == "main",
+					Pinned:    info.Pinned,
+					AutoStart: info.AutoStart,
 				})
 			}
 		}
