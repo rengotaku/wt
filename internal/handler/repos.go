@@ -25,6 +25,7 @@ type repoItem struct {
 	MainDirty   bool   `json:"main_dirty"`
 	MainAhead   int    `json:"main_ahead"`
 	MainBehind  int    `json:"main_behind"`
+	Hidden      bool   `json:"hidden"`
 }
 
 func (h *Handler) ListRepos(w http.ResponseWriter, _ *http.Request) {
@@ -37,12 +38,14 @@ func (h *Handler) ListRepos(w http.ResponseWriter, _ *http.Request) {
 		}
 		name := filepath.Base(c)
 		mainDir, mainName := core.ResolveMain(c)
+		cfg, _ := core.LoadConfig(c)
 
 		item := repoItem{
 			Name:       name,
 			Container:  c,
 			Count:      len(entries),
 			MainBranch: mainName,
+			Hidden:     cfg.Hidden,
 		}
 
 		if mainDir != "" {
@@ -314,4 +317,37 @@ func (h *Handler) SyncAll(w http.ResponseWriter, _ *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	jsonOK(w, map[string]string{"message": "同期を開始しました"})
+}
+
+type setRepoHiddenRequest struct {
+	Hidden bool `json:"hidden"`
+}
+
+func (h *Handler) SetRepoHidden(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if name == "" || !repoNameRe.MatchString(name) {
+		jsonErr(w, http.StatusBadRequest, "invalid repo name")
+		return
+	}
+	var req setRepoHiddenRequest
+	if err := decodeJSON(r, &req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	container, err := core.FindContainer(name)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	cfg, err := core.LoadConfig(container)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	cfg.Hidden = req.Hidden
+	if err := core.SaveConfig(container, cfg); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]any{"hidden": req.Hidden})
 }

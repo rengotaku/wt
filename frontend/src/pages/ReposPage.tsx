@@ -8,6 +8,8 @@ import {
   ExternalLink,
   RefreshCw,
   Settings,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { reposApi, type Repo } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -73,6 +75,15 @@ export function ReposPage() {
     onSuccess: () => {
       refetch();
       setDeleteTarget(null);
+    },
+    onError: (e: Error) => alert(e.message),
+  });
+
+  const hiddenMutation = useMutation({
+    mutationFn: ({ name, hidden }: { name: string; hidden: boolean }) =>
+      reposApi.setHidden(name, hidden),
+    onSuccess: () => {
+      refetch();
     },
     onError: (e: Error) => alert(e.message),
   });
@@ -214,7 +225,7 @@ export function ReposPage() {
               </TableHeader>
               <TableBody>
                 {repos.map((r) => (
-                  <TableRow key={r.name}>
+                  <TableRow key={r.name} className={r.hidden ? "opacity-50" : ""}>
                     <TableCell className="font-medium">
                       <span>{r.name}</span>
                       {r.description && (
@@ -283,6 +294,19 @@ export function ReposPage() {
                     <TableCell>
                       <div className="flex flex-col gap-1">
                         <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => hiddenMutation.mutate({ name: r.name, hidden: !r.hidden })}
+                            title={r.hidden ? "一覧に表示する" : "一覧から隠す"}
+                            disabled={hiddenMutation.isPending}
+                          >
+                            {r.hidden ? (
+                              <EyeOff className="h-3 w-3 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-3 w-3" />
+                            )}
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

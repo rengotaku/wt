@@ -87,3 +87,57 @@ func TestSyncRepo_RestartLogic(t *testing.T) {
 		})
 	}
 }
+
+func TestSetRepoHidden(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := filepath.Join(home, "Workspace", "myrepo")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "main", &core.Entry{Type: "main"}); err != nil {
+		t.Fatal(err)
+	}
+
+	h := New()
+
+	// Hide the repo
+	reqBody := `{"hidden":true}`
+	r := httptest.NewRequest(http.MethodPut, "/api/repos/myrepo/hidden", strings.NewReader(reqBody))
+	r.SetPathValue("name", "myrepo")
+	w := httptest.NewRecorder()
+	h.SetRepoHidden(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if hidden, ok := resp["hidden"].(bool); !ok || !hidden {
+		t.Errorf("expected hidden=true in response, got %v", resp["hidden"])
+	}
+
+	// Verify the config is updated
+	cfg, err := core.LoadConfig(container)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Hidden {
+		t.Errorf("expected repo to be hidden in _config, but it was not")
+	}
+
+	// Unhide the repo
+	reqBody2 := `{"hidden":false}`
+	r2 := httptest.NewRequest(http.MethodPut, "/api/repos/myrepo/hidden", strings.NewReader(reqBody2))
+	r2.SetPathValue("name", "myrepo")
+	w2 := httptest.NewRecorder()
+	h.SetRepoHidden(w2, r2)
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w2.Code)
+	}
+	cfg2, _ := core.LoadConfig(container)
+	if cfg2.Hidden {
+		t.Errorf("expected repo to be visible in _config, but it was hidden")
+	}
+}
