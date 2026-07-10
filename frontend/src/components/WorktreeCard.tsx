@@ -189,7 +189,6 @@ export function WorktreeCard({
             "0"
           )}
         </span>
-        <span>tmux: {t.has_tmux ? <span className="text-green-600">✓</span> : "—"}</span>
         <span>{t.created_at || "—"}</span>
       </div>
     </div>
