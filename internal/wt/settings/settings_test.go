@@ -85,6 +85,61 @@ enabled = false
 	}
 }
 
+func TestLoad_PortReaper(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. 未記載 -> default (enabled=true, interval=1440 = 24h)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load()
+	if !got.PortReaper.Enabled || got.PortReaper.IntervalMinutes != 24*60 {
+		t.Errorf("empty file: got %+v, want default enabled=true, interval=1440", got.PortReaper)
+	}
+
+	// 2. 明示値 -> 尊重
+	content := `
+[port_reaper]
+enabled = false
+interval_minutes = 60
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.PortReaper.Enabled || got.PortReaper.IntervalMinutes != 60 {
+		t.Errorf("explicit file: got %+v, want enabled=false, interval=60", got.PortReaper)
+	}
+
+	// 3. interval_minutes <= 0 -> 既定値へ補正
+	contentZero := `
+[port_reaper]
+enabled = true
+interval_minutes = 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentZero), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if !got.PortReaper.Enabled || got.PortReaper.IntervalMinutes != 24*60 {
+		t.Errorf("interval<=0: got %+v, want enabled=true, interval=1440 (default)", got.PortReaper)
+	}
+
+	// 4. enabled=false 以外未記載 -> 補完されること
+	contentPart := `
+[port_reaper]
+enabled = false
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentPart), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.PortReaper.Enabled || got.PortReaper.IntervalMinutes != 24*60 {
+		t.Errorf("partial file: got %+v, want enabled=false, interval=1440", got.PortReaper)
+	}
+}
+
 func TestLoad_ProcessStats(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("WT_CONFIG_DIR", dir)

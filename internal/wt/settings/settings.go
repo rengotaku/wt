@@ -35,6 +35,14 @@ type IdleReaper struct {
 	IntervalMinutes int  `toml:"interval_minutes"`
 }
 
+// PortReaper configures the ghost-port reaper: it periodically prunes
+// registry entries whose worktree directory is gone but whose port_base
+// still lingers (see `wt ports prune`).
+type PortReaper struct {
+	Enabled         bool `toml:"enabled"`
+	IntervalMinutes int  `toml:"interval_minutes"`
+}
+
 // ProcessStats configures memory thresholds for the process-stats view.
 type ProcessStats struct {
 	WarnMB   int `toml:"warn_mb"`
@@ -45,14 +53,19 @@ type ProcessStats struct {
 type Settings struct {
 	DevPorts     DevPorts     `toml:"dev_ports"`
 	IdleReaper   IdleReaper   `toml:"idle_reaper"`
+	PortReaper   PortReaper   `toml:"port_reaper"`
 	ProcessStats ProcessStats `toml:"process_stats"`
 }
+
+// defaultPortReaperIntervalMinutes is once a day.
+const defaultPortReaperIntervalMinutes = 24 * 60
 
 // Default returns the built-in settings.
 func Default() Settings {
 	return Settings{
 		DevPorts:     DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd},
 		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
+		PortReaper:   PortReaper{Enabled: true, IntervalMinutes: defaultPortReaperIntervalMinutes},
 		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
 	}
 }
@@ -93,6 +106,9 @@ func Load() Settings {
 	}
 	if loaded.IdleReaper.IntervalMinutes <= 0 {
 		loaded.IdleReaper.IntervalMinutes = 2
+	}
+	if loaded.PortReaper.IntervalMinutes <= 0 {
+		loaded.PortReaper.IntervalMinutes = defaultPortReaperIntervalMinutes
 	}
 	if loaded.ProcessStats.WarnMB <= 0 {
 		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
