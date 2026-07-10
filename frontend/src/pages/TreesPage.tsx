@@ -170,21 +170,27 @@ export function TreesPage() {
     onError: (e: Error) => toast.error("最新化に失敗しました", { description: e.message }),
   });
 
-  // Issue / 親issue / PR 列の表示。既定は非表示。localStorage に永続化。
+  // Issue / PR 列の表示。既定は非表示。localStorage に永続化。
   const [showCols, setShowCols] = useState<{
     issue: boolean;
-    parentIssue: boolean;
     pr: boolean;
   }>(() => {
     try {
       const saved = localStorage.getItem("wt.trees.cols");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if ("parentIssue" in parsed) {
+          delete parsed.parentIssue;
+          localStorage.setItem("wt.trees.cols", JSON.stringify(parsed));
+        }
+        return { issue: parsed.issue ?? false, pr: parsed.pr ?? false };
+      }
     } catch {
       /* ignore */
     }
-    return { issue: false, parentIssue: false, pr: false };
+    return { issue: false, pr: false };
   });
-  const toggleCol = (key: "issue" | "parentIssue" | "pr") =>
+  const toggleCol = (key: "issue" | "pr") =>
     setShowCols((prev) => {
       const next = { ...prev, [key]: !prev[key] };
       try {
@@ -241,6 +247,19 @@ export function TreesPage() {
   const initialRepoFilter = searchParams.get("repo") ?? "";
   const [showMain, setShowMain] = useState(true);
   const [repoFilter, setRepoFilter] = useState(initialRepoFilter);
+
+  const [colsDropdownOpen, setColsDropdownOpen] = useState(false);
+  const colsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colsDropdownRef.current && !colsDropdownRef.current.contains(e.target as Node)) {
+        setColsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState("delete");
@@ -536,10 +555,68 @@ export function TreesPage() {
     <div className="space-y-6">
       {/* Worktree 一覧（追加はヘッダの「追加」ボタン→モーダル） */}
       <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>Worktree 一覧</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
+        <CardHeader className="py-3">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm w-full">
+            <Input
+              className="h-8 w-full sm:w-48"
+              placeholder="フリーワードで絞り込み..."
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+            />
+            <select
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              value={repoFilter}
+              onChange={(e) => setRepoFilter(e.target.value)}
+              title="リポジトリで絞り込み"
+            >
+              <option value="">全 repo</option>
+              {repos.filter(r => !r.hidden).map((r) => (
+                <option key={r.name} value={r.name}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1 text-muted-foreground cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                checked={showMain}
+                onChange={(e) => setShowMain(e.target.checked)}
+              />
+              main/master
+            </label>
+
+            <div className="relative shrink-0" ref={colsDropdownRef}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground font-normal"
+                onClick={() => setColsDropdownOpen(!colsDropdownOpen)}
+              >
+                表示列 ▾
+              </Button>
+              {colsDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-32 bg-popover border shadow-md rounded-md z-50 p-2 flex flex-col gap-2">
+                  <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showCols.issue}
+                      onChange={() => toggleCol("issue")}
+                    />
+                    Issue
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showCols.pr}
+                      onChange={() => toggleCol("pr")}
+                    />
+                    PR
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 ml-auto">
               <Button
                 size="sm"
                 onClick={() => {
@@ -576,60 +653,6 @@ export function TreesPage() {
                 Issue/PR更新
               </Button>
             </div>
-          </div>
-          <div className="flex items-center gap-x-4 gap-y-2 mt-2 flex-wrap text-sm">
-            <Input
-              className="h-8 w-full sm:w-48"
-              placeholder="フリーワードで絞り込み..."
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-            />
-            <select
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              value={repoFilter}
-              onChange={(e) => setRepoFilter(e.target.value)}
-              title="リポジトリで絞り込み"
-            >
-              <option value="">全 repo</option>
-              {repos.filter(r => !r.hidden).map((r) => (
-                <option key={r.name} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-            <label className="flex items-center gap-1 text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showMain}
-                onChange={(e) => setShowMain(e.target.checked)}
-              />
-              main/master
-            </label>
-            <span className="text-xs text-muted-foreground">列:</span>
-            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showCols.issue}
-                onChange={() => toggleCol("issue")}
-              />
-              Issue
-            </label>
-            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showCols.parentIssue}
-                onChange={() => toggleCol("parentIssue")}
-              />
-              親 issue
-            </label>
-            <label className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showCols.pr}
-                onChange={() => toggleCol("pr")}
-              />
-              PR
-            </label>
           </div>
         </CardHeader>
         <CardContent>
@@ -713,8 +736,8 @@ export function TreesPage() {
                 </div>
               ) : (
               <div className="overflow-x-auto">
-                <Table className="table-fixed w-full whitespace-nowrap">
-                <TableHeader>
+                <Table wrapperClassName="max-h-[calc(100vh-250px)]" className="table-fixed w-full whitespace-nowrap">
+                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
                   <TableRow>
                     <TableHead className="w-8">
                       <input
@@ -730,9 +753,7 @@ export function TreesPage() {
                     <TableHead className="w-12">コピー</TableHead>
                     <TableHead className="w-56">フォルダ名 / Branch</TableHead>
                     {showCols.issue && <TableHead className="w-24">Issue</TableHead>}
-                    {showCols.parentIssue && <TableHead className="w-20">親 issue</TableHead>}
                     {showCols.pr && <TableHead className="w-24">PR</TableHead>}
-                    <TableHead className="w-14" title="同名の tmux セッションが存在するか">tmux</TableHead>
                     <TableHead className="w-14" title="git status の変更ファイル数（未追跡除く）">
                       変更
                     </TableHead>
@@ -883,24 +904,7 @@ export function TreesPage() {
                           )}
                         </TableCell>
                         )}
-                        {showCols.parentIssue && (
-                        <TableCell className="text-xs">
-                          {issueDetail?.parent_number ? (
-                            <a
-                              href={issueDetail.parent_url || "#"}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
-                            >
-                              #{issueDetail.parent_number}
-                            </a>
-                          ) : loadingIssueRepos.has(t.repo) && t.issue ? (
-                            <span className="text-muted-foreground">…</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        )}
+
                         {showCols.pr && (
                         <TableCell className="text-xs">
                           {pr ? (
@@ -928,13 +932,7 @@ export function TreesPage() {
                           )}
                         </TableCell>
                         )}
-                        <TableCell className="text-xs">
-                          {t.has_tmux ? (
-                            <span className="text-green-600">✓</span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
+
                         <TableCell className="text-xs">
                           {t.diff_count > 0 ? (
                             <span className="text-amber-600 font-medium">
