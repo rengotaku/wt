@@ -38,6 +38,7 @@ type treeItem struct {
 	Branch    string `json:"branch"`
 	Issue     string `json:"issue,omitempty"`
 	Pinned    bool   `json:"pinned"`
+	AutoStart bool   `json:"auto_start"`
 }
 
 func (h *Handler) getTmuxSessions() map[string]bool {
@@ -100,6 +101,7 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 			IsMain:    entries[i].IsMain,
 			Issue:     entries[i].Issue,
 			Pinned:    entries[i].Pinned,
+			AutoStart: entries[i].AutoStart,
 		}
 	}
 
@@ -123,8 +125,9 @@ type pinTreeRequest struct {
 }
 
 // SetTreePin sets or clears the pinned flag on a worktree in .worktrees.json.
-// Pinned worktrees are auto-served when `wt web` starts and float to the top of
-// the list. The body is {"pinned": bool}; the call is idempotent.
+// Pinned worktrees float to the top of the list. Pinning has no effect on
+// auto-serve or the idle reaper; see SetTreeAutoStart for that. The body is
+// {"pinned": bool}; the call is idempotent.
 func (h *Handler) SetTreePin(w http.ResponseWriter, r *http.Request) {
 	repo := r.PathValue("repo")
 	wtName := r.PathValue("wt")
@@ -158,6 +161,49 @@ func (h *Handler) SetTreePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonOK(w, map[string]any{"pinned": req.Pinned})
+}
+
+type autoStartTreeRequest struct {
+	AutoStart bool `json:"auto_start"`
+}
+
+// SetTreeAutoStart sets or clears the AutoStart flag on a worktree in
+// .worktrees.json. AutoStart worktrees are auto-served when `wt web` starts
+// and are candidates for the idle reaper; it is independent of Pinned. The
+// body is {"auto_start": bool}; the call is idempotent.
+func (h *Handler) SetTreeAutoStart(w http.ResponseWriter, r *http.Request) {
+	repo := r.PathValue("repo")
+	wtName := r.PathValue("wt")
+	if !isKnownRepo(repo) {
+		jsonErr(w, http.StatusBadRequest, "unknown repo: "+repo)
+		return
+	}
+	var req autoStartTreeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	container, err := core.FindContainer(repo)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	entries, err := core.LoadEntries(container)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	entry, ok := entries[wtName]
+	if !ok {
+		jsonErr(w, http.StatusNotFound, "worktree が見つかりません: "+wtName)
+		return
+	}
+	entry.AutoStart = req.AutoStart
+	if err := core.PutEntry(container, wtName, &entry); err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonOK(w, map[string]any{"auto_start": req.AutoStart})
 }
 
 type addTreeRequest struct {

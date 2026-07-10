@@ -11,7 +11,8 @@ export interface TreeItem {
   is_main: boolean;
   branch: string;
   issue?: string;
-  pinned: boolean; // 起動時 auto-serve + 一覧先頭固定（.worktrees.json に永続化）
+  pinned: boolean; // 一覧先頭固定のみ（.worktrees.json に永続化）
+  auto_start: boolean; // 起動時 auto-serve + アイドルリーパ対象（.worktrees.json に永続化）
 }
 
 export interface AddTreeRequest {
@@ -80,6 +81,17 @@ export const treesApi = {
     apiClient
       .put(`api/trees/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/pin`, {
         json: { pinned },
+      })
+      .json(),
+
+  setAutoStart: (
+    repo: string,
+    wtName: string,
+    autoStart: boolean,
+  ): Promise<{ auto_start: boolean }> =>
+    apiClient
+      .put(`api/trees/${encodeURIComponent(repo)}/${encodeURIComponent(wtName)}/autostart`, {
+        json: { auto_start: autoStart },
       })
       .json(),
 

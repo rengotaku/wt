@@ -3,10 +3,12 @@ package autostart
 import (
 	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"wt/internal/wt/core"
 	"wt/internal/wt/devserver"
 )
 
@@ -16,8 +18,8 @@ func TestReaper_Tick(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolate devserver run state
 	container := filepath.Join(home, "Workspace", "myrepo")
 
-	// Pinned and running worktree
-	wt := makeWorktree(t, container, "wtpinned", 9000, true)
+	// AutoStart and running worktree
+	wt := makeWorktree(t, container, "wtauto", 9000, true)
 
 	var buf bytes.Buffer
 	// Emulate it being running
@@ -82,5 +84,58 @@ func TestReaper_Tick(t *testing.T) {
 	}
 	if _, ok := r.last[wt]; ok {
 		t.Error("worktree should be removed from last map")
+	}
+}
+
+// TestReaper_Tick_IgnoresPinnedWithoutAutoStart ensures Pinned alone does not
+// make a worktree a reaper target: Pinned only controls list ordering, while
+// the reaper (like auto-serve) is keyed off AutoStart.
+func TestReaper_Tick_IgnoresPinnedWithoutAutoStart(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	container := filepath.Join(home, "Workspace", "myrepo")
+
+	wt := filepath.Join(container, "wtpinnedonly")
+	if err := os.MkdirAll(filepath.Join(wt, ".wt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".wt", "dev.toml"), []byte(sleeperToml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "wtpinnedonly", &core.Entry{Type: "feature", PortBase: 9020, Pinned: true, AutoStart: false}); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := devserver.Serve(&buf, wt, 9020); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = devserver.Down(&buf, wt)
+	})
+
+	downCalled := 0
+	r := &Reaper{
+		TTL:      30 * time.Minute,
+		Interval: 2 * time.Minute,
+		Now:      func() time.Time { return time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC) },
+		Active:   func(base int) bool { return false },
+		Down: func(out io.Writer, worktree string) error {
+			downCalled++
+			return devserver.Down(out, worktree)
+		},
+		last: make(map[string]time.Time),
+	}
+
+	r.Tick(&buf)
+	if downCalled != 0 {
+		t.Errorf("expected 0 Down calls for a pinned-only worktree, got %d", downCalled)
+	}
+	if _, ok := r.last[wt]; ok {
+		t.Error("pinned-only worktree must not be tracked by the reaper")
+	}
+	if !devserver.IsRunning(wt) {
+		t.Error("pinned-only worktree should remain running (reaper must ignore it)")
 	}
 }

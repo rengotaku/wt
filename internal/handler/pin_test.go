@@ -61,6 +61,32 @@ func TestSetTreePin_UnknownRepo(t *testing.T) {
 	}
 }
 
+// TestSetTreePin_DoesNotTouchAutoStart is the symmetric counterpart of
+// TestSetTreeAutoStart_DoesNotTouchPinned: toggling pinned must not mutate
+// AutoStart, since the two flags are independent.
+func TestSetTreePin_DoesNotTouchAutoStart(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := filepath.Join(home, "Workspace", "myrepo")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "wt1", &core.Entry{Type: "feature", AutoStart: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	if w := pinRequest("myrepo", "wt1", `{"pinned":true}`); w.Code != http.StatusOK {
+		t.Fatalf("pin: status %d, body %s", w.Code, w.Body.String())
+	}
+	entries, _ := core.LoadEntries(container)
+	if !entries["wt1"].AutoStart {
+		t.Error("AutoStart flag must survive a pinned toggle")
+	}
+	if !entries["wt1"].Pinned {
+		t.Error("entry should be pinned after PUT pinned=true")
+	}
+}
+
 func TestSetTreePin_UnknownWorktree(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

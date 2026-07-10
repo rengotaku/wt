@@ -70,7 +70,7 @@ func (r *Reaper) Tick(out io.Writer) {
 			continue
 		}
 		for name := range entries {
-			if !entries[name].Pinned {
+			if !entries[name].AutoStart {
 				continue
 			}
 			worktree := filepath.Join(container, name)

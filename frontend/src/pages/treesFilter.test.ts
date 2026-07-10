@@ -13,6 +13,7 @@ const makeTree = (overrides: Partial<TreeItem>): TreeItem => ({
   is_main: false,
   branch: "feat/issue-1-abc",
   pinned: false,
+  auto_start: false,
   ...overrides,
 });
 

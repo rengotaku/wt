@@ -15,12 +15,22 @@ function makeTree(overrides: Partial<TreeItem> = {}): TreeItem {
     is_main: false,
     branch: "feat/1",
     pinned: false,
+    auto_start: false,
     ...overrides,
   };
 }
 
-function renderPanel(tree: TreeItem, onDelete = vi.fn(), port?: PortItem) {
+function renderPanel(
+  tree: TreeItem,
+  onDelete = vi.fn(),
+  port?: PortItem,
+  overrides: {
+    onToggleAutoStart?: () => void;
+    autoStartBusy?: boolean;
+  } = {},
+) {
   const detail: WorktreeDetail = { tree, issueURL: null, port };
+  const onToggleAutoStart = overrides.onToggleAutoStart ?? vi.fn();
   render(
     <WorktreeDetailPanel
       detail={detail}
@@ -34,9 +44,12 @@ function renderPanel(tree: TreeItem, onDelete = vi.fn(), port?: PortItem) {
       updating={false}
       deleting={false}
       portBusy={false}
+      autoStart={tree.auto_start}
+      onToggleAutoStart={onToggleAutoStart}
+      autoStartBusy={overrides.autoStartBusy ?? false}
     />,
   );
-  return { onDelete };
+  return { onDelete, onToggleAutoStart };
 }
 
 describe("WorktreeDetailPanel 削除", () => {
@@ -136,6 +149,37 @@ describe("WorktreeDetailPanel 稼働ポート表示", () => {
     expect(
       screen.getByText(/一部のサービスが正常に稼働していません（縮退稼働）/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("WorktreeDetailPanel 自動起動", () => {
+  it("トグルをクリックすると onToggleAutoStart が呼ばれる", () => {
+    const { onToggleAutoStart } = renderPanel(makeTree({ auto_start: false }));
+
+    fireEvent.click(screen.getByRole("switch", { name: "自動起動の ON/OFF" }));
+
+    expect(onToggleAutoStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("aria-checked が autoStart prop を反映する", () => {
+    renderPanel(makeTree({ auto_start: true }));
+    expect(screen.getByRole("switch", { name: "自動起動の ON/OFF" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("aria-checked は autoStart=false のとき false になる", () => {
+    renderPanel(makeTree({ auto_start: false }));
+    expect(screen.getByRole("switch", { name: "自動起動の ON/OFF" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("autoStartBusy=true のときトグルが disabled になる", () => {
+    renderPanel(makeTree({ auto_start: false }), vi.fn(), undefined, { autoStartBusy: true });
+    expect(screen.getByRole("switch", { name: "自動起動の ON/OFF" })).toBeDisabled();
   });
 });
 
