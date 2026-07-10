@@ -36,9 +36,18 @@ func registerWebCmd(parent *cobra.Command) {
 				}
 			}()
 
-			if rc := settings.Load().IdleReaper; rc.Enabled {
+			s := settings.Load()
+			if rc := s.IdleReaper; rc.Enabled {
 				r := autostart.NewReaper(time.Duration(rc.TTLMinutes)*time.Minute, time.Duration(rc.IntervalMinutes)*time.Minute)
 				go r.Run(cmd.Context(), cmd.OutOrStdout())
+			}
+
+			// Auto-prune ghost port allocations (removed worktree, lingering
+			// port_base) periodically (once a day by default) so they don't
+			// withhold blocks from the dev band forever.
+			if pc := s.PortReaper; pc.Enabled {
+				pr := autostart.NewPortReaper(time.Duration(pc.IntervalMinutes) * time.Minute)
+				go pr.Run(cmd.Context(), cmd.OutOrStdout())
 			}
 
 			return srv.ListenAndServe()
