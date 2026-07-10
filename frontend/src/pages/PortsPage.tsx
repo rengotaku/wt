@@ -79,8 +79,8 @@ function StalePortsCard() {
             幽霊エントリはありません。
           </p>
         ) : (
-          <Table>
-            <TableHeader>
+          <Table wrapperClassName="max-h-[calc(100vh-250px)]">
+            <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
               <TableRow>
                 <TableHead>リポジトリ</TableHead>
                 <TableHead>worktree</TableHead>
@@ -148,8 +148,8 @@ export function PortsPage() {
               LISTEN 中のポートがありません（ss が無い環境かも）
             </p>
           ) : (
-            <Table>
-              <TableHeader>
+            <Table wrapperClassName="max-h-[calc(100vh-250px)]">
+              <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
                 <TableRow>
                   <TableHead>ポート</TableHead>
                   <TableHead>プロセス</TableHead>

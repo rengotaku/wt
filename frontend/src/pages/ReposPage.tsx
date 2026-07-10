@@ -212,8 +212,8 @@ export function ReposPage() {
               登録リポジトリがありません (wt repo add で追加してください)
             </p>
           ) : (
-            <Table>
-              <TableHeader>
+            <Table wrapperClassName="max-h-[calc(100vh-250px)]">
+              <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Base</TableHead>
