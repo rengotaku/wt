@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"os"
 
 	"wt/internal/wt/devserver"
 	"wt/internal/wt/procstats"
@@ -9,10 +10,16 @@ import (
 	"wt/internal/wt/tree"
 )
 
+// procRoot は procstats が読む /proc のルート。実運用では常に "/proc"。
+const procRoot = "/proc"
+
 type ProcessStatsResponse struct {
-	WarnBytes   uint64                 `json:"warn_bytes"`
-	DangerBytes uint64                 `json:"danger_bytes"`
-	Items       []WorktreeProcessStats `json:"items"`
+	WarnBytes        uint64                 `json:"warn_bytes"`
+	DangerBytes      uint64                 `json:"danger_bytes"`
+	TotalRSSBytes    uint64                 `json:"total_rss_bytes"`
+	InotifyInstances int                    `json:"inotify_instances"`
+	InotifyMax       int                    `json:"inotify_max"`
+	Items            []WorktreeProcessStats `json:"items"`
 }
 
 type WorktreeProcessStats struct {
@@ -67,7 +74,7 @@ func (h *Handler) GetProcessStats(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !snapshotFetched {
-			snapshot, _ = procstats.Snapshot("/proc")
+			snapshot, _ = procstats.Snapshot(procRoot)
 			snapshotFetched = true
 		}
 
@@ -100,7 +107,10 @@ func (h *Handler) GetProcessStats(w http.ResponseWriter, r *http.Request) {
 
 		wtStats.Level = calcLevel(wtStats.TotalRSSBytes, warnBytes, dangerBytes)
 		resp.Items = append(resp.Items, wtStats)
+		resp.TotalRSSBytes += wtStats.TotalRSSBytes
 	}
+
+	resp.InotifyInstances, resp.InotifyMax = procstats.InotifyInstances(procRoot, os.Getuid())
 
 	jsonOK(w, resp)
 }

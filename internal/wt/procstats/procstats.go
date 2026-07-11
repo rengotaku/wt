@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // GroupStat aggregates the live processes of one process group.
@@ -106,4 +107,45 @@ func Snapshot(procRoot string) (map[int]GroupStat, error) {
 		stats[pgid] = gs
 	}
 	return stats, nil
+}
+
+// InotifyInstances は uid のプロセスが保持する inotify インスタンス数と
+// システム上限（max_user_instances）を返す。上限が読めない場合 maxInstances は 0 のまま。
+func InotifyInstances(procRoot string, uid int) (used, maxInstances int) {
+	if b, err := os.ReadFile(filepath.Join(procRoot, "sys", "fs", "inotify", "max_user_instances")); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+			maxInstances = n
+		}
+	}
+	entries, err := os.ReadDir(procRoot)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue // pid ディレクトリのみ
+		}
+		pdir := filepath.Join(procRoot, entry.Name())
+		var st syscall.Stat_t
+		if err := syscall.Stat(pdir, &st); err != nil {
+			continue // プロセスがスキャン中に消えた場合など
+		}
+		if int(st.Uid) != uid {
+			continue
+		}
+		fds, err := os.ReadDir(filepath.Join(pdir, "fd"))
+		if err != nil {
+			continue // 他ユーザー所有プロセスの fd は権限で読めない
+		}
+		for _, fd := range fds {
+			target, err := os.Readlink(filepath.Join(pdir, "fd", fd.Name()))
+			if err == nil && target == "anon_inode:inotify" {
+				used++
+			}
+		}
+	}
+	return
 }

@@ -1,5 +1,13 @@
 import { Outlet, NavLink } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import {
+  portsApi,
+  statsApi,
+  formatBytes,
+  type PortItem,
+  type ProcessStatsResponse,
+} from "@/api";
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -10,6 +18,41 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       ? "bg-primary-foreground/15 text-primary-foreground"
       : "text-primary-foreground/80 hover:bg-primary-foreground/10 hover:text-primary-foreground"
   );
+
+// ヘッダ右上の inotify/メモリ表示。queryKey・queryFn・refetchInterval は
+// TreesPage.tsx の同名 useQuery と完全に一致させ、TanStack Query のキャッシュを
+// 共有することで二重fetchを避ける。
+function HeaderStats() {
+  const { data: portItems = [] } = useQuery<PortItem[]>({
+    queryKey: ["ports"],
+    queryFn: portsApi.list,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) =>
+      (query.state.data as PortItem[] | undefined)?.some((p) => p.running)
+        ? 3000
+        : false,
+  });
+
+  const { data } = useQuery<ProcessStatsResponse>({
+    queryKey: ["process-stats"],
+    queryFn: statsApi.list,
+    refetchOnWindowFocus: false,
+    refetchInterval: () => (portItems.some((p) => p.running) ? 10000 : false),
+  });
+
+  if (!data) return null;
+
+  return (
+    <div className="ml-auto flex items-center gap-3 text-xs text-primary-foreground/70">
+      <span title="inotify instances (使用/上限)">
+        inotify {data.inotify_instances}/{data.inotify_max}
+      </span>
+      <span title="wt 管理プロセスの合計メモリ">
+        mem {formatBytes(data.total_rss_bytes)}
+      </span>
+    </div>
+  );
+}
 
 export function Layout() {
   return (
@@ -36,6 +79,7 @@ export function Layout() {
               Settings
             </NavLink>
           </nav>
+          <HeaderStats />
         </div>
       </header>
       <main className="mx-auto w-full min-w-0 max-w-5xl flex-1 px-0 py-8 sm:px-4">
