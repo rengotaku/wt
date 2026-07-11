@@ -3,6 +3,9 @@ import { apiClient } from "./client";
 export interface ProcessStatsResponse {
   warn_bytes: number;
   danger_bytes: number;
+  total_rss_bytes: number;
+  inotify_instances: number;
+  inotify_max: number;
   items: WorktreeProcessStats[];
 }
 

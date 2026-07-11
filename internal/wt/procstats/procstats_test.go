@@ -3,6 +3,7 @@ package procstats
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -116,5 +117,55 @@ func TestSnapshot(t *testing.T) {
 	// uptime = 1000 - 90000/100 = 100
 	if s300.UptimeSec != 100 {
 		t.Errorf("pgid 300 uptime=%v, want 100", s300.UptimeSec)
+	}
+}
+
+func TestInotifyInstances(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := os.MkdirAll(filepath.Join(dir, "sys", "fs", "inotify"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sys", "fs", "inotify", "max_user_instances"), []byte("1024\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writePid := func(pid string, fdTargets []string) {
+		fddir := filepath.Join(dir, pid, "fd")
+		if err := os.MkdirAll(fddir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for i, target := range fdTargets {
+			if err := os.Symlink(target, filepath.Join(fddir, strconv.Itoa(i))); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	// pid 100 (own uid): 2 inotify fd + 1 unrelated fd
+	writePid("100", []string{"anon_inode:inotify", "anon_inode:inotify", "socket:[12345]"})
+	// pid 200 (own uid): 1 inotify fd
+	writePid("200", []string{"anon_inode:inotify"})
+
+	// non-pid dir must be ignored
+	if err := os.Mkdir(filepath.Join(dir, "notpid"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	uid := os.Getuid()
+
+	used, maxInstances := InotifyInstances(dir, uid)
+	if maxInstances != 1024 {
+		t.Errorf("maxInstances=%v, want 1024", maxInstances)
+	}
+	if used != 3 {
+		t.Errorf("used=%v, want 3", used)
+	}
+
+	// different uid must not match any pid dir (all temp dirs are owned by the
+	// current user), so the count stays 0.
+	usedOther, _ := InotifyInstances(dir, uid+1)
+	if usedOther != 0 {
+		t.Errorf("usedOther=%v, want 0", usedOther)
 	}
 }
