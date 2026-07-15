@@ -957,18 +957,28 @@ export function TreesPage() {
                               ⚠ 縮退
                             </span>
                           ) : (
-                            <span
-                              className={
-                                port.running
-                                  ? "inline-flex items-center gap-1 text-green-700"
-                                  : "inline-flex items-center gap-1 text-muted-foreground"
-                              }
-                              title={port.port_range ?? "未割当"}
-                            >
+                            <span className="inline-flex items-center gap-1">
                               <span
-                                className={`h-2 w-2 rounded-full ${port.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
-                              />
-                              {port.running ? "稼働" : "停止"}
+                                className={
+                                  port.running
+                                    ? "inline-flex items-center gap-1 text-green-700"
+                                    : "inline-flex items-center gap-1 text-muted-foreground"
+                                }
+                                title={port.port_range ?? "未割当"}
+                              >
+                                <span
+                                  className={`h-2 w-2 rounded-full ${port.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
+                                />
+                                {port.running ? "稼働" : "停止"}
+                              </span>
+                              {port.unmanaged && (
+                                <span
+                                  className="rounded border border-slate-400/50 px-1 py-px text-[10px] font-normal text-slate-600 dark:text-slate-400"
+                                  title="wt serve 経由ではない外部起動プロセスが LISTEN しています。wt からは停止できません。"
+                                >
+                                  wt管理外
+                                </span>
+                              )}
                             </span>
                           )}
                         </TableCell>

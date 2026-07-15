@@ -115,11 +115,16 @@ export function WorktreeDetailPanel({
               role="switch"
               aria-checked={!!port?.running}
               aria-label="サーバーの起動/停止"
-              disabled={portBusy || !port?.has_dev_config}
+              disabled={portBusy || !port?.has_dev_config || !!port?.unmanaged}
               onClick={() => (port?.running ? onDown() : onServe())}
               className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
                 port?.running ? "bg-green-600" : "bg-muted-foreground/30"
               }`}
+              title={
+                port?.unmanaged
+                  ? "wt serve 経由ではない外部起動プロセスです。wt からは停止できません。"
+                  : undefined
+              }
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
@@ -128,6 +133,14 @@ export function WorktreeDetailPanel({
               />
             </button>
             <span className="text-sm">{port?.running ? "稼働中" : "停止中"}</span>
+            {port?.unmanaged && (
+              <span
+                className="rounded border border-slate-400/50 px-1 py-px text-[10px] font-normal text-slate-600 dark:text-slate-400"
+                title="wt serve 経由ではない外部起動プロセスが LISTEN しています。wt からは停止できません。"
+              >
+                wt管理外
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button

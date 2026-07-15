@@ -131,6 +131,15 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 - 状態リンククリックでオーバーレイ: サービス別の PID / ポート / 稼働・停止 / プロセス数 / メモリ / 稼働時間 + しきい値の注記
 - 10秒間隔でポーリング（稼働 worktree が無い間は停止）
 
+### ポート稼働状態の判定（#116）
+
+`GET /api/ports` のレスポンス（`internal/handler/ports.go::portItem`）は「稼働」と「wt 管理下か」を分けて返す:
+
+- `running` = **`alive > 0 || anyListening`** — `alive` は `devserver.RunStatus`（`running.json` 記録の生存 PID 数）、`anyListening` は `ports.Status` が `ss` から拾った LISTEN の有無。**LISTEN があれば `wt serve` 経由でなくても「稼働中」扱い**にして CLI (`internal/wt/ports/list.go::liveCell` の `Listening || Running`) と揃える
+- `unmanaged` = `alive == 0 && anyListening` — LISTEN しているが wt の `running.json` に記録が無い状態（外部から手動起動された dev サーバ等）。wt 側に PID を握っていないので **`down` できない**
+- `degraded` = `alive > 0 && alive < total || any unhealthy` — wt 記録の一部だけが死んでいる「縮退稼働」。外部 LISTEN だけで `running=true` になった状態を縮退と誤解しないように `alive > 0` でガードする
+- UI（`WorktreeCard.tsx` / `TreesPage.tsx` / `WorktreeDetailPanel.tsx`）は `port.running` で「稼働/停止」を出し、`port.unmanaged` のとき「wt管理外」バッジを並置。詳細パネルの起動/停止トグルは `unmanaged` のとき `disabled`（wt からは停止できない旨のツールチップ）
+
 ### テーブル UI 刷新（#106）
 
 `TreesPage.tsx` のテーブル レイアウト改善:
@@ -154,6 +163,7 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 | テーブル header sticky 化・列トグル | `frontend/src/pages/TreesPage.tsx` の `Table` コンポーネント + `wrapperClassName` |
 | worktree 一覧の非表示フィルタ | `frontend/src/pages/TreesPage.tsx::ListTrees` の hidden repos チェック |
 | API の追加 | `internal/handler/` + `frontend/src/api/` |
+| ポート稼働/管理外/縮退の判定 | `internal/handler/ports.go::ListPorts`（`running` / `unmanaged` / `degraded` 導出）+ `frontend/src/api/ports.ts::PortItem` + `WorktreeCard.tsx` / `TreesPage.tsx` / `WorktreeDetailPanel.tsx` の「稼働」列 |
 
 ## 検証ゲート
 

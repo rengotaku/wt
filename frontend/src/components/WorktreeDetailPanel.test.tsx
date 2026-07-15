@@ -152,6 +152,44 @@ describe("WorktreeDetailPanel 稼働ポート表示", () => {
   });
 });
 
+describe("WorktreeDetailPanel wt管理外 (外部起動 LISTEN)", () => {
+  it("unmanaged=true では稼働中扱いで『wt管理外』バッジを表示し、トグルを無効化する", () => {
+    const port: PortItem = {
+      repo: "myrepo",
+      wt_name: "myrepo--feat-1",
+      port_base: 9920,
+      port_range: "9920-9924",
+      ports: [
+        { port: 9920, listening: true, running: false, proc: "uvicorn", pid: 238829 },
+      ],
+      has_dev_config: true,
+      running: true,
+      unmanaged: true,
+    };
+    renderPanel(makeTree(), vi.fn(), port);
+
+    expect(screen.getByText("稼働中")).toBeInTheDocument();
+    expect(screen.getByText("wt管理外")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "サーバーの起動/停止" })).toBeDisabled();
+  });
+
+  it("wt 管理下の通常稼働では『wt管理外』バッジを出さない", () => {
+    const port: PortItem = {
+      repo: "myrepo",
+      wt_name: "myrepo--feat-1",
+      port_base: 9000,
+      port_range: "9000-9001",
+      ports: [{ port: 9000, listening: true, running: true, service: "api" }],
+      has_dev_config: true,
+      running: true,
+    };
+    renderPanel(makeTree(), vi.fn(), port);
+
+    expect(screen.queryByText("wt管理外")).toBeNull();
+    expect(screen.getByRole("switch", { name: "サーバーの起動/停止" })).toBeEnabled();
+  });
+});
+
 describe("WorktreeDetailPanel 自動起動", () => {
   it("トグルをクリックすると onToggleAutoStart が呼ばれる", () => {
     const { onToggleAutoStart } = renderPanel(makeTree({ auto_start: false }));
