@@ -21,6 +21,7 @@ export interface PortItem {
   has_dev_config: boolean;
   running: boolean;
   degraded?: boolean; // running しているが記録済みサービスの一部が停止している（縮退）
+  unmanaged?: boolean; // LISTEN しているが wt の起動記録が無い（外部起動）。wt からは停止できない
   domain?: string; // <label>.wt.localhost when a domain service exists
   domain_port?: number; // localhost port of the domain(=user-facing)サービス
 }

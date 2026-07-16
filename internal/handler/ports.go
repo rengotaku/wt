@@ -29,6 +29,7 @@ type portItem struct {
 	HasDevConfig bool        `json:"has_dev_config"`
 	Running      bool        `json:"running"`
 	Degraded     bool        `json:"degraded,omitempty"`    // running しているが記録済みサービスの一部が停止している（縮退）
+	Unmanaged    bool        `json:"unmanaged,omitempty"`   // LISTEN しているが wt の起動記録が無い（外部起動）。wt 側からは停止できない
 	Domain       string      `json:"domain,omitempty"`      // <label>.<repo>.wt.localhost when a domain service exists
 	DomainPort   int         `json:"domain_port,omitempty"` // localhost port of the domain(=user-facing)サービス。「開く」の遷移先
 	Stale        bool        `json:"stale,omitempty"`       // worktree ディレクトリが消えた幽霊エントリ（port を死蔵）
@@ -107,6 +108,7 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 		cfg, source, _ := devserver.EffectiveConfig(r.Path)
 		states := make([]portState, 0, len(r.Ports))
 		unhealthy := false
+		anyListening := false
 		for i, p := range r.Ports {
 			st := portState{Port: p.Port, Listening: p.Listening, Running: p.Running, Headless: p.Headless, Unhealthy: p.Unhealthy(), PID: p.PID, Proc: p.Proc}
 			if i < len(cfg.Services) {
@@ -114,6 +116,9 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			}
 			if st.Unhealthy {
 				unhealthy = true
+			}
+			if st.Listening {
+				anyListening = true
 			}
 			states = append(states, st)
 		}
@@ -127,6 +132,9 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			}
 		}
 		alive, total := devserver.RunStatus(r.Path)
+		// 「稼働中」判定は wt の起動記録 (alive) と LISTEN 実測の OR にする。
+		// 外部起動された dev サーバも LISTEN していれば「稼働中」として扱い、
+		// CLI (`wt ports list` の Listening||Running) と表示を揃える。
 		items = append(items, portItem{
 			Repo:         r.Repo,
 			WtName:       r.WtName,
@@ -135,11 +143,15 @@ func (h *Handler) ListPorts(w http.ResponseWriter, _ *http.Request) {
 			PortRange:    ports.RangeString(r.PortBase),
 			Ports:        states,
 			HasDevConfig: source != devserver.SourceNone,
-			Running:      alive > 0,
-			Degraded:     (total > 0 && alive < total) || unhealthy,
-			Domain:       domainOf[r.Repo+"/"+r.WtName],
-			DomainPort:   domainPort,
-			Stale:        !r.Exists && r.PortBase != 0,
+			Running:      alive > 0 || anyListening,
+			// Degraded は「wt 記録が一部欠けている」意味のみに絞る。外部 LISTEN
+			// だけで Running=true になった状態 (alive==0) を「縮退」と誤って呼
+			// ばないようガードする。
+			Degraded:   (alive > 0 && alive < total) || unhealthy,
+			Unmanaged:  alive == 0 && anyListening,
+			Domain:     domainOf[r.Repo+"/"+r.WtName],
+			DomainPort: domainPort,
+			Stale:      !r.Exists && r.PortBase != 0,
 		})
 	}
 	jsonOK(w, items)
