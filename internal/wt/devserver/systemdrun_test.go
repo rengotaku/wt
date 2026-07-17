@@ -40,6 +40,10 @@ func TestScopeUnitName(t *testing.T) {
 		{"/home/user/work/my-repo", "api-server", []string{"wt-dev-home-user-work-my-repo-api-server-"}},
 		{"weird!@#path", "svc$1", []string{"wt-dev-weird-path-svc-1-"}},
 		{"very/long/path/that/exceeds/forty/characters/in/length", "svc", []string{"wt-dev-that-exceeds-forty-characters-in-length-svc-"}},
+		// Over-long service names must be capped so the unit name stays
+		// under UNIT_NAME_MAX; dash-wrapped names must not leave dash runs.
+		{"/w", strings.Repeat("s", 60), []string{"wt-dev-w-" + strings.Repeat("s", 40) + "-"}},
+		{"/w", "-web-", []string{"wt-dev-w-web-"}},
 	}
 
 	for _, tt := range tests {
