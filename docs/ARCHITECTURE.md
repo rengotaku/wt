@@ -43,8 +43,8 @@ wt (cobra CLI)
 
 1. **定義**: worktree の `.wt/dev.toml` → repo 既定（`.worktrees.json` の `_config.dev_services`）の優先順で実効化（`devserver.EffectiveConfig`）
 2. **ポート割当**: worktree ごとに band から `BlockSize=5` の連続ブロックを確保し `port_base` を `.worktrees.json` に永続化。service i は `base+i` を使う
-3. **起動**: `devserver.Serve` が `sh -c` + `Setpgid` で各サービスを起動（leader PID = PGID）。`PORT` と全サービス分の `WT_PORT_<NAME>` を環境変数で共有。600ms の起動グレース後に生存確認し、`running.json` へ記録
-4. **停止**: `devserver.Down` がプロセスグループごと SIGTERM
+3. **起動**: `devserver.Serve` が各サービスを `Setpgid` 付きで起動（leader PID = PGID）。systemd が使える環境では `systemd-run --user --scope --slice=wt-dev.slice` でラップし、`wt-dev-<worktree>-<svc>-<suffix>.scope` として **wt-web.service の cgroup 外**に分離する（#122。unit の stop/restart が dev サービスと headless chrome を巻き添えにしない）。`systemd-run` 不在・`WT_NO_SYSTEMD_RUN=1` の環境では従来どおり `sh -c` 直接 spawn にフォールバック。`PORT` と全サービス分の `WT_PORT_<NAME>` を環境変数で共有。600ms の起動グレース後に生存確認し、`running.json` へ記録。稼働 scope は `systemctl --user list-units 'wt-dev-*'` で列挙できる
+4. **停止**: `devserver.Down` がプロセスグループごと SIGTERM（カレント worktree の記録済みサービスのみが対象。wt-web 本体・他 worktree には影響しない。scope は全メンバー終了で自動消滅）
 5. **AutoStart 自動 serve**: `wt web` 起動時に `auto_start=true` かつ未稼働の worktree を `autostart.ServeAutoStart` が serve。既に稼働中の worktree は再起動しない
 6. **idle reaper**: `auto_start=true` かつ稼働中で、dev ポート帯に ESTABLISHED 接続が TTL（既定30分）以上無い worktree を自動 down（手動 serve は対象外、#92/#93）
 7. **幽霊ポート reaper**: 削除済み worktree の残骸（port_base だけ残る registry エントリ）を定期 prune（既定 1 日 1 回、`autostart.PortReaper`）。起動時と定期スケジュールで実行
