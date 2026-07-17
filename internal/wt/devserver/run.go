@@ -182,6 +182,13 @@ func Serve(out io.Writer, worktree string, base int) error {
 		return err
 	}
 
+	useSystemd := systemdRunAvailable()
+	if useSystemd {
+		_, _ = fmt.Fprintf(out, "プロセス起動モード: systemd-run (transient scope)\n")
+	} else {
+		_, _ = fmt.Fprintf(out, "プロセス起動モード: sh -c (fallback)\n")
+	}
+
 	// Every service learns all service ports via WT_PORT_<NAME> so a frontend
 	// can proxy to a sibling backend on its allocated port.
 	shared := sharedEnv(cfg.Services, base)
@@ -198,7 +205,13 @@ func Serve(out io.Writer, worktree string, base int) error {
 	for i, svc := range cfg.Services {
 		port := base + i
 		cmdStr := applyPort(svc.Cmd, port)
-		c := exec.Command("sh", "-c", cmdStr)
+		var c *exec.Cmd
+		if useSystemd {
+			unitName := scopeUnitName(worktree, svc.Name)
+			c = systemdRunCmd(unitName, cmdStr)
+		} else {
+			c = exec.Command("sh", "-c", cmdStr)
+		}
 		c.Dir = worktree
 		c.Env = append(os.Environ(), shared...)
 		c.Env = append(c.Env, fmt.Sprintf("PORT=%d", port))
