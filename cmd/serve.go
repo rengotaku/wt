@@ -28,7 +28,7 @@ func currentWorktree() (worktree, container, name string, err error) {
 func registerServeCmd(parent *cobra.Command) {
 	serveCmd := &cobra.Command{
 		Use:   "serve",
-		Short: ".wt/dev.toml のサーバーを割当ポートで起動（未割当なら自動採番）",
+		Short: "カレント worktree の dev サービスを割当ポートで起動（未割当なら自動採番。他 worktree には影響しない）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wt, container, name, err := currentWorktree()
 			if err != nil {
@@ -43,7 +43,7 @@ func registerServeCmd(parent *cobra.Command) {
 	}
 	downCmd := &cobra.Command{
 		Use:   "down",
-		Short: "wt serve で起動したサーバーを停止",
+		Short: "カレント worktree の dev サービスのみ停止（wt-web 本体・他 worktree には影響しない）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wt, _, _, err := currentWorktree()
 			if err != nil {
