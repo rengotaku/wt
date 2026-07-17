@@ -90,8 +90,7 @@ func treeRmCmd() *cobra.Command {
 	c.Flags().StringVar(&opts.Repo, "repo", "", "リポジトリ名（--branch 時必須）")
 	c.Flags().BoolVar(&opts.KeepBranch, "keep-branch", false, "ブランチを残す")
 	c.Flags().BoolVar(&opts.Merged, "merged", false, "マージ済み worktree を一括削除")
-	c.Flags().BoolVar(&opts.KeepTmux, "keep-tmux", false, "tmux セッションを残す")
-	c.Flags().BoolVar(&opts.Force, "force", false, "dirty / current session でも強行")
+	c.Flags().BoolVar(&opts.Force, "force", false, "dirty でも強行")
 	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "削除せず候補のみ表示")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "--merged 時に確認なしで全削除")
 	return c
@@ -101,21 +100,37 @@ func treeGcCmd() *cobra.Command {
 	var opts gc.Options
 	c := &cobra.Command{
 		Use:   "gc",
-		Short: "横断 GC（複数フィルタ AND）",
+		Short: "横断 GC（フィルタ／保持／安全の3群フラグ、複数フィルタは AND）",
+		Long: `横断 GC — 複数の worktree を条件で絞り込んで削除する。
+
+フラグは意味論で3群に分かれる:
+
+  Filter    どの worktree を対象にするか（複数指定は AND）
+    --done            PR merged/closed または issue closed の worktree
+    --merged          --done の後方互換 alias
+    --older-than=STR  最終コミットが STR (30d, 24h) 以上前
+
+  Retention  削除後に何を残すか
+    --keep-branch     ブランチを残す
+
+  Safety    実行前の確認
+    --dry-run         候補列挙のみ、削除しない
+    -y, --yes         確認なしで全候補を削除
+    --force           dirty な worktree も対象に含める`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return gc.Run(cmd.OutOrStdout(), opts)
 		},
 	}
-	c.Flags().BoolVar(&opts.Merged, "merged", false, "マージ済み PR に紐づくものだけ")
-	c.Flags().BoolVar(&opts.Closed, "closed", false, "issue/PR が closed/merged なものだけ")
-	c.Flags().BoolVar(&opts.IncludeDirty, "include-dirty", false, "--closed 時に未コミット変更ありも含める")
+	// Filter
+	c.Flags().BoolVar(&opts.Done, "done", false, "PR merged/closed または issue closed の worktree だけ")
+	c.Flags().BoolVar(&opts.Merged, "merged", false, "--done の alias（後方互換）")
 	c.Flags().StringVar(&opts.OlderThan, "older-than", "", "最終コミットが N(d|h) 以上前")
-	c.Flags().BoolVar(&opts.NoTmux, "no-tmux", false, "tmux セッションが無いものだけ")
+	// Retention
+	c.Flags().BoolVar(&opts.KeepBranch, "keep-branch", false, "ブランチを残す")
+	// Safety
 	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "候補のみ列挙")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "確認なしで全候補を削除")
-	c.Flags().BoolVar(&opts.KeepTmux, "keep-tmux", false, "tmux セッションを残す")
-	c.Flags().BoolVar(&opts.KeepBranch, "keep-branch", false, "ブランチを残す")
-	c.Flags().BoolVar(&opts.Force, "force", false, "dirty でも対象に含める")
+	c.Flags().BoolVar(&opts.Force, "force", false, "dirty も対象に含める")
 	return c
 }
 

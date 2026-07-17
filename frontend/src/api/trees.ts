@@ -7,7 +7,6 @@ export interface TreeItem {
   path: string;
   created_at: string;
   diff_count: number;
-  has_tmux: boolean;
   is_main: boolean;
   branch: string;
   issue?: string;
@@ -36,13 +35,12 @@ export interface DeleteTreeRequest {
 }
 
 export interface GcRequest {
-  merged?: boolean;
-  closed?: boolean;
-  include_dirty?: boolean;
+  done?: boolean;
+  merged?: boolean; // --done の後方互換 alias
   older_than?: string;
-  no_tmux?: boolean;
   dry_run?: boolean;
   yes?: boolean;
+  force?: boolean;
 }
 
 export interface GcResponse {

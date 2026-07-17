@@ -11,7 +11,6 @@ function makeTree(overrides: Partial<TreeItem> = {}): TreeItem {
     path: "/home/user/Workspace/myrepo/myrepo--feat-1",
     created_at: "2024-01-01",
     diff_count: 0,
-    has_tmux: false,
     is_main: false,
     branch: "feat/1",
     pinned: false,

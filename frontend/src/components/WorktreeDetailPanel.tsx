@@ -329,7 +329,6 @@ export function WorktreeDetailPanel({
               "なし"
             )}
           </Row>
-          <Row label="tmux">{t.has_tmux ? "あり" : "なし"}</Row>
           <Row label="作成日">{t.created_at || "—"}</Row>
         </div>
 
