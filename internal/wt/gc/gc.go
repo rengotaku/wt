@@ -16,24 +16,23 @@ import (
 	"wt/internal/wt/tree"
 )
 
-// Options captures CLI flags for `wt tree gc`.
+// Options captures CLI flags for `wt tree gc`. The three groups (filter /
+// retention / safety) map onto the flag groups shown in `wt tree gc --help`.
 type Options struct {
-	Merged       bool
-	Closed       bool   // issue/PR が closed/merged な worktree を対象に
-	IncludeDirty bool   // --closed 時に未コミット変更ありも含める
-	OlderThan    string // "30d", "24h"
-	NoTmux       bool
-	DryRun       bool
-	Yes          bool
-	KeepTmux     bool
-	KeepBranch   bool
-	Force        bool
+	// --- filter ---
+	Done      bool   // --done: PR merged/closed または issue closed の worktree を対象
+	Merged    bool   // --merged: --done の alias（後方互換）
+	OlderThan string // --older-than: 最終コミットが N(d|h) 以上前
+	// --- retention ---
+	KeepBranch bool // --keep-branch: ブランチを残す
+	// --- safety ---
+	DryRun bool // --dry-run: 候補列挙のみ
+	Yes    bool // --yes: 確認なしで削除
+	Force  bool // --force: dirty も対象に含める
 }
 
-// allowDirty reports whether dirty worktrees should be kept as candidates.
-func (o Options) allowDirty() bool {
-	return o.Force || (o.Closed && o.IncludeDirty)
-}
+// closedFilter reports whether the --done family (--done / --merged alias) is on.
+func (o Options) closedFilter() bool { return o.Done || o.Merged }
 
 var issueNumRe = regexp.MustCompile(`issue[-_]?(\d+)`)
 
@@ -88,6 +87,11 @@ func Run(out io.Writer, opts Options) error {
 		return err
 	}
 
+	// --merged は --done の後方互換 alias。使ったら通知する。
+	if opts.Merged && !opts.Done {
+		_, _ = fmt.Fprintln(out, "ℹ️  --merged は --done の alias です（PR merged/closed または issue closed を対象）")
+	}
+
 	type cand struct {
 		entry  tree.RmEntry
 		branch string
@@ -95,22 +99,11 @@ func Run(out io.Writer, opts Options) error {
 	}
 	var cands []cand
 
-	prCache := map[string][]mergedPR{}
-	if opts.Merged {
-		_, _ = fmt.Fprintln(out, "🧹 マージ済み PR を取得中...")
-		for i := range items {
-			if _, ok := prCache[items[i].MainDir]; ok {
-				continue
-			}
-			prCache[items[i].MainDir] = fetchMergedPRs(items[i].MainDir)
-		}
-	}
-
-	// --closed: branch→PR state と issue state を repo 単位でキャッシュ。
+	// --done: branch→PR state と issue state を repo 単位でキャッシュ。
 	prStateCache := map[string]map[string]string{}
 	issueCache := map[string]map[int]string{} // mainDir → issueNum → state
-	if opts.Closed {
-		_, _ = fmt.Fprintln(out, "🧹 closed な issue/PR を判定中...")
+	if opts.closedFilter() {
+		_, _ = fmt.Fprintln(out, "🧹 closed/merged な issue/PR を判定中...")
 		for i := range items {
 			md := items[i].MainDir
 			if _, ok := prStateCache[md]; !ok {
@@ -125,36 +118,14 @@ func Run(out io.Writer, opts Options) error {
 		if it.WtName == "main" || it.WtName == "master" {
 			continue
 		}
-		if core.IsDirty(it.WtPath) && !opts.allowDirty() {
+		if core.IsDirty(it.WtPath) && !opts.Force {
 			continue
 		}
 
 		branch, _ := core.GitOutput(it.WtPath, "branch", "--show-current")
 		info := ""
 
-		if opts.Merged {
-			if branch == "" {
-				continue
-			}
-			matched := false
-			for _, pr := range prCache[it.MainDir] {
-				if pr.HeadRefName != branch {
-					continue
-				}
-				date := pr.MergedAt
-				if len(date) > 10 {
-					date = date[:10]
-				}
-				info += fmt.Sprintf("PR #%d merged %s", pr.Number, date)
-				matched = true
-				break
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		if opts.Closed {
+		if opts.closedFilter() {
 			md := it.MainDir
 			issueState := func(n int) string {
 				if st, ok := issueCache[md][n]; ok {
@@ -167,9 +138,6 @@ func Run(out io.Writer, opts Options) error {
 			ok, reason := closedCandidate(branch, prStateCache[md], issueState)
 			if !ok {
 				continue
-			}
-			if info != "" {
-				info += "  "
 			}
 			info += reason
 		}
@@ -189,12 +157,6 @@ func Run(out io.Writer, opts Options) error {
 				info += "  "
 			}
 			info += "last commit " + date
-		}
-
-		if opts.NoTmux {
-			if exec.Command("tmux", "has-session", "-t", it.WtName).Run() == nil {
-				continue
-			}
 		}
 
 		cands = append(cands, cand{entry: *it, branch: branch, info: info})
@@ -225,9 +187,8 @@ func Run(out io.Writer, opts Options) error {
 	}
 
 	rmOpts := tree.RmOptions{
-		KeepTmux:   opts.KeepTmux,
 		KeepBranch: opts.KeepBranch,
-		Force:      opts.allowDirty(),
+		Force:      opts.Force,
 	}
 	for i := range cands {
 		c := &cands[i]
@@ -261,12 +222,6 @@ func parseOlderThan(s string) (int64, error) {
 	return 0, errors.New("--older-than の単位は d または h")
 }
 
-type mergedPR struct {
-	Number      int    `json:"number"`
-	HeadRefName string `json:"headRefName"`
-	MergedAt    string `json:"mergedAt"`
-}
-
 // repoSlug returns "owner/repo" from the origin remote, or "" if not GitHub.
 func repoSlug(mainDir string) string {
 	remote, err := core.GitOutput(mainDir, "remote", "get-url", "origin")
@@ -281,26 +236,6 @@ func repoSlug(mainDir string) string {
 		}
 	}
 	return strings.TrimSuffix(slug, ".git")
-}
-
-func fetchMergedPRs(mainDir string) []mergedPR {
-	slug := repoSlug(mainDir)
-	if slug == "" {
-		return nil
-	}
-	out, err := exec.Command("gh", "pr", "list",
-		"--state", "merged",
-		"--json", "number,headRefName,mergedAt",
-		"--limit", "200",
-		"--repo", slug).Output()
-	if err != nil {
-		return nil
-	}
-	var prs []mergedPR
-	if err := json.Unmarshal(out, &prs); err != nil {
-		return nil
-	}
-	return prs
 }
 
 // fetchPRStates returns branch→state (OPEN/CLOSED/MERGED) for all PRs of a repo.

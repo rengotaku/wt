@@ -19,7 +19,6 @@ type RmOptions struct {
 	Repo       string // --repo
 	KeepBranch bool   // --keep-branch
 	Merged     bool   // --merged
-	KeepTmux   bool   // --keep-tmux
 	Force      bool   // --force
 	DryRun     bool   // --dry-run
 	Yes        bool   // --yes (--merged 時に必須)
@@ -130,12 +129,6 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 		return nil
 	}
 
-	if !opts.KeepTmux {
-		if err := killTmuxSession(out, t.WtName, opts.Force); err != nil {
-			return err
-		}
-	}
-
 	branch := branchOfWorktree(t.MainDir, t.WtPath)
 
 	_ = core.GitRun(t.MainDir, "worktree", "remove", t.WtPath, "--force")
@@ -168,30 +161,6 @@ func branchOfWorktree(mainDir, wtPath string) string {
 		}
 	}
 	return ""
-}
-
-// killTmuxSession terminates the tmux session if it exists; if it's the
-// currently attached session, requires force to proceed.
-func killTmuxSession(out io.Writer, name string, force bool) error {
-	if exec.Command("tmux", "has-session", "-t", name).Run() != nil {
-		return nil
-	}
-	cur, _ := exec.Command("tmux", "display-message", "-p", "#S").Output()
-	curName := strings.TrimSpace(string(cur))
-	if curName == name {
-		if !force {
-			_, _ = fmt.Fprintf(out, "⚠️  現在 attach 中のセッションはスキップ: %s（--force で強行）\n", name)
-			return errors.New("aborted: current tmux session")
-		}
-		_, _ = fmt.Fprintf(out, "⚠️  現在のセッションを強制 kill: %s\n", name)
-	}
-	if err := exec.Command("tmux", "kill-session", "-t", name).Run(); err != nil {
-		return nil //nolint:nilerr // tmux exit codes are advisory here
-	}
-	if curName != name {
-		_, _ = fmt.Fprintf(out, "🔪 tmux kill-session: %s\n", name)
-	}
-	return nil
 }
 
 // eligibleForMerged returns the entries the --merged workflow should consider:

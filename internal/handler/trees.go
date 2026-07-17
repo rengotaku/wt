@@ -33,30 +33,11 @@ type treeItem struct {
 	Path      string `json:"path"`
 	CreatedAt string `json:"created_at"`
 	DiffCount int    `json:"diff_count"`
-	HasTmux   bool   `json:"has_tmux"`
 	IsMain    bool   `json:"is_main"`
 	Branch    string `json:"branch"`
 	Issue     string `json:"issue,omitempty"`
 	Pinned    bool   `json:"pinned"`
 	AutoStart bool   `json:"auto_start"`
-}
-
-func (h *Handler) getTmuxSessions() map[string]bool {
-	const key = "tmux_sessions"
-	if v, ok := h.cache.get(key); ok {
-		return v.(map[string]bool)
-	}
-	sessions := map[string]bool{}
-	out, err := exec.Command("tmux", "ls", "-F", "#{session_name}").Output()
-	if err == nil {
-		for _, s := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			if s != "" {
-				sessions[s] = true
-			}
-		}
-	}
-	h.cache.set(key, sessions, cacheTTL)
-	return sessions
 }
 
 func (h *Handler) getDiffCount(path string) int {
@@ -88,7 +69,6 @@ func (h *Handler) getBranch(path string) string {
 
 func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 	entries := tree.Entries()
-	tmuxSessions := h.getTmuxSessions()
 
 	hiddenRepos := make(map[string]bool)
 	for _, c := range core.ListContainers() {
@@ -122,7 +102,6 @@ func (h *Handler) ListTrees(w http.ResponseWriter, _ *http.Request) {
 		go func(idx int) {
 			defer wg.Done()
 			items[idx].DiffCount = h.getDiffCount(items[idx].Path)
-			items[idx].HasTmux = tmuxSessions[items[idx].WtName]
 			items[idx].Branch = h.getBranch(items[idx].Path)
 		}(i)
 	}
@@ -359,13 +338,12 @@ func (h *Handler) UpdateTree(w http.ResponseWriter, r *http.Request) {
 }
 
 type gcRequest struct {
-	Merged       bool   `json:"merged"`
-	Closed       bool   `json:"closed"`
-	IncludeDirty bool   `json:"include_dirty"`
-	OlderThan    string `json:"older_than"`
-	NoTmux       bool   `json:"no_tmux"`
-	DryRun       bool   `json:"dry_run"`
-	Yes          bool   `json:"yes"`
+	Done      bool   `json:"done"`
+	Merged    bool   `json:"merged"` // 後方互換 alias（deprecated → --done）
+	OlderThan string `json:"older_than"`
+	DryRun    bool   `json:"dry_run"`
+	Yes       bool   `json:"yes"`
+	Force     bool   `json:"force"`
 }
 
 func (h *Handler) GcTrees(w http.ResponseWriter, r *http.Request) {
@@ -388,13 +366,12 @@ func (h *Handler) GcTrees(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	opts := gc.Options{
-		Merged:       req.Merged,
-		Closed:       req.Closed,
-		IncludeDirty: req.IncludeDirty,
-		OlderThan:    req.OlderThan,
-		NoTmux:       req.NoTmux,
-		DryRun:       req.DryRun,
-		Yes:          req.Yes,
+		Done:      req.Done,
+		Merged:    req.Merged,
+		OlderThan: req.OlderThan,
+		DryRun:    req.DryRun,
+		Yes:       req.Yes,
+		Force:     req.Force,
 	}
 	if err := gc.Run(&buf, opts); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())

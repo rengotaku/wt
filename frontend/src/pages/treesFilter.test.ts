@@ -9,7 +9,6 @@ const makeTree = (overrides: Partial<TreeItem>): TreeItem => ({
   path: "/home/user/Workspace/repo/repo--feat-issue-1-abc",
   created_at: "2024-01-01",
   diff_count: 0,
-  has_tmux: false,
   is_main: false,
   branch: "feat/issue-1-abc",
   pinned: false,

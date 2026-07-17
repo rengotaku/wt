@@ -8,11 +8,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export function GcPage() {
   const [opts, setOpts] = useState<GcRequest>({
-    merged: false,
-    closed: false,
-    include_dirty: false,
+    done: false,
     older_than: "",
-    no_tmux: false,
+    force: false,
     dry_run: true,
     yes: false,
   });
@@ -43,71 +41,56 @@ export function GcPage() {
             まず「プレビュー」で削除対象を確認してから「GC 実行」で削除します。
             <br />
             <span className="text-xs">
-              ※ main / master worktree と、未コミットの変更がある worktree は対象外です。
+              ※ main / master worktree は対象外。dirty な worktree は既定で対象外
+              （「dirty も含める」を有効にすると強制対象化します）。
             </span>
           </p>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={opts.merged ?? false}
-              onChange={(e) => setOpts({ ...opts, merged: e.target.checked })}
-            />
-            マージ済み PR のみ対象
-          </label>
-          <p className="text-xs text-muted-foreground ml-5">
-            マージ済みブランチを持つ worktree のみを GC 対象にします。
-          </p>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={opts.closed ?? false}
-              onChange={(e) => setOpts({ ...opts, closed: e.target.checked })}
-            />
-            closed な issue/PR のみ対象
-          </label>
-          <p className="text-xs text-muted-foreground ml-5">
-            対応する issue / PR が close（マージ含む）された worktree を対象にします。
-            放置された没ブランチの掃除に。
-          </p>
-          <label className="flex items-center gap-2 text-sm ml-5">
-            <input
-              type="checkbox"
-              checked={opts.include_dirty ?? false}
-              disabled={!opts.closed}
-              onChange={(e) => setOpts({ ...opts, include_dirty: e.target.checked })}
-            />
-            未コミット変更ありも含める（closed 時）
-          </label>
-          <p className="text-xs text-muted-foreground ml-5">
-            通常は変更ありの worktree は対象外ですが、closed なものは変更があっても削除します。
-          </p>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={opts.no_tmux ?? false}
-              onChange={(e) => setOpts({ ...opts, no_tmux: e.target.checked })}
-            />
-            tmux セッションなしのみ対象
-          </label>
-          <p className="text-xs text-muted-foreground ml-5">
-            アクティブな tmux セッションが存在しない worktree のみを対象にします。
-          </p>
-          <div className="flex items-center gap-2">
-            <label className="text-sm whitespace-nowrap">最終コミット</label>
-            <Input
-              className="w-32"
-              placeholder="30d / 24h"
-              value={opts.older_than ?? ""}
-              onChange={(e) => setOpts({ ...opts, older_than: e.target.value })}
-            />
-            <span className="text-sm text-muted-foreground">以上前</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            指定期間より古い最終コミットを持つ worktree を対象にします（例: 30d =
-            30日前、24h = 24時間前）。
-          </p>
+        <CardContent className="space-y-6">
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">Filter — どの worktree を対象にするか</h3>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={opts.done ?? false}
+                onChange={(e) => setOpts({ ...opts, done: e.target.checked })}
+              />
+              done な PR / issue の worktree を対象
+            </label>
+            <p className="text-xs text-muted-foreground ml-5">
+              対応する PR が merged / closed、または issue が closed の worktree
+              を対象にします。放置された没ブランチの掃除に。
+            </p>
+            <div className="flex items-center gap-2">
+              <label className="text-sm whitespace-nowrap">最終コミット</label>
+              <Input
+                className="w-32"
+                placeholder="30d / 24h"
+                value={opts.older_than ?? ""}
+                onChange={(e) => setOpts({ ...opts, older_than: e.target.value })}
+              />
+              <span className="text-sm text-muted-foreground">以上前</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              指定期間より古い最終コミットを持つ worktree を対象にします（例: 30d =
+              30日前、24h = 24時間前）。
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">Safety — 実行前の確認</h3>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={opts.force ?? false}
+                onChange={(e) => setOpts({ ...opts, force: e.target.checked })}
+              />
+              dirty な worktree も対象に含める（--force 相当）
+            </label>
+            <p className="text-xs text-muted-foreground ml-5">
+              未コミットの変更がある worktree も削除対象にします。
+            </p>
+          </section>
 
           <div className="flex gap-2">
             <Button

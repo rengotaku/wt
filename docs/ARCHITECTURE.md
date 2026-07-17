@@ -157,7 +157,17 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 - **sticky header**: `TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]"` で行リストのみ縦スクロール可能に
 - **wrapperClassName**: `Table` コンポーネントに `max-h-[calc(100vh-250px)]` を指定し、ビューポート内での高さ制限
 - **列トグルドロップダウン**: 「表示列 ▾」ドロップダウンに Issue / PR 列の表示/非表示を集約
-- **表示変更**: tmux 列・親 issue 列は UI から削除（バックエンド配線 `has_tmux` / `issueDetail` は維持して将来対応を残す）
+- **表示変更**: tmux 列・親 issue 列は UI から削除（tmux 概念は #127 でバックエンド/CLI からも完全撤去）
+
+## wt tree gc の3群フラグ（#127）
+
+`wt tree gc` のフラグは意味論で3群に整列されている（`cmd/tree.go` の `treeGcCmd` と `internal/wt/gc/gc.go` の `Options`）:
+
+- **Filter**（複数指定は AND）: `--done`（PR merged/closed または issue closed）/ `--merged`（`--done` の後方互換 alias）/ `--older-than=STR`（30d / 24h）
+- **Retention**: `--keep-branch`（ブランチを残す）
+- **Safety**: `--dry-run`（列挙のみ）/ `-y, --yes`（確認省略）/ `--force`（dirty も対象）
+
+`--merged` / `--closed` / `--include-dirty` の分離は撤廃され、`--done` と `--force` に統合された。tmux セッションの管理（`--no-tmux` / `--keep-tmux` / `killTmuxSession`）は撤去されており、`wt tree rm` / `wt tree gc` は tmux を一切参照しない。
 
 ## どこを触れば何が変わるか
 

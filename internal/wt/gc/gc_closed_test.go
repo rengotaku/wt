@@ -54,17 +54,17 @@ func TestClosedCandidate(t *testing.T) {
 	}
 }
 
-func TestAllowDirty(t *testing.T) {
-	if (Options{}).allowDirty() {
-		t.Error("default should not allow dirty")
+func TestClosedFilter(t *testing.T) {
+	if (Options{}).closedFilter() {
+		t.Error("default should not enable the closed filter")
 	}
-	if !(Options{Force: true}).allowDirty() {
-		t.Error("--force should allow dirty")
+	if !(Options{Done: true}).closedFilter() {
+		t.Error("--done should enable the closed filter")
 	}
-	if (Options{Closed: true}).allowDirty() {
-		t.Error("--closed alone should not allow dirty")
+	if !(Options{Merged: true}).closedFilter() {
+		t.Error("--merged (alias) should enable the closed filter")
 	}
-	if !(Options{Closed: true, IncludeDirty: true}).allowDirty() {
-		t.Error("--closed --include-dirty should allow dirty")
+	if !(Options{Done: true, Merged: true}).closedFilter() {
+		t.Error("--done and --merged together should enable the closed filter")
 	}
 }
