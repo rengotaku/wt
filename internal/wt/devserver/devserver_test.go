@@ -98,6 +98,7 @@ domain = true
 }
 
 func TestServeAndDown(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	wt := writeWorktree(t, `
 [[services]]
 name = "sleeper"
@@ -128,6 +129,7 @@ cmd = "sleep 30"
 }
 
 func TestServe_DeadOnStartupNotRecorded(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	// A command that exits immediately (as a port conflict would) must be
 	// reported as failed, not as running.
 	wt := writeWorktree(t, "[[services]]\nname = \"crasher\"\ncmd = \"echo 'Address already in use' >&2; exit 1\"\n")
@@ -145,6 +147,7 @@ func TestServe_DeadOnStartupNotRecorded(t *testing.T) {
 }
 
 func TestServe_PartialFailureKeepsSurvivors(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	// One service stays up, one dies: Serve succeeds, records only the survivor.
 	wt := writeWorktree(t, `
 [[services]]
@@ -338,6 +341,7 @@ func cmdOf(c Config) string {
 }
 
 func TestLogs_CapturesOutputAndPersists(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	wt := writeWorktree(t, "[[services]]\nname = \"noisy\"\ncmd = \"echo HELLO_LOG_LINE; sleep 30\"\n")
 	var buf bytes.Buffer
 	if err := Serve(&buf, wt, 9000); err != nil {
@@ -398,6 +402,7 @@ func TestSameServicesAndSourceLabel(t *testing.T) {
 // default shadows a divergent committed .wt/dev.toml, Serve prints the source
 // and a warning so editing the file-with-no-effect is no longer invisible.
 func TestServe_WarnsWhenFileShadowed(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	container := t.TempDir()
 	worktree := filepath.Join(container, "feat-x")
@@ -432,6 +437,7 @@ func TestServe_WarnsWhenFileShadowed(t *testing.T) {
 // TestServe_NoWarnWhenFileIsSource verifies no false warning when the committed
 // file itself is the effective source.
 func TestServe_NoWarnWhenFileIsSource(t *testing.T) {
+	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
 	wt := writeWorktree(t, "[[services]]\nname = \"web\"\ncmd = \"sleep 30\"\n")
 	var buf bytes.Buffer
 	if err := Serve(&buf, wt, 9000); err != nil {
