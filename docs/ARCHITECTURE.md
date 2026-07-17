@@ -8,8 +8,8 @@ git worktree 管理 CLI + Web UI。単一 Go バイナリ（React SPA を go:emb
 wt (cobra CLI)
 ├── tree / repo / symlink / gc   worktree・リポジトリ管理
 ├── dev / serve / ports          dev サービス定義・起動・ポート管理
-├── proxy                        ドメインルーティング (:8088)
-└── web                          SPA + JSON API (:8090)
+├── proxy                        ドメインルーティング (:8088、`wt web` に内蔵。単独起動も可)
+└── web                          SPA + JSON API (:8090、内蔵 proxy を既定 ON で同時起動)
 ```
 
 ### ディレクトリマップ
@@ -35,7 +35,7 @@ wt (cobra CLI)
 |---|---|
 | `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / auto_start / port_base / `_config.dev_services` 等） |
 | `<base>/<repo>/.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` | repo 単位の表示/非表示フラグ（ローカル設定、コミットしない） |
-| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[process_stats]` |
+| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
 | `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
@@ -48,6 +48,16 @@ wt (cobra CLI)
 5. **AutoStart 自動 serve**: `wt web` 起動時に `auto_start=true` かつ未稼働の worktree を `autostart.ServeAutoStart` が serve。既に稼働中の worktree は再起動しない
 6. **idle reaper**: `auto_start=true` かつ稼働中で、dev ポート帯に ESTABLISHED 接続が TTL（既定30分）以上無い worktree を自動 down（手動 serve は対象外、#92/#93）
 7. **幽霊ポート reaper**: 削除済み worktree の残骸（port_base だけ残る registry エントリ）を定期 prune（既定 1 日 1 回、`autostart.PortReaper`）。起動時と定期スケジュールで実行
+
+## 内蔵 proxy（#125）
+
+`wt web` は起動時に built-in reverse proxy を **既定で同時起動**する（`cmd/web.go`）。`<label>.<repo>.wt.localhost:<port>` 形式で各 worktree の domain-exposed dev サービスに名前でアクセスできる。
+
+- 実装は `internal/handler/proxy.go` の `proxyController`。`wt web` プロセス内で goroutine として動作
+- 設定は `settings.toml` の `[proxy]` セクション（`enabled`, `port`）と、CLI フラグ（`--proxy-port` / `--no-proxy`）で行う。CLI フラグは settings を上書きする
+- 起動失敗（ポート衝突等）は warn ログとして出力し、`wt web` 本体（:8090）は起動を続行する
+- 既存の `wt proxy` 独立コマンドは維持（別プロセスで proxy だけ動かしたい場合や、内蔵をオフにしたい場合に使う）
+- Web UI（`SettingsPage`）から `POST /api/proxy/start|stop` で稼働状態を切り替えられる。この操作は現行 wt web セッション内でのみ有効（`settings.toml` を書き換えないため永続化しない）
 
 ## ピン留めと自動起動の分離（#103）
 

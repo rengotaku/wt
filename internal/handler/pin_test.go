@@ -14,7 +14,7 @@ import (
 // pinRequest issues SetTreePin directly with path values set, mirroring how the
 // router would populate {repo}/{wt}.
 func pinRequest(repo, wt, body string) *httptest.ResponseRecorder {
-	h := New()
+	h := New(0)
 	r := httptest.NewRequest(http.MethodPut, "/api/trees/"+repo+"/"+wt+"/pin", strings.NewReader(body))
 	r.SetPathValue("repo", repo)
 	r.SetPathValue("wt", wt)

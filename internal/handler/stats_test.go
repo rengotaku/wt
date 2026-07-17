@@ -35,7 +35,7 @@ func TestGetProcessStats(t *testing.T) {
 	// 実環境の settings.toml に依存しないよう設定を空ディレクトリへ隔離する
 	// （しきい値の既定値 2048/4096 を検証するため）。
 	t.Setenv("WT_CONFIG_DIR", t.TempDir())
-	h := New()
+	h := New(0)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/process-stats", http.NoBody)
 	w := httptest.NewRecorder()

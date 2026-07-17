@@ -13,8 +13,11 @@ type Handler struct {
 	prx   *proxyController
 }
 
-// New returns a ready-to-use Handler.
-func New() *Handler { return &Handler{cache: newTTLCache(), prx: &proxyController{}} }
+// New returns a ready-to-use Handler. proxyPort is the TCP port the built-in
+// reverse proxy will bind to when started; pass 0 to use the built-in default.
+func New(proxyPort int) *Handler {
+	return &Handler{cache: newTTLCache(), prx: newProxyController(proxyPort)}
+}
 
 // Routes wires all API endpoints and falls back to staticHandler for SPA assets.
 func (h *Handler) Routes(staticHandler http.Handler) http.Handler {

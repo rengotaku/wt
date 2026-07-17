@@ -14,7 +14,7 @@ import (
 // autoStartRequest issues SetTreeAutoStart directly with path values set,
 // mirroring how the router would populate {repo}/{wt}.
 func autoStartRequest(repo, wt, body string) *httptest.ResponseRecorder {
-	h := New()
+	h := New(0)
 	r := httptest.NewRequest(http.MethodPut, "/api/trees/"+repo+"/"+wt+"/autostart", strings.NewReader(body))
 	r.SetPathValue("repo", repo)
 	r.SetPathValue("wt", wt)
