@@ -63,7 +63,7 @@ func TestUpdateTree_RestartLogic(t *testing.T) {
 			}
 			t.Cleanup(func() { restartDevIfRunning = oldRestart })
 
-			h := New()
+			h := New(0)
 			r := httptest.NewRequest(http.MethodPost, "/api/trees/myrepo/wt1/update", http.NoBody)
 			r.SetPathValue("repo", "myrepo")
 			r.SetPathValue("wt", "wt1")
@@ -106,7 +106,7 @@ func TestListTrees_HiddenRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New()
+	h := New(0)
 	r := httptest.NewRequest(http.MethodGet, "/api/trees", http.NoBody)
 	w := httptest.NewRecorder()
 	h.ListTrees(w, r)

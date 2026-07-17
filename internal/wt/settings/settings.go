@@ -49,16 +49,28 @@ type ProcessStats struct {
 	DangerMB int `toml:"danger_mb"`
 }
 
+// Proxy configures the built-in reverse proxy that `wt web` starts alongside
+// the API. Port is the listen port for `<label>.<repo>.wt.localhost`; Enabled
+// toggles auto-start at `wt web` startup.
+type Proxy struct {
+	Enabled bool `toml:"enabled"`
+	Port    int  `toml:"port"`
+}
+
 // Settings is the full wt settings document.
 type Settings struct {
 	DevPorts     DevPorts     `toml:"dev_ports"`
 	IdleReaper   IdleReaper   `toml:"idle_reaper"`
 	PortReaper   PortReaper   `toml:"port_reaper"`
 	ProcessStats ProcessStats `toml:"process_stats"`
+	Proxy        Proxy        `toml:"proxy"`
 }
 
 // defaultPortReaperIntervalMinutes is once a day.
 const defaultPortReaperIntervalMinutes = 24 * 60
+
+// DefaultProxyPort is the built-in proxy's default listen port.
+const DefaultProxyPort = 8088
 
 // Default returns the built-in settings.
 func Default() Settings {
@@ -67,6 +79,7 @@ func Default() Settings {
 		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
 		PortReaper:   PortReaper{Enabled: true, IntervalMinutes: defaultPortReaperIntervalMinutes},
 		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
+		Proxy:        Proxy{Enabled: true, Port: DefaultProxyPort},
 	}
 }
 
@@ -120,6 +133,9 @@ func Load() Settings {
 		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
 		loaded.ProcessStats.DangerMB = def.ProcessStats.DangerMB
 	}
+	if loaded.Proxy.Port <= 0 || loaded.Proxy.Port > 65535 {
+		loaded.Proxy.Port = def.Proxy.Port
+	}
 	if err := loaded.Validate(); err != nil {
 		return def
 	}
@@ -127,7 +143,7 @@ func Load() Settings {
 }
 
 // Save validates and atomically writes settings to disk.
-func Save(s Settings) error {
+func Save(s *Settings) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
@@ -157,7 +173,7 @@ func Save(s Settings) error {
 }
 
 // Validate ensures the dev port band is sane and fits at least one block.
-func (s Settings) Validate() error {
+func (s *Settings) Validate() error {
 	d := s.DevPorts
 	if d.Start < 1024 || d.Start > 65535 {
 		return fmt.Errorf("dev_ports.start は 1024-65535 の範囲で指定してください: %d", d.Start)
@@ -170,6 +186,9 @@ func (s Settings) Validate() error {
 	}
 	if d.End-d.Start+1 < minBandSpan {
 		return fmt.Errorf("dev ポート帯は最低 %d ポート必要です（start=%d end=%d）", minBandSpan, d.Start, d.End)
+	}
+	if p := s.Proxy.Port; p < 1024 || p > 65535 {
+		return fmt.Errorf("proxy.port は 1024-65535 の範囲で指定してください: %d", p)
 	}
 	return nil
 }

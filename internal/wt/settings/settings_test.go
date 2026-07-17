@@ -16,8 +16,8 @@ func TestLoad_MissingFileReturnsDefault(t *testing.T) {
 
 func TestSaveThenLoad_RoundTrip(t *testing.T) {
 	t.Setenv("WT_CONFIG_DIR", t.TempDir())
-	want := Settings{DevPorts: DevPorts{Start: 9500, End: 9700}}
-	if err := Save(want); err != nil {
+	want := Settings{DevPorts: DevPorts{Start: 9500, End: 9700}, Proxy: Proxy{Enabled: true, Port: DefaultProxyPort}}
+	if err := Save(&want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 	got := Load()
@@ -182,6 +182,65 @@ danger_mb = 500
 	}
 }
 
+func TestLoad_Proxy(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. 未記載 -> default (enabled=true, port=8088)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load()
+	if !got.Proxy.Enabled || got.Proxy.Port != DefaultProxyPort {
+		t.Errorf("empty file: got %+v, want enabled=true port=%d", got.Proxy, DefaultProxyPort)
+	}
+
+	// 2. 明示値 -> 尊重
+	content := `
+[proxy]
+enabled = false
+port = 8100
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.Proxy.Enabled || got.Proxy.Port != 8100 {
+		t.Errorf("explicit file: got %+v, want enabled=false port=8100", got.Proxy)
+	}
+
+	// 3. port=0 -> 既定値へ補正（enabled は保持）
+	contentZero := `
+[proxy]
+enabled = true
+port = 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentZero), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if !got.Proxy.Enabled || got.Proxy.Port != DefaultProxyPort {
+		t.Errorf("port=0: got %+v, want enabled=true port=%d (default)", got.Proxy, DefaultProxyPort)
+	}
+
+	// 4. port 範囲外 -> Validate 失敗で全体が Default にフォールバック
+	contentOOR := `
+[dev_ports]
+start = 9000
+end = 9999
+[proxy]
+enabled = true
+port = 80
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentOOR), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.Proxy.Port != DefaultProxyPort {
+		t.Errorf("port<1024: got %+v, want default fallback", got.Proxy)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -197,7 +256,8 @@ func TestValidate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Settings{DevPorts: tt.dp}.Validate()
+			s := Settings{DevPorts: tt.dp, Proxy: Proxy{Port: DefaultProxyPort}}
+			err := s.Validate()
 			if tt.wantErr && err == nil {
 				t.Error("expected error, got nil")
 			}

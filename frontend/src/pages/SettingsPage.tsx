@@ -126,11 +126,14 @@ export function SettingsPage() {
         <CardHeader>
           <CardTitle>内蔵 proxy（名前アクセス）</CardTitle>
           <p className="text-sm text-muted-foreground">
-            起動すると <code className="font-mono text-xs">{`<label>`}.wt.localhost:{proxyStatus?.port ?? 8088}</code>{" "}
+            <code className="font-mono text-xs">{`<label>`}.{`<repo>`}.wt.localhost:{proxyStatus?.port ?? 8088}</code>{" "}
             で各 worktree の dev サーバに名前でアクセスできます（
             <code className="font-mono text-xs">domain = true</code> のサービスのみ）。
-            マシン全体で1つの共有サービスです。通常のアクセスはポート直リンクで足り、
-            名前アクセスを使いたいときだけ起動してください。
+            <strong>wt web 起動時にデフォルトで自動起動</strong>し、マシン全体で1つの共有サービスです。
+            ポート変更は{" "}
+            <code className="font-mono text-xs">wt web --proxy-port &lt;PORT&gt;</code> または{" "}
+            <code className="font-mono text-xs">~/.config/wt/settings.toml</code>{" "}
+            の <code className="font-mono text-xs">[proxy]</code> セクションで指定できます。
           </p>
         </CardHeader>
         <CardContent>

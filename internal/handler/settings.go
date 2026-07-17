@@ -17,7 +17,7 @@ type settingsDTO struct {
 	DevPorts devPortsDTO `json:"dev_ports"`
 }
 
-func toSettingsDTO(s settings.Settings) settingsDTO {
+func toSettingsDTO(s *settings.Settings) settingsDTO {
 	return settingsDTO{DevPorts: devPortsDTO{
 		Start:     s.DevPorts.Start,
 		End:       s.DevPorts.End,
@@ -27,7 +27,8 @@ func toSettingsDTO(s settings.Settings) settingsDTO {
 
 // GetSettings returns the current wt settings.
 func (h *Handler) GetSettings(w http.ResponseWriter, _ *http.Request) {
-	jsonOK(w, toSettingsDTO(settings.Load()))
+	cur := settings.Load()
+	jsonOK(w, toSettingsDTO(&cur))
 }
 
 type updateSettingsRequest struct {
@@ -37,20 +38,21 @@ type updateSettingsRequest struct {
 	} `json:"dev_ports"`
 }
 
-// UpdateSettings validates and persists the dev port band.
+// UpdateSettings validates and persists the dev port band. Other sections
+// (Proxy, IdleReaper, etc.) are preserved from the on-disk settings so the
+// partial UI update doesn't clobber them.
 func (h *Handler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req updateSettingsRequest
 	if err := decodeJSON(r, &req); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid JSON")
 		return
 	}
-	s := settings.Settings{DevPorts: settings.DevPorts{
-		Start: req.DevPorts.Start,
-		End:   req.DevPorts.End,
-	}}
-	if err := settings.Save(s); err != nil {
+	s := settings.Load()
+	s.DevPorts = settings.DevPorts{Start: req.DevPorts.Start, End: req.DevPorts.End}
+	if err := settings.Save(&s); err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonOK(w, toSettingsDTO(settings.Load()))
+	next := settings.Load()
+	jsonOK(w, toSettingsDTO(&next))
 }

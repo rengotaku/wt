@@ -8,24 +8,39 @@ import (
 	"time"
 
 	"wt/internal/wt/proxy"
+	"wt/internal/wt/settings"
 )
-
-// proxyPort is the fixed port the built-in reverse proxy listens on. The
-// <label>.wt.localhost links in the UI point at this port.
-const proxyPort = 8088
 
 // proxyController runs wt's reverse proxy as a goroutine inside the wt web
 // process so it can be started/stopped from the Web UI without a separate
 // `wt proxy` command. It is safe for concurrent use.
 type proxyController struct {
-	mu  sync.Mutex
-	srv *http.Server
+	mu   sync.Mutex
+	srv  *http.Server
+	port int
+}
+
+// newProxyController returns a controller that will listen on `port` when
+// started. A port <= 0 falls back to the built-in default so callers that
+// haven't threaded a value through still get a working proxy.
+func newProxyController(port int) *proxyController {
+	if port <= 0 {
+		port = settings.DefaultProxyPort
+	}
+	return &proxyController{port: port}
 }
 
 func (p *proxyController) isRunning() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.srv != nil
+}
+
+// listenPort returns the port the controller will bind to on start().
+func (p *proxyController) listenPort() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.port
 }
 
 // start binds the proxy port and serves in the background. It is a no-op when
@@ -37,7 +52,7 @@ func (p *proxyController) start() error {
 	if p.srv != nil {
 		return nil
 	}
-	addr := fmt.Sprintf("127.0.0.1:%d", proxyPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", p.port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -71,8 +86,13 @@ type proxyStatus struct {
 }
 
 func (h *Handler) statusOfProxy() proxyStatus {
-	return proxyStatus{Running: h.prx.isRunning(), Port: proxyPort, Suffix: proxy.DomainSuffix}
+	return proxyStatus{Running: h.prx.isRunning(), Port: h.prx.listenPort(), Suffix: proxy.DomainSuffix}
 }
+
+// StartBuiltinProxy starts the built-in proxy synchronously so callers can
+// distinguish success from bind failure at wt web startup. Idempotent while
+// already running.
+func (h *Handler) StartBuiltinProxy() error { return h.prx.start() }
 
 // GetProxy returns whether the built-in proxy is currently running.
 func (h *Handler) GetProxy(w http.ResponseWriter, _ *http.Request) {

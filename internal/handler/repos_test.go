@@ -68,7 +68,7 @@ func TestSyncRepo_RestartLogic(t *testing.T) {
 			}
 			t.Cleanup(func() { restartDevIfRunning = oldRestart })
 
-			h := New()
+			h := New(0)
 			r := httptest.NewRequest(http.MethodPost, "/api/repos/myrepo/sync", strings.NewReader(`{"name":"myrepo"}`))
 			w := httptest.NewRecorder()
 			h.SyncRepo(w, r)
@@ -99,7 +99,7 @@ func TestSetRepoHidden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New()
+	h := New(0)
 
 	// Hide the repo
 	reqBody := `{"hidden":true}`
