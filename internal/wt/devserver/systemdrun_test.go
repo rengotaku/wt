@@ -1,6 +1,8 @@
 package devserver
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -87,5 +89,61 @@ func TestSystemdRunCmd(t *testing.T) {
 		if arg != wantArgs[i] {
 			t.Errorf("arg %d = %q, want %q", i, arg, wantArgs[i])
 		}
+	}
+}
+
+func TestScopeGlobForWorktree(t *testing.T) {
+	tests := []struct {
+		worktree string
+		want     string
+	}{
+		{"/home/user/work/my-repo", "wt-dev-home-user-work-my-repo-*.scope"},
+		{"weird!@#path", "wt-dev-weird-path-*.scope"},
+		{"/w", "wt-dev-w-*.scope"},
+	}
+	for _, tt := range tests {
+		if got := scopeGlobForWorktree(tt.worktree); got != tt.want {
+			t.Errorf("scopeGlobForWorktree(%q) = %q, want %q", tt.worktree, got, tt.want)
+		}
+	}
+}
+
+// TestIsRunning_FallsBackToSystemdScope verifies that IsRunning returns true
+// when the recorded PID group is drained but a wt-dev scope is still active.
+// This is the failure mode fixed by #131 (python worker detaches via setsid,
+// so kill(-pid, 0) reports the group empty even while Chrome children run on
+// inside the transient scope).
+func TestIsRunning_FallsBackToSystemdScope(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
+	// Force systemdRunAvailable() to return true: point XDG_RUNTIME_DIR at a
+	// dir where "bus" is a regular file (not a directory).
+	xdg := t.TempDir()
+	t.Setenv("XDG_RUNTIME_DIR", xdg)
+	if err := os.WriteFile(filepath.Join(xdg, "bus"), []byte(""), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("WT_NO_SYSTEMD_RUN", "0")
+	if !systemdRunAvailable() {
+		t.Skip("systemd-run not available; PATH lookup failed")
+	}
+
+	// Override the systemd probe so we don't spawn systemctl in unit tests.
+	orig := hasActiveScope
+	t.Cleanup(func() { hasActiveScope = orig })
+
+	worktree := filepath.Join(home, "Workspace", "myrepo", "wtscope")
+	// No running.json exists → PID probe finds nothing.
+
+	hasActiveScope = func(w string) bool { return w == worktree }
+	if !IsRunning(worktree) {
+		t.Error("IsRunning should be true when an active scope exists even without recorded PIDs")
+	}
+
+	hasActiveScope = func(string) bool { return false }
+	if IsRunning(worktree) {
+		t.Error("IsRunning should be false when no PIDs and no active scope")
 	}
 }

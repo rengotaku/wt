@@ -68,3 +68,32 @@ func scopeUnitName(worktree, svc string) string {
 func systemdRunCmd(unitName, cmdStr string) *exec.Cmd {
 	return exec.Command("systemd-run", "--user", "--scope", "--quiet", "--collect", "--unit="+unitName, "--slice=wt-dev.slice", "--", "sh", "-c", cmdStr)
 }
+
+// scopeGlobForWorktree returns the systemd unit glob that matches every
+// wt-dev scope for the given worktree, regardless of service name or the
+// nanosecond suffix appended by scopeUnitName.
+func scopeGlobForWorktree(worktree string) string {
+	return fmt.Sprintf("wt-dev-%s-*.scope", sanitizeUnitPart(worktree, 40, true))
+}
+
+// hasActiveScope reports whether any wt-dev scope for the worktree is currently
+// active in the user's systemd instance. Used as a fallback for IsRunning when
+// the recorded PID group is empty (e.g. a python worker that detached via
+// setsid — its Chrome descendants live on inside the scope, but the recorded
+// leader PID's group is drained). #131
+//
+// The list-units output includes an empty final line when no matches exist, so
+// callers check for any non-empty line, not merely non-empty output.
+var hasActiveScope = func(worktree string) bool {
+	cmd := exec.Command("systemctl", "--user", "list-units", "--state=active", "--plain", "--no-legend", scopeGlobForWorktree(worktree))
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) != "" {
+			return true
+		}
+	}
+	return false
+}
