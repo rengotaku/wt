@@ -91,15 +91,20 @@ func serviceAlive(pid int) bool {
 }
 
 // IsRunning reports whether any service recorded for the worktree is alive.
+// When the recorded PID group has drained (e.g. sh → make → python detached
+// via setsid; Chrome children re-parented to systemd inside the scope), it
+// falls back to asking systemd whether any wt-dev-*.scope for this worktree
+// is still active. #131
 func IsRunning(worktree string) bool {
-	r, err := loadRunning(worktree)
-	if err != nil {
-		return false
-	}
-	for _, s := range r.Services {
-		if serviceAlive(s.PID) {
-			return true
+	if r, err := loadRunning(worktree); err == nil {
+		for _, s := range r.Services {
+			if serviceAlive(s.PID) {
+				return true
+			}
 		}
+	}
+	if systemdRunAvailable() && hasActiveScope(worktree) {
+		return true
 	}
 	return false
 }
