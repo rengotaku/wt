@@ -19,8 +19,16 @@ build-frontend:
 	@touch internal/static/dist/.gitkeep
 
 ## build: Build the monolithic binary (frontend embed + Go)
+# ldflags inject buildinfo so wt web can show a "binary may be stale" badge
+# when the source repo has advanced past the running binary's start time.
+# See internal/handler/buildinfo.go.
 build: build-frontend
-	go build -o $(BIN_DIR)/$(BINARY_NAME) .
+	go build \
+		-ldflags "\
+			-X wt/internal/buildinfo.Commit=$$(git rev-parse HEAD 2>/dev/null) \
+			-X wt/internal/buildinfo.CommitTime=$$(git log -1 --format=%ct HEAD 2>/dev/null) \
+			-X wt/internal/buildinfo.SourceRepo=$$(pwd)" \
+		-o $(BIN_DIR)/$(BINARY_NAME) .
 
 ## run: Run Go (-tags dev) + Vite in parallel for hot-reload development
 run:

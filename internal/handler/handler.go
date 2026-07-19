@@ -56,6 +56,7 @@ func (h *Handler) Routes(staticHandler http.Handler) http.Handler {
 	mux.HandleFunc("POST /api/proxy/stop", h.StopProxy)
 	mux.HandleFunc("GET /api/settings", h.GetSettings)
 	mux.HandleFunc("PUT /api/settings", h.UpdateSettings)
+	mux.HandleFunc("GET /api/build-info", h.GetBuildInfo)
 
 	mux.Handle("/", staticHandler)
 
