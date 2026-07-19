@@ -34,3 +34,5 @@ export type {
   WorktreeProcessStats,
   ServiceProcessStat,
 } from "./stats";
+export { buildInfoApi } from "./buildinfo";
+export type { BuildInfoResponse } from "./buildinfo";

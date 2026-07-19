@@ -92,6 +92,18 @@ repos ページで repo ごとに表示/非表示をトグル。非表示 repo �
 - `GET /api/ports`（worktree 別の稼働/縮退/ドメイン）、`/api/ports/listeners|stale`、`POST /api/ports/prune`、`/api/ports/{repo}/{wt}/serve|down|devconfig|logs`
 - `GET /api/process-stats`（後述）
 - `GET/POST /api/proxy`、`GET/PUT /api/settings`
+- `GET /api/build-info`（後述: バイナリ鮮度表示）
+
+## バイナリ鮮度表示（#133）
+
+`wt web` は systemd unit として常駐する（ホットリロード無し）。ソース repo に新しい commit が入っても再ビルド・差し替え・再起動しない限り古いコードで動き続けるため、画面ヘッダに「⚠ バイナリ古い可能性」バッジを出して気づけるようにする。
+
+- **判定**: `HEAD の commit 時刻 > バイナリ起動時刻` なら stale。動的ビルド（`-tags dev` / air）と source repo path が取れないケースはバッジを出さない（fail-closed）
+- **backend** (`internal/buildinfo/`, `internal/handler/buildinfo.go`):
+  - `buildinfo.Commit` / `.CommitTime` / `.SourceRepo` は Makefile の `ldflags` で埋め込む（`make build` 経由）。`buildinfo.StartTime` は `init()` で `time.Now()`
+  - `buildinfo.IsDev` は build tag（`mode_dev.go` / `mode_prod.go`）で切替
+  - `GET /api/build-info` が build 情報 + `git -C <SourceRepo> log -1 HEAD` の結果 + `is_stale` を返す。git 呼び出しは 5s の TTL キャッシュ、2s のタイムアウト
+- **frontend** (`Layout.tsx` の `StaleBinaryBadge`): 60s 間隔で fetch、`is_dev=false && is_stale=true` の時だけ黄色バッジ + hover で build/head commit 情報を表示
 
 ## プロセス状態可視化（process-stats）仕様（#99 / PR #100）
 
