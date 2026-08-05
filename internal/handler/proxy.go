@@ -1,9 +1,10 @@
 package handler
 
 import (
-	"fmt"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,16 +19,23 @@ type proxyController struct {
 	mu   sync.Mutex
 	srv  *http.Server
 	port int
+	bind string
 }
 
 // newProxyController returns a controller that will listen on `port` when
 // started. A port <= 0 falls back to the built-in default so callers that
-// haven't threaded a value through still get a working proxy.
+// haven't threaded a value through still get a working proxy. The bind address
+// comes from settings so the proxy can be reached from the LAN (default) or
+// restricted to loopback.
 func newProxyController(port int) *proxyController {
 	if port <= 0 {
 		port = settings.DefaultProxyPort
 	}
-	return &proxyController{port: port}
+	bind := strings.TrimSpace(settings.Load().Proxy.Bind)
+	if bind == "" {
+		bind = settings.DefaultProxyBind
+	}
+	return &proxyController{port: port, bind: bind}
 }
 
 func (p *proxyController) isRunning() bool {
@@ -52,7 +60,7 @@ func (p *proxyController) start() error {
 	if p.srv != nil {
 		return nil
 	}
-	addr := fmt.Sprintf("127.0.0.1:%d", p.port)
+	addr := net.JoinHostPort(p.bind, strconv.Itoa(p.port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err

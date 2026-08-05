@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"wt/internal/wt/proxy"
+	"wt/internal/wt/settings"
 )
 
 func registerProxyCmd(parent *cobra.Command) {
@@ -16,7 +20,11 @@ func registerProxyCmd(parent *cobra.Command) {
 		Use:   "proxy",
 		Short: "*.wt.localhost のリバースプロキシを起動（worktree のサーバーに名前でアクセス）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			addr := fmt.Sprintf("127.0.0.1:%d", port)
+			bind := strings.TrimSpace(settings.Load().Proxy.Bind)
+			if bind == "" {
+				bind = settings.DefaultProxyBind
+			}
+			addr := net.JoinHostPort(bind, strconv.Itoa(port))
 			srv := &http.Server{
 				Addr:              addr,
 				Handler:           proxy.Handler(proxy.Routes),

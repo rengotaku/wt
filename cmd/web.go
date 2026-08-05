@@ -3,7 +3,10 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -51,7 +54,11 @@ func registerWebCmd(parent *cobra.Command) {
 					slog.Warn("built-in proxy failed to start", "port", effProxyPort, "err", err)
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "warning: 内蔵 proxy の起動に失敗しました（port=%d）: %v\n", effProxyPort, err)
 				} else {
-					proxyAddr := fmt.Sprintf("127.0.0.1:%d", effProxyPort)
+					proxyBind := strings.TrimSpace(s.Proxy.Bind)
+					if proxyBind == "" {
+						proxyBind = settings.DefaultProxyBind
+					}
+					proxyAddr := net.JoinHostPort(proxyBind, strconv.Itoa(effProxyPort))
 					slog.Info("wt proxy listening", "addr", "http://"+proxyAddr, "suffix", proxy.DomainSuffix)
 					_, _ = fmt.Fprintf(cmd.OutOrStdout(), "wt proxy listening on http://%s (suffix %s)\n", proxyAddr, proxy.DomainSuffix)
 				}

@@ -241,6 +241,59 @@ port = 80
 	}
 }
 
+func TestLoad_ProxyBind(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. bind 未記載 -> default (0.0.0.0)。この field を持たない古い
+	//    settings.toml がそのまま残っていても LAN 公開の既定が効く。
+	content := `
+[proxy]
+enabled = true
+port = 8088
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(); got.Proxy.Bind != DefaultProxyBind {
+		t.Errorf("bind 未記載: got %q, want %q", got.Proxy.Bind, DefaultProxyBind)
+	}
+
+	// 2. 明示値 -> 尊重（loopback へ戻せることの担保）
+	contentLoopback := `
+[proxy]
+enabled = true
+port = 8088
+bind = "127.0.0.1"
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentLoopback), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(); got.Proxy.Bind != "127.0.0.1" {
+		t.Errorf("bind 明示: got %q, want 127.0.0.1", got.Proxy.Bind)
+	}
+
+	// 3. 空文字・空白のみ -> default へ補正（net.Listen が "" を全 interface と
+	//    解釈するのに依存せず、意図した既定値を明示的に入れる）
+	contentBlank := `
+[proxy]
+enabled = true
+port = 8088
+bind = "   "
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentBlank), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Load(); got.Proxy.Bind != DefaultProxyBind {
+		t.Errorf("bind 空白: got %q, want %q", got.Proxy.Bind, DefaultProxyBind)
+	}
+
+	// 4. Default() 自体が 0.0.0.0 を返す
+	if Default().Proxy.Bind != DefaultProxyBind {
+		t.Errorf("Default(): got %q, want %q", Default().Proxy.Bind, DefaultProxyBind)
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
