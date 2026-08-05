@@ -51,6 +51,15 @@ func (p *proxyController) listenPort() int {
 	return p.port
 }
 
+// listenBind returns the address the controller will bind to on start(). The UI
+// shows this, so a settings change is visible instead of the display being
+// hardcoded to loopback.
+func (p *proxyController) listenBind() string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.bind
+}
+
 // start binds the proxy port and serves in the background. It is a no-op when
 // already running, and returns an error (e.g. address in use) when the port is
 // taken — typically by a separate `wt proxy` process.
@@ -90,11 +99,17 @@ func (p *proxyController) stop() error {
 type proxyStatus struct {
 	Running bool   `json:"running"`
 	Port    int    `json:"port"`
+	Bind    string `json:"bind"`
 	Suffix  string `json:"suffix"`
 }
 
 func (h *Handler) statusOfProxy() proxyStatus {
-	return proxyStatus{Running: h.prx.isRunning(), Port: h.prx.listenPort(), Suffix: proxy.DomainSuffix}
+	return proxyStatus{
+		Running: h.prx.isRunning(),
+		Port:    h.prx.listenPort(),
+		Bind:    h.prx.listenBind(),
+		Suffix:  proxy.DomainSuffix,
+	}
 }
 
 // StartBuiltinProxy starts the built-in proxy synchronously so callers can

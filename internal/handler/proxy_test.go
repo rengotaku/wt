@@ -79,3 +79,21 @@ func TestProxyController_DefaultPortFallback(t *testing.T) {
 		t.Fatalf("negative port listenPort()=%d, want DefaultProxyPort=%d", got, want)
 	}
 }
+
+// TestStatusOfProxy_IncludesBind pins that the status API reports the address
+// the proxy actually listens on. Without it the settings UI hardcoded
+// "127.0.0.1:<port>" and silently misreported a LAN-exposed proxy as
+// loopback-only.
+func TestStatusOfProxy_IncludesBind(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	h := &Handler{prx: newProxyController(18089)}
+	got := h.statusOfProxy()
+	if got.Bind != settings.DefaultProxyBind {
+		t.Errorf("Bind=%q, want %q (default)", got.Bind, settings.DefaultProxyBind)
+	}
+	if got.Port != 18089 {
+		t.Errorf("Port=%d, want 18089", got.Port)
+	}
+}

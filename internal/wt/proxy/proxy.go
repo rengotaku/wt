@@ -187,6 +187,10 @@ func writeLANIndex(w http.ResponseWriter, r *http.Request, routesFn func() ([]Ro
 	b.WriteString(`<p>この一覧は <code>` + html.EscapeString(DomainSuffix) +
 		`</code> 以外の Host で来たときに出ます。<code>` + html.EscapeString(DomainSuffix) +
 		`</code> は規格上どの端末でもその端末自身を指すため、LAN の別端末からは名前ではなく上のポート直リンクを使ってください。</p>`)
+	b.WriteString(`<p>リンクが開けない場合、その worktree の dev サーバが loopback のみで ` +
+		`listen しています（proxy の bind とは別）。リポジトリ側の dev コマンドに ` +
+		`<code>--host 0.0.0.0</code> 相当を足してください（Vite なら <code>--host</code>、` +
+		`uvicorn なら <code>--host 0.0.0.0</code>）。</p>`)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

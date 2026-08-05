@@ -149,7 +149,9 @@ export function SettingsPage() {
                 className={`h-2 w-2 rounded-full ${proxyStatus?.running ? "bg-green-600" : "bg-muted-foreground/40"}`}
               />
               {proxyStatus?.running
-                ? `稼働中（127.0.0.1:${proxyStatus.port}）`
+                ? `稼働中（${proxyStatus.bind || "127.0.0.1"}:${proxyStatus.port}${
+                    proxyStatus.bind === "0.0.0.0" ? " / LAN からも到達可" : ""
+                  }）`
                 : "停止中"}
             </span>
             <Button
