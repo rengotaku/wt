@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -51,10 +52,17 @@ type ProcessStats struct {
 
 // Proxy configures the built-in reverse proxy that `wt web` starts alongside
 // the API. Port is the listen port for `<label>.<repo>.wt.localhost`; Enabled
-// toggles auto-start at `wt web` startup.
+// toggles auto-start at `wt web` startup; Bind is the listen address.
+//
+// Bind defaults to 0.0.0.0 so that a phone or another PC on the same LAN can
+// reach a worktree's dev server by name. Set it to 127.0.0.1 to go back to
+// loopback-only. Note this exposes every running dev server to the LAN, so it
+// is only appropriate on a network you trust. `wt web` (the management UI,
+// which can create and delete worktrees) stays on 127.0.0.1 regardless.
 type Proxy struct {
-	Enabled bool `toml:"enabled"`
-	Port    int  `toml:"port"`
+	Enabled bool   `toml:"enabled"`
+	Port    int    `toml:"port"`
+	Bind    string `toml:"bind"`
 }
 
 // Settings is the full wt settings document.
@@ -72,6 +80,9 @@ const defaultPortReaperIntervalMinutes = 24 * 60
 // DefaultProxyPort is the built-in proxy's default listen port.
 const DefaultProxyPort = 8088
 
+// DefaultProxyBind is the built-in proxy's default listen address.
+const DefaultProxyBind = "0.0.0.0"
+
 // Default returns the built-in settings.
 func Default() Settings {
 	return Settings{
@@ -79,7 +90,7 @@ func Default() Settings {
 		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
 		PortReaper:   PortReaper{Enabled: true, IntervalMinutes: defaultPortReaperIntervalMinutes},
 		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
-		Proxy:        Proxy{Enabled: true, Port: DefaultProxyPort},
+		Proxy:        Proxy{Enabled: true, Port: DefaultProxyPort, Bind: DefaultProxyBind},
 	}
 }
 
@@ -135,6 +146,12 @@ func Load() Settings {
 	}
 	if loaded.Proxy.Port <= 0 || loaded.Proxy.Port > 65535 {
 		loaded.Proxy.Port = def.Proxy.Port
+	}
+	// An empty bind means "not written in settings.toml" (older files predate
+	// this field), so fall back to the default rather than to Go's zero value,
+	// which net.Listen would read as "all interfaces" only by accident.
+	if strings.TrimSpace(loaded.Proxy.Bind) == "" {
+		loaded.Proxy.Bind = def.Proxy.Bind
 	}
 	if err := loaded.Validate(); err != nil {
 		return def
