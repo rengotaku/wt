@@ -38,14 +38,16 @@ func TestProxyController_StartStop(t *testing.T) {
 	if !p.isRunning() {
 		t.Fatal("should be running after start")
 	}
-	// Reachable on the proxy port; a non-domain Host yields 404 from the handler.
+	// Reachable on the proxy port. A non-domain Host (what LAN clients send when
+	// they hit http://<host-ip>:<proxy>/) now renders the worktree index instead
+	// of 404; this assertion only needs the port to be served.
 	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
 	if err != nil {
 		t.Fatalf("proxy not reachable: %v", err)
 	}
 	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("non-domain Host: got %d, want 404", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("non-domain Host: got %d, want 200 (worktree index)", resp.StatusCode)
 	}
 
 	// start is idempotent while running.

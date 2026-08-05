@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"wt/internal/wt/core"
@@ -131,17 +132,50 @@ func TestHandler_RoutesByHost(t *testing.T) {
 		t.Errorf("unknown label: code=%d, want 502", rec3.Code)
 	}
 
-	// missing repo segment (old single-level form) → 404
+	// missing repo segment (old single-level form) → not proxied.
+	// Since LAN access landed here too, this now renders the worktree index
+	// instead of 404. The guarantee kept from the old assertion is that it must
+	// NOT reach a backend.
 	rec4 := httptest.NewRecorder()
 	h.ServeHTTP(rec4, httptest.NewRequest("GET", "http://issue10.wt.localhost/", http.NoBody))
-	if rec4.Code != http.StatusNotFound {
-		t.Errorf("missing repo: code=%d, want 404", rec4.Code)
+	if rec4.Body.String() == "hello from backend" {
+		t.Errorf("missing repo: must not be proxied to a backend, got %q", rec4.Body.String())
 	}
 
-	// non-wt host → 404
+	// non-wt host (e.g. http://<host-ip>:8088/ from a phone) → not proxied,
+	// and must not be a dead end: the index lists each worktree's direct URL.
 	rec5 := httptest.NewRecorder()
-	h.ServeHTTP(rec5, httptest.NewRequest("GET", "http://example.com/", http.NoBody))
-	if rec5.Code != http.StatusNotFound {
-		t.Errorf("non-wt host: code=%d, want 404", rec5.Code)
+	h.ServeHTTP(rec5, httptest.NewRequest("GET", "http://192.168.10.50:8088/", http.NoBody))
+	if rec5.Body.String() == "hello from backend" {
+		t.Errorf("non-wt host: must not be proxied to a backend, got %q", rec5.Body.String())
+	}
+	if rec5.Code != http.StatusOK {
+		t.Errorf("non-wt host: code=%d, want 200 (worktree index)", rec5.Code)
+	}
+	body := rec5.Body.String()
+	// The link must point at the address the client actually used, not loopback,
+	// or it is unreachable from the very device that asked for it.
+	wantLink := "http://192.168.10.50:" + strconv.Itoa(port) + "/"
+	if !strings.Contains(body, wantLink) {
+		t.Errorf("non-wt host: index missing direct link %q, body=%q", wantLink, body)
+	}
+	if !strings.Contains(body, "myrepo") || !strings.Contains(body, "issue10") {
+		t.Errorf("non-wt host: index missing worktree name, body=%q", body)
+	}
+}
+
+// TestHandler_LANIndex_NoRoutes covers the empty case: reaching the proxy by IP
+// with nothing running must still explain what to do rather than render a bare
+// empty list.
+func TestHandler_LANIndex_NoRoutes(t *testing.T) {
+	h := Handler(func() ([]Route, error) { return nil, nil })
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://192.168.10.50:8088/", http.NoBody))
+	if rec.Code != http.StatusOK {
+		t.Errorf("code=%d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "wt serve") {
+		t.Errorf("empty index should mention how to start a dev server, body=%q", rec.Body.String())
 	}
 }

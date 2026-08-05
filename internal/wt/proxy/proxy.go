@@ -8,10 +8,14 @@ package proxy
 
 import (
 	"fmt"
+	"html"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"wt/internal/wt/devserver"
@@ -113,7 +117,12 @@ func Handler(routesFn func() ([]Route, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		label, repo, ok := hostParts(r.Host)
 		if !ok {
-			http.Error(w, "アクセスは <label>.<repo>"+DomainSuffix+" で行ってください", http.StatusNotFound)
+			// `.wt.localhost` は RFC 6761 によりどの端末でもその端末自身の
+			// loopback へ解決されるため、LAN の別端末からは名前で到達できない。
+			// そこで IP 等での直アクセスには 404 を返さず、起動中の worktree と
+			// その直リンク（dev サーバは 0.0.0.0 で listen している）を一覧で
+			// 返して入口にする。
+			writeLANIndex(w, r, routesFn)
 			return
 		}
 		routes, err := routesFn()
@@ -130,4 +139,56 @@ func Handler(routesFn func() ([]Route, error)) http.Handler {
 		}
 		http.Error(w, fmt.Sprintf("'%s.%s' に対応する worktree がありません（wt serve で起動済みか確認してください）", label, repo), http.StatusBadGateway)
 	})
+}
+
+// writeLANIndex renders the worktree list for requests that did not arrive via
+// a `<label>.<repo>.wt.localhost` Host — typically `http://<host-ip>:<proxy>/`
+// from a phone or another PC on the LAN.
+//
+// The proxy cannot serve those by name: `.localhost` always resolves to the
+// requesting device's own loopback, so name-based routing is only ever usable
+// on the host itself. Each dev server already listens on all interfaces, so the
+// useful thing to hand back is its direct URL on this host's address.
+func writeLANIndex(w http.ResponseWriter, r *http.Request, routesFn func() ([]Route, error)) {
+	routes, err := routesFn()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Reuse the address the client actually reached us on, so the links work
+	// regardless of which interface or hostname was used.
+	hostOnly := r.Host
+	if h, _, splitErr := net.SplitHostPort(r.Host); splitErr == nil {
+		hostOnly = h
+	}
+
+	var b strings.Builder
+	b.WriteString(`<!doctype html><meta charset="utf-8">`)
+	b.WriteString(`<meta name="viewport" content="width=device-width,initial-scale=1">`)
+	b.WriteString(`<title>wt — 起動中の worktree</title>`)
+	b.WriteString(`<style>body{font-family:system-ui,sans-serif;margin:2rem auto;max-width:40rem;padding:0 1rem;line-height:1.6}` +
+		`h1{font-size:1.25rem}li{margin:.5rem 0}code{background:#8881;padding:.1rem .3rem;border-radius:.2rem}` +
+		`p{color:#666;font-size:.9rem}</style>`)
+	b.WriteString(`<h1>起動中の worktree</h1>`)
+
+	if len(routes) == 0 {
+		b.WriteString(`<p>起動中の dev サーバがありません（<code>wt serve</code> で起動してください）。</p>`)
+	} else {
+		b.WriteString(`<ul>`)
+		for _, rt := range routes {
+			link := "http://" + net.JoinHostPort(hostOnly, strconv.Itoa(rt.Port)) + "/"
+			b.WriteString(`<li><a href="` + html.EscapeString(link) + `">` +
+				html.EscapeString(rt.Repo) + " / " + html.EscapeString(rt.Label) +
+				`</a> <code>` + html.EscapeString(link) + `</code></li>`)
+		}
+		b.WriteString(`</ul>`)
+	}
+	b.WriteString(`<p>この一覧は <code>` + html.EscapeString(DomainSuffix) +
+		`</code> 以外の Host で来たときに出ます。<code>` + html.EscapeString(DomainSuffix) +
+		`</code> は規格上どの端末でもその端末自身を指すため、LAN の別端末からは名前ではなく上のポート直リンクを使ってください。</p>`)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, b.String())
 }
