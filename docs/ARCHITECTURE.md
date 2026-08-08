@@ -24,7 +24,7 @@ wt (cobra CLI)
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
 | `internal/wt/procstats/` | `/proc` スキャンによるプロセスグループ単位のメモリ計測 |
-| `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`） |
+| `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
 | `internal/wt/settings/` | `~/.config/wt/settings.toml` の読み書き |
 | `frontend/` | React + vite + Tailwind の SPA（`src/pages/TreesPage.tsx` が worktree 一覧） |
@@ -35,7 +35,7 @@ wt (cobra CLI)
 |---|---|
 | `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / auto_start / port_base / `_config.dev_services` 等） |
 | `<base>/<repo>/.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` | repo 単位の表示/非表示フラグ（ローカル設定、コミットしない） |
-| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
+| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
 | `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
@@ -48,6 +48,7 @@ wt (cobra CLI)
 5. **AutoStart 自動 serve**: `wt web` 起動時に `auto_start=true` かつ未稼働の worktree を `autostart.ServeAutoStart` が serve。既に稼働中の worktree は再起動しない
 6. **idle reaper**: `auto_start=true` かつ稼働中で、dev ポート帯に ESTABLISHED 接続が TTL（既定30分）以上無い worktree を自動 down（手動 serve は対象外、#92/#93）。ただし dev 設定に `headless=true` のサービス（ポート listen しない worker/scheduler）を **1つでも含む worktree は除外**する（#129。接続数ベース活動判定で常駐バックグラウンド処理を誤停止しないため）
 7. **幽霊ポート reaper**: 削除済み worktree の残骸（port_base だけ残る registry エントリ）を定期 prune（既定 1 日 1 回、`autostart.PortReaper`）。起動時と定期スケジュールで実行
+8. **HealthReaper（クラッシュ検知＆自動復帰、#137）**: `devserver.Recorded` が非空（serve 済みで一度も明示的に `Down` されていない）にもかかわらず `devserver.IsRunning == false`（全サービス死亡）な worktree を「クラッシュ」とみなし、`devserver.Serve` で再起動する。`Reaper`（idle 判定で `Down` のみ）とは責務が逆（起動を試みる側）のため別 struct として実装。cooldown ウィンドウ内（既定10分）で試行回数が上限（既定3回）に達すると以降そのウィンドウでは再起動を試みず `slog.Warn` のみ出す（壊れた dev 設定が systemd scope を無限に生成し続ける新たな障害増幅器にならないためのガード）。復帰に成功した worktree は試行カウンタをリセットする。degraded（部分死）は対象外、全滅のみ対象
 
 ## 内蔵 proxy（#125）
 
@@ -189,6 +190,8 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 | ポート帯・割当ロジック | `internal/wt/ports/` + `settings.toml [dev_ports]` |
 | AutoStart 自動 serve / idle 停止の方針 | `internal/wt/autostart/` + `[idle_reaper]` |
 | 幽霊ポート自動 prune | `internal/wt/autostart/port_reaper.go` + `[port_reaper]` |
+| クラッシュ検知・自動復帰・リトライ上限 | `internal/wt/autostart/health_reaper.go` + `[health_reaper]` |
+| devserver Down/Serve 呼び出しの監査ログ（trigger 種別） | `internal/handler/devserver.go` / `internal/handler/devrestart.go` / `internal/wt/autostart/reaper.go` / `internal/wt/autostart/autostart.go` / `internal/wt/autostart/health_reaper.go` / `cmd/serve.go`（`slog.Info("devserver action", ...)`） |
 | worktree の AutoStart フラグ（起動時自動 serve）| `.worktrees.json::auto_start` + `internal/handler/trees.go::SetTreeAutoStart` |
 | repo 単位の表示/非表示 | `.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` + `internal/handler/repos.go::SetRepoHidden` |
 | メモリ計測・危険判定 | `internal/wt/procstats/` + `internal/handler/stats.go` + `[process_stats]` |

@@ -44,6 +44,19 @@ type PortReaper struct {
 	IntervalMinutes int  `toml:"interval_minutes"`
 }
 
+// HealthReaper configures the crash-detection/auto-recovery reaper: it
+// periodically checks every worktree that has ever been served (Recorded is
+// non-empty) and, when the recorded services have all died (IsRunning ==
+// false) without an explicit Down, re-serves them. CooldownMinutes/MaxRetries
+// bound how many times it will retry a worktree that keeps crashing, so a
+// broken dev config cannot make it spawn systemd scopes forever. #137
+type HealthReaper struct {
+	Enabled         bool `toml:"enabled"`
+	IntervalMinutes int  `toml:"interval_minutes"`
+	CooldownMinutes int  `toml:"cooldown_minutes"`
+	MaxRetries      int  `toml:"max_retries"`
+}
+
 // ProcessStats configures memory thresholds for the process-stats view.
 type ProcessStats struct {
 	WarnMB   int `toml:"warn_mb"`
@@ -70,6 +83,7 @@ type Settings struct {
 	DevPorts     DevPorts     `toml:"dev_ports"`
 	IdleReaper   IdleReaper   `toml:"idle_reaper"`
 	PortReaper   PortReaper   `toml:"port_reaper"`
+	HealthReaper HealthReaper `toml:"health_reaper"`
 	ProcessStats ProcessStats `toml:"process_stats"`
 	Proxy        Proxy        `toml:"proxy"`
 }
@@ -89,6 +103,7 @@ func Default() Settings {
 		DevPorts:     DevPorts{Start: DefaultDevPortStart, End: DefaultDevPortEnd},
 		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
 		PortReaper:   PortReaper{Enabled: true, IntervalMinutes: defaultPortReaperIntervalMinutes},
+		HealthReaper: HealthReaper{Enabled: true, IntervalMinutes: 2, CooldownMinutes: 10, MaxRetries: 3},
 		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
 		Proxy:        Proxy{Enabled: true, Port: DefaultProxyPort, Bind: DefaultProxyBind},
 	}
@@ -133,6 +148,15 @@ func Load() Settings {
 	}
 	if loaded.PortReaper.IntervalMinutes <= 0 {
 		loaded.PortReaper.IntervalMinutes = defaultPortReaperIntervalMinutes
+	}
+	if loaded.HealthReaper.IntervalMinutes <= 0 {
+		loaded.HealthReaper.IntervalMinutes = def.HealthReaper.IntervalMinutes
+	}
+	if loaded.HealthReaper.CooldownMinutes <= 0 {
+		loaded.HealthReaper.CooldownMinutes = def.HealthReaper.CooldownMinutes
+	}
+	if loaded.HealthReaper.MaxRetries <= 0 {
+		loaded.HealthReaper.MaxRetries = def.HealthReaper.MaxRetries
 	}
 	if loaded.ProcessStats.WarnMB <= 0 {
 		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB

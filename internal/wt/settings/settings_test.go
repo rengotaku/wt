@@ -140,6 +140,69 @@ enabled = false
 	}
 }
 
+func TestLoad_HealthReaper(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("WT_CONFIG_DIR", dir)
+
+	// 1. 未記載 -> default (enabled=true, interval=2, cooldown=10, max_retries=3)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Load()
+	if !got.HealthReaper.Enabled || got.HealthReaper.IntervalMinutes != 2 ||
+		got.HealthReaper.CooldownMinutes != 10 || got.HealthReaper.MaxRetries != 3 {
+		t.Errorf("empty file: got %+v, want default enabled=true, interval=2, cooldown=10, max_retries=3", got.HealthReaper)
+	}
+
+	// 2. 明示値 -> 尊重
+	content := `
+[health_reaper]
+enabled = false
+interval_minutes = 5
+cooldown_minutes = 20
+max_retries = 5
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.HealthReaper.Enabled || got.HealthReaper.IntervalMinutes != 5 ||
+		got.HealthReaper.CooldownMinutes != 20 || got.HealthReaper.MaxRetries != 5 {
+		t.Errorf("explicit file: got %+v, want enabled=false, interval=5, cooldown=20, max_retries=5", got.HealthReaper)
+	}
+
+	// 3. 0 以下の値 -> 既定値へ補正
+	contentZero := `
+[health_reaper]
+enabled = true
+interval_minutes = 0
+cooldown_minutes = 0
+max_retries = 0
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentZero), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if !got.HealthReaper.Enabled || got.HealthReaper.IntervalMinutes != 2 ||
+		got.HealthReaper.CooldownMinutes != 10 || got.HealthReaper.MaxRetries != 3 {
+		t.Errorf("<=0 values: got %+v, want default interval=2, cooldown=10, max_retries=3", got.HealthReaper)
+	}
+
+	// 4. enabled=false 以外未記載 -> 補完されること
+	contentPart := `
+[health_reaper]
+enabled = false
+`
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte(contentPart), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got = Load()
+	if got.HealthReaper.Enabled || got.HealthReaper.IntervalMinutes != 2 ||
+		got.HealthReaper.CooldownMinutes != 10 || got.HealthReaper.MaxRetries != 3 {
+		t.Errorf("partial file: got %+v, want enabled=false, interval=2, cooldown=10, max_retries=3", got.HealthReaper)
+	}
+}
+
 func TestLoad_ProcessStats(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("WT_CONFIG_DIR", dir)

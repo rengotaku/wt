@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -111,6 +112,7 @@ func (r *Reaper) Tick(out io.Writer) {
 				continue
 			}
 			if r.Now().Sub(r.last[worktree]) > r.TTL {
+				slog.Info("devserver action", "worktree", worktree, "action", "down", "trigger", "idle-reaper")
 				_ = r.Down(out, worktree)
 				delete(r.last, worktree)
 				_, _ = fmt.Fprintf(out, "⏸ idle stop: %s\n", name)
