@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"log/slog"
 
 	"wt/internal/wt/devserver"
 	"wt/internal/wt/ports"
@@ -23,9 +24,11 @@ func defaultRestartDevIfRunning(container, wtName, worktree string) (bool, error
 		return false, err
 	}
 	var buf bytes.Buffer
+	slog.Info("devserver action", "worktree", worktree, "action", "down", "trigger", "pull-restart")
 	if err := devserver.Down(&buf, worktree); err != nil {
 		return false, err
 	}
+	slog.Info("devserver action", "worktree", worktree, "action", "serve", "trigger", "pull-restart")
 	if err := devserver.Serve(&buf, worktree, base); err != nil {
 		return false, err
 	}

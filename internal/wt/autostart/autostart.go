@@ -6,6 +6,7 @@ package autostart
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -46,6 +47,7 @@ func ServeAutoStart(out io.Writer) int {
 				_, _ = fmt.Fprintf(out, "⚠️  auto-start: %s のポート割当に失敗: %v\n", name, err)
 				continue
 			}
+			slog.Info("devserver action", "worktree", worktree, "action", "serve", "trigger", "autostart")
 			if err := devserver.Serve(out, worktree, base); err != nil {
 				_, _ = fmt.Fprintf(out, "⚠️  auto-start: %s の起動に失敗: %v\n", name, err)
 				continue

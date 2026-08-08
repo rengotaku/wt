@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -38,6 +39,7 @@ func registerServeCmd(parent *cobra.Command) {
 			if err != nil {
 				return err
 			}
+			slog.Info("devserver action", "worktree", wt, "action", "serve", "trigger", "cli-serve")
 			return devserver.Serve(cmd.OutOrStdout(), wt, base)
 		},
 	}
@@ -49,6 +51,7 @@ func registerServeCmd(parent *cobra.Command) {
 			if err != nil {
 				return err
 			}
+			slog.Info("devserver action", "worktree", wt, "action", "down", "trigger", "cli-down")
 			return devserver.Down(cmd.OutOrStdout(), wt)
 		},
 	}

@@ -85,6 +85,19 @@ func registerWebCmd(parent *cobra.Command) {
 				go pr.Run(cmd.Context(), cmd.OutOrStdout())
 			}
 
+			// Detect dev services that crashed (died without an explicit
+			// down) and re-serve them, so `wt tree add`/pull/idle-reaper etc.
+			// never leave a worktree permanently dead after an unrelated
+			// SIGTERM. #137
+			if hc := s.HealthReaper; hc.Enabled {
+				hr := autostart.NewHealthReaper(
+					time.Duration(hc.IntervalMinutes)*time.Minute,
+					time.Duration(hc.CooldownMinutes)*time.Minute,
+					hc.MaxRetries,
+				)
+				go hr.Run(cmd.Context(), cmd.OutOrStdout())
+			}
+
 			return srv.ListenAndServe()
 		},
 	}

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 
@@ -49,6 +50,7 @@ func (h *Handler) ServeWorktree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
+	slog.Info("devserver action", "worktree", worktree, "action", "serve", "trigger", "manual-api")
 	if err := devserver.Serve(&buf, worktree, base); err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -63,6 +65,7 @@ func (h *Handler) DownWorktree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
+	slog.Info("devserver action", "worktree", worktree, "action", "down", "trigger", "manual-api")
 	if err := devserver.Down(&buf, worktree); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
