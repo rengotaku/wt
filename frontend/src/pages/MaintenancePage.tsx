@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { portsApi, treesApi, type ListenerRow, type StaleItem, type GcRequest } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Table,
@@ -227,12 +227,14 @@ function GcCard() {
     yes: false,
   });
   const [output, setOutput] = useState("");
+  const [outputWasDryRun, setOutputWasDryRun] = useState(true);
   const [error, setError] = useState("");
 
   const gcMutation = useMutation({
     mutationFn: treesApi.gc,
-    onSuccess: (res) => {
+    onSuccess: (res, variables) => {
       setOutput(res.output);
+      setOutputWasDryRun(variables.dry_run ?? true);
       setError("");
     },
     onError: (e: Error) => setError(e.message),
@@ -306,7 +308,7 @@ function GcCard() {
           </Alert>
         )}
       </CardContent>
-      <div className="-mx-6 -mb-6 flex flex-col gap-2 rounded-b-lg border-t bg-muted/20 px-6 py-4 sm:flex-row sm:justify-end">
+      <CardFooter className="flex-col gap-2 rounded-b-xl border-t bg-muted/20 py-4 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
           className="w-full sm:w-auto"
@@ -323,11 +325,11 @@ function GcCard() {
         >
           {gcMutation.isPending ? "実行中..." : "GC 実行"}
         </Button>
-      </div>
+      </CardFooter>
       {output && (
         <div className="border-t px-6 py-4">
           <h3 className="mb-2 text-sm font-medium">
-            {opts.dry_run ? "プレビュー結果" : "GC実行結果"}
+            {outputWasDryRun ? "プレビュー結果" : "GC実行結果"}
           </h3>
           <pre className="max-h-64 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
             {output}

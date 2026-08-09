@@ -127,5 +127,27 @@ describe("MaintenancePage (Ports + GC combined)", () => {
       dry_run: true,
       yes: false,
     });
+    expect(screen.getByText("プレビュー結果")).toBeInTheDocument();
+  });
+
+  it("labels the output as GC実行結果 after an actual (non-dry-run) execution", async () => {
+    const { treesApi } = await import("@/api");
+    vi.mocked(treesApi.gc).mockResolvedValue({
+      output: "removed: marchedb--issue-9",
+    } as never);
+
+    render(<MaintenancePage />);
+    fireEvent.click(screen.getByRole("button", { name: "GC 実行" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("removed: marchedb--issue-9")).toBeInTheDocument();
+    });
+    const calls = vi.mocked(treesApi.gc).mock.calls;
+    expect(calls[calls.length - 1][0]).toMatchObject({
+      dry_run: false,
+      yes: true,
+    });
+    expect(screen.getByText("GC実行結果")).toBeInTheDocument();
+    expect(screen.queryByText("プレビュー結果")).not.toBeInTheDocument();
   });
 });
