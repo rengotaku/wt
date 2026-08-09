@@ -98,11 +98,15 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     confirmSpy.mockRestore();
   });
 
-  it("shows an empty state when there are no ghost entries", async () => {
+  it("shows a compact empty state when there are no ghost entries", async () => {
     render(<MaintenancePage />);
     await waitFor(() => {
-      expect(screen.getByText("幽霊エントリはありません。")).toBeInTheDocument();
+      expect(
+        screen.getByText("幽霊ポート（削除済み worktree の残骸）はありません。")
+      ).toBeInTheDocument();
     });
+    // 異常時専用の警告パネル（見出し）は正常時には出ない
+    expect(screen.queryByText(/幽霊ポートが\d+件見つかりました/)).not.toBeInTheDocument();
   });
 
   it("runs a GC dry-run preview and shows the output", async () => {
