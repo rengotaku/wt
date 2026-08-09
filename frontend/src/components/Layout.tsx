@@ -115,11 +115,8 @@ export function Layout() {
             <NavLink to="/repos" className={navLinkClass}>
               Repos
             </NavLink>
-            <NavLink to="/gc" className={navLinkClass}>
-              GC
-            </NavLink>
-            <NavLink to="/ports" className={navLinkClass}>
-              Ports
+            <NavLink to="/maintenance" className={navLinkClass}>
+              Maintenance
             </NavLink>
             <NavLink to="/settings" className={navLinkClass}>
               Settings

@@ -7,6 +7,6 @@ describe("App", () => {
     render(<App />);
     expect(screen.getByRole("link", { name: "Worktrees" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Repos" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "GC" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Maintenance" })).toBeInTheDocument();
   });
 });
