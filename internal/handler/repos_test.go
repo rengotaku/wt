@@ -88,6 +88,57 @@ func TestSyncRepo_RestartLogic(t *testing.T) {
 	}
 }
 
+func TestListRepos_VisibleBeforeHidden(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// name 昇順だと z, hidden-a, visible-b の順になるが、
+	// 表示中を非表示より上位にしたいので visible-b, z, hidden-a を期待する。
+	repos := []struct {
+		name   string
+		hidden bool
+	}{
+		{"z-visible", false},
+		{"hidden-a", true},
+		{"visible-b", false},
+	}
+	for _, r := range repos {
+		container := filepath.Join(home, "Workspace", r.name)
+		if err := os.MkdirAll(container, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := core.PutEntry(container, "main", &core.Entry{Type: "main"}); err != nil {
+			t.Fatal(err)
+		}
+		if r.hidden {
+			if err := core.SaveConfig(container, core.EntryConfig{Hidden: true}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	h := New(0)
+	req := httptest.NewRequest(http.MethodGet, "/api/repos", http.NoBody)
+	w := httptest.NewRecorder()
+	h.ListRepos(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", w.Code, w.Body.String())
+	}
+	var items []repoItem
+	if err := json.Unmarshal(w.Body.Bytes(), &items); err != nil {
+		t.Fatal(err)
+	}
+	gotNames := make([]string, len(items))
+	for i, it := range items {
+		gotNames[i] = it.Name
+	}
+	wantNames := []string{"visible-b", "z-visible", "hidden-a"}
+	if strings.Join(gotNames, ",") != strings.Join(wantNames, ",") {
+		t.Errorf("expected order %v, got %v", wantNames, gotNames)
+	}
+}
+
 func TestSetRepoHidden(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

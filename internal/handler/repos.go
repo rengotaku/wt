@@ -57,7 +57,12 @@ func (h *Handler) ListRepos(w http.ResponseWriter, _ *http.Request) {
 
 		items = append(items, item)
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Hidden != items[j].Hidden {
+			return !items[i].Hidden // 表示中のリポジトリを非表示より上位に
+		}
+		return items[i].Name < items[j].Name
+	})
 	jsonOK(w, items)
 }
 
