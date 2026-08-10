@@ -235,6 +235,16 @@ function PortsCard() {
   );
 }
 
+// backend の parseOlderThan（internal/wt/gc/gc.go）と同じ形式・正数判定を
+// フロントでも行う。"0d" / "0h" のようにフォーマットは正しいが期間が0の値を
+// 「フィルタ指定あり」と誤判定しないようにする（backend は olderSecs<=0 を
+// フィルタ未指定として拒否するため、判定基準をここで一致させる）。
+function isPositiveOlderThan(value: string): boolean {
+  const m = /^(\d+)([dh])$/.exec(value.trim());
+  if (!m) return false;
+  return Number(m[1]) > 0;
+}
+
 // GC カード。危険度はボタンの destructive variant とアイコンだけで示し、
 // カード枠・背景ブロックは他ページと同じニュートラルな見た目に揃える。
 function GcCard() {
@@ -266,7 +276,7 @@ function GcCard() {
   // フィルタが1つも無いと「削除対象」の絞り込みが一切効かず、main/master
   // 以外の全 worktree が対象になる（backend は fail-safe でエラーを返すが、
   // フロントでも早期に気づかせて実行自体をブロックする）。
-  const hasFilter = Boolean(opts.done) || Boolean(opts.older_than?.trim());
+  const hasFilter = Boolean(opts.done) || isPositiveOlderThan(opts.older_than ?? "");
 
   return (
     <Card>
