@@ -182,7 +182,10 @@ function PortsCard() {
               checked={showUnknown}
               onChange={(e) => setShowUnknown(e.target.checked)}
             />
-            プロセス不明の行も表示する（{unknownCount}件を隠しています）
+            プロセス不明の行も表示する
+            {showUnknown
+              ? `（不明プロセス${unknownCount}件を表示中）`
+              : `（${unknownCount}件を隠しています）`}
           </label>
         )}
       </CardHeader>

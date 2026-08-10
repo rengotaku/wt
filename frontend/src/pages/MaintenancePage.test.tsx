@@ -65,7 +65,7 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     });
     // port 7000 (proc: "") is hidden by default
     expect(screen.queryByText("7000")).not.toBeInTheDocument();
-    expect(screen.getByText(/プロセス不明の行も表示する/)).toBeInTheDocument();
+    expect(screen.getByText("プロセス不明の行も表示する（1件を隠しています）")).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("checkbox", { name: /プロセス不明の行も表示する/ })
@@ -74,6 +74,10 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     await waitFor(() => {
       expect(screen.getByText("7000")).toBeInTheDocument();
     });
+    // 表示中は「隠しています」ではなく「表示中」に文言が切り替わる（codex regression）
+    expect(
+      screen.getByText("プロセス不明の行も表示する（不明プロセス1件を表示中）")
+    ).toBeInTheDocument();
   });
 
   it("lists ghost entries and prunes them on confirm", async () => {
