@@ -37,13 +37,12 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     } as never);
   });
 
-  it("renders both the Ports and GC sections", async () => {
+  it("renders the Ports and GC cards", async () => {
     render(<MaintenancePage />);
     await waitFor(() => {
       expect(screen.getByText("8000")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Ports" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "GC" })).toBeInTheDocument();
+    expect(screen.getByText("稼働中ポート")).toBeInTheDocument();
     expect(screen.getByText("GC オプション")).toBeInTheDocument();
   });
 
@@ -98,15 +97,33 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     confirmSpy.mockRestore();
   });
 
-  it("shows a compact empty state when there are no ghost entries", async () => {
+  it("keeps the ghost-port card collapsed by default (0件) and shows the empty state once opened", async () => {
     render(<MaintenancePage />);
     await waitFor(() => {
-      expect(
-        screen.getByText("幽霊ポート（削除済み worktree の残骸）はありません。")
-      ).toBeInTheDocument();
+      expect(screen.getByText("8000")).toBeInTheDocument();
     });
-    // 異常時専用の警告パネル（見出し）は正常時には出ない
-    expect(screen.queryByText(/幽霊ポートが\d+件見つかりました/)).not.toBeInTheDocument();
+    // 0件のときは閉じたまま、件数バッジも出ない
+    expect(screen.queryByText(/^\d+件$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("幽霊エントリはありません。")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("幽霊ポート（削除済み worktree の残骸）"));
+
+    await waitFor(() => {
+      expect(screen.getByText("幽霊エントリはありません。")).toBeInTheDocument();
+    });
+  });
+
+  it("auto-expands the ghost-port card when entries are detected, with a count badge", async () => {
+    const { portsApi } = await import("@/api");
+    vi.mocked(portsApi.stale).mockResolvedValue([
+      { repo: "marchedb", wt_name: "marchedb--issue-9", port_base: 9200, port_range: "9200-9204" },
+    ] as never);
+
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("marchedb--issue-9")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1件")).toBeInTheDocument();
   });
 
   it("runs a GC dry-run preview and shows the output", async () => {
