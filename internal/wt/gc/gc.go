@@ -75,11 +75,15 @@ func closedCandidate(branch string, prState map[string]string, issueState func(i
 
 var olderThanRegex = regexp.MustCompile(`^(\d+)([dh])$`)
 
-// noFilterErrMsg is returned by Run when no filter (--done/--merged or
-// --older-than) is given. Exported as a var (not embedded inline) so tests
-// can assert on the exact guard without duplicating the string.
-var noFilterErrMsg = "フィルタ条件（--done/--merged または --older-than）を1つ以上指定してください。" +
-	"未指定のまま実行すると main/master 以外の全 worktree が対象になります"
+// ErrNoFilter is returned by Run when no filter (--done/--merged or
+// --older-than) is given. Exported as a sentinel (not just an error string)
+// so callers — notably the HTTP handler — can classify it as a client error
+// (400) via errors.Is, rather than letting it fall through to a generic
+// server error (500).
+var ErrNoFilter = errors.New(
+	"フィルタ条件（--done/--merged または --older-than）を1つ以上指定してください。" +
+		"未指定のまま実行すると main/master 以外の全 worktree が対象になります",
+)
 
 // Run executes the cross-repo GC workflow.
 func Run(out io.Writer, opts Options) error {
@@ -93,7 +97,7 @@ func Run(out io.Writer, opts Options) error {
 	// worktree が対象になってしまう（fail-open）。fail-safe に倒し、明示的に
 	// フィルタを要求する。
 	if !opts.closedFilter() && olderSecs <= 0 {
-		return errors.New(noFilterErrMsg)
+		return ErrNoFilter
 	}
 
 	items, err := tree.RmEntries()

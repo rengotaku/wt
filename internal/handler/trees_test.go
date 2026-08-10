@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"wt/internal/wt/core"
@@ -82,6 +83,20 @@ func TestUpdateTree_RestartLogic(t *testing.T) {
 				t.Errorf("expected restarted JSON field = %v, got %v", tt.expectRestart, resp["restarted"])
 			}
 		})
+	}
+}
+
+// GC のフィルタ未指定は修正可能なクライアントエラーであり、サーバ障害
+// （500）ではない。older_than のフォーマットエラーと同じ 400 で返す。
+func TestGcTrees_NoFilterReturns400(t *testing.T) {
+	h := New(0)
+	body := strings.NewReader(`{"done":false,"older_than":"","dry_run":true,"yes":false,"force":false}`)
+	r := httptest.NewRequest(http.MethodPost, "/api/trees/gc", body)
+	w := httptest.NewRecorder()
+	h.GcTrees(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d. body: %s", w.Code, w.Body.String())
 	}
 }
 

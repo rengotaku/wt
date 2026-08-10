@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -374,6 +375,13 @@ func (h *Handler) GcTrees(w http.ResponseWriter, r *http.Request) {
 		Force:     req.Force,
 	}
 	if err := gc.Run(&buf, opts); err != nil {
+		// フィルタ未指定はリクエスト側の不備（修正可能なクライアントエラー）
+		// であり、サーバ障害ではない。監視・API利用側の誤分類を避けるため
+		// 他の older_than フォーマットエラーと同様に 400 を返す。
+		if errors.Is(err, gc.ErrNoFilter) {
+			jsonErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -270,7 +270,16 @@ function GcCard() {
   });
 
   const run = (execute: boolean) => {
-    gcMutation.mutate({ ...opts, dry_run: !execute, yes: execute });
+    // older_than は前後の空白を含んでいても hasFilter 判定・表示上は許容するが、
+    // 送信値はここで trim する。trim しないまま送ると backend の正規表現
+    // （前後空白不可）に拒否され、フロントで「有効」と判定したのに送信後に
+    // フォーマットエラーになる不整合が起きる。
+    gcMutation.mutate({
+      ...opts,
+      older_than: opts.older_than?.trim() ?? "",
+      dry_run: !execute,
+      yes: execute,
+    });
   };
 
   // フィルタが1つも無いと「削除対象」の絞り込みが一切効かず、main/master
