@@ -97,6 +97,33 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     confirmSpy.mockRestore();
   });
 
+  it("keeps the ghost-port card open to show the success message after pruning (regression)", async () => {
+    const { portsApi } = await import("@/api");
+    // 初回取得は1件、掃除後の再取得（invalidateQueries）では0件に変わる。
+    vi.mocked(portsApi.stale)
+      .mockResolvedValueOnce([
+        { repo: "marchedb", wt_name: "marchedb--issue-9", port_base: 9200, port_range: "9200-9204" },
+      ] as never)
+      .mockResolvedValue([] as never);
+    vi.mocked(portsApi.prune).mockResolvedValue({ removed: [], count: 1 } as never);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("marchedb--issue-9")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /掃除して回収/ }));
+
+    // stale が 0件に変わってもカードが自動で閉じず、成功メッセージが見える
+    await waitFor(() => {
+      expect(
+        screen.getByText("1 件を掃除し、1 ブロックを回収しました。")
+      ).toBeInTheDocument();
+    });
+    confirmSpy.mockRestore();
+  });
+
   it("keeps the ghost-port card collapsed by default (0件) and shows the empty state once opened", async () => {
     render(<MaintenancePage />);
     await waitFor(() => {

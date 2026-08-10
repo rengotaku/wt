@@ -36,7 +36,9 @@ function StalePortsCard() {
     },
   });
 
-  const open = manualOpen ?? stale.length > 0;
+  // 掃除成功直後は stale が空になり自動判定だけでは閉じてしまうため、
+  // 完了メッセージが見える間（isSuccess）は開いたままにする。
+  const open = manualOpen ?? (stale.length > 0 || prune.isSuccess);
 
   return (
     <Card>
