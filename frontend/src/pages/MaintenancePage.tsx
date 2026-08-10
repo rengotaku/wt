@@ -263,6 +263,11 @@ function GcCard() {
     gcMutation.mutate({ ...opts, dry_run: !execute, yes: execute });
   };
 
+  // フィルタが1つも無いと「削除対象」の絞り込みが一切効かず、main/master
+  // 以外の全 worktree が対象になる（backend は fail-safe でエラーを返すが、
+  // フロントでも早期に気づかせて実行自体をブロックする）。
+  const hasFilter = Boolean(opts.done) || Boolean(opts.older_than?.trim());
+
   return (
     <Card>
       <CardHeader>
@@ -320,6 +325,14 @@ function GcCard() {
           </p>
         </section>
 
+        {!hasFilter && (
+          <p className="flex items-center gap-1.5 text-xs text-amber-600">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            「削除対象」のフィルタを1つ以上指定してください。未指定のままでは
+            main/master 以外の全 worktree が対象になるため実行できません。
+          </p>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -331,7 +344,7 @@ function GcCard() {
           variant="outline"
           className="w-full sm:w-auto"
           onClick={() => run(false)}
-          disabled={gcMutation.isPending}
+          disabled={gcMutation.isPending || !hasFilter}
         >
           プレビュー (dry-run)
         </Button>
@@ -339,7 +352,7 @@ function GcCard() {
           variant="destructive"
           className="w-full sm:w-auto"
           onClick={() => run(true)}
-          disabled={gcMutation.isPending}
+          disabled={gcMutation.isPending || !hasFilter}
         >
           {gcMutation.isPending ? "実行中..." : "GC 実行"}
         </Button>
