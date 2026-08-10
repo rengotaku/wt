@@ -22,7 +22,9 @@
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --accent: #f3ebff;
-  --accent-foreground: #863bff;
+  /* #863bff だと #f3ebff 上で 4.44:1 と WCAG AA(4.5:1) をわずかに下回るため、
+     同系色でより暗い #6d28d9（コントラスト比 6.14:1）を使う。 */
+  --accent-foreground: #6d28d9;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
