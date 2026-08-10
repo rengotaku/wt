@@ -22,7 +22,7 @@ describe("App", () => {
       await waitFor(() => {
         expect(window.location.pathname).toBe("/maintenance");
       });
-      expect(screen.getByRole("heading", { name: "GC" })).toBeInTheDocument();
+      expect(screen.getByText("GC オプション")).toBeInTheDocument();
     },
   );
 });

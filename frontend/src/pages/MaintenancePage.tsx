@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import { portsApi, treesApi, type ListenerRow, type StaleItem, type GcRequest } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// 幽霊ポート（削除済み worktree の残骸）: 正常時（0件）はコンパクトな1行表示に留め、
-// 検出時のみ amber の警告パネルへ展開する。常時カード1枚を占有させない。
-function StalePortsSection() {
+// 幽霊ポート（削除済み worktree の残骸）。ReposPage の「リポジトリを追加」カードと
+// 同じクリック開閉パターン。検出時は自動で開き、0件なら閉じたままにする
+// （ユーザーが一度でも手で開閉したら、その状態を優先する）。
+function StalePortsCard() {
+  const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const queryClient = useQueryClient();
   const { data: stale = [], isFetching } = useQuery<StaleItem[]>({
     queryKey: ["port-stale"],
@@ -33,84 +36,108 @@ function StalePortsSection() {
     },
   });
 
-  if (isFetching && stale.length === 0 && !prune.isSuccess) {
-    return (
-      <p className="text-xs text-muted-foreground">幽霊ポートを確認中...</p>
-    );
-  }
-
-  if (stale.length === 0) {
-    return (
-      <p className="text-xs text-muted-foreground">
-        {prune.isSuccess
-          ? `幽霊ポートを${prune.data.count}件掃除しました。`
-          : "幽霊ポート（削除済み worktree の残骸）はありません。"}
-      </p>
-    );
-  }
+  // 掃除成功直後は stale が空になり自動判定だけでは閉じてしまうため、
+  // 完了メッセージが見える間（isSuccess）は開いたままにする。
+  const open = manualOpen ?? (stale.length > 0 || prune.isSuccess);
 
   return (
-    <div className="rounded-lg border border-amber-300/60 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-            幽霊ポートが{stale.length}件見つかりました
-          </p>
-          <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/70">
+    <Card>
+      <CardHeader className="p-0">
+        <button
+          type="button"
+          className="flex w-full flex-col space-y-1.5 p-6 text-left cursor-pointer select-none"
+          onClick={() => setManualOpen(!open)}
+          aria-expanded={open}
+          aria-controls="stale-ports-content"
+        >
+          <CardTitle className="flex items-center gap-2">
+            {open ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            幽霊ポート（削除済み worktree の残骸）
+            {stale.length > 0 && (
+              <span className="text-amber-600 font-medium">{stale.length}件</span>
+            )}
+          </CardTitle>
+        </button>
+      </CardHeader>
+      {open && (
+        <CardContent id="stale-ports-content" className="space-y-3">
+          <p className="text-sm text-muted-foreground">
             <code>wt tree rm</code> を経由せず消された worktree が{" "}
             <code>.worktrees.json</code> に <code>port_base</code>{" "}
-            だけ残した残骸です。ポート帯を死蔵し、割当枯渇の原因になります。
+            だけ残した残骸です。ポート帯を死蔵し、割当枯渇の原因になります。掃除すると
+            該当ブロックが回収されます（登録の削除のみ・ファイルは触りません）。
           </p>
-        </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="shrink-0"
-          disabled={prune.isPending}
-          onClick={() => {
-            if (
-              window.confirm(
-                `${stale.length} 件の幽霊エントリを削除し、ポートブロックを回収します。よろしいですか？`,
-              )
-            ) {
-              prune.mutate();
-            }
-          }}
-        >
-          {prune.isPending ? "掃除中..." : `掃除して回収（${stale.length}件）`}
-        </Button>
-      </div>
-      {prune.isError && (
-        <p className="mt-3 text-sm text-red-600">
-          {(prune.error as Error).message}
-        </p>
+          {prune.isError && (
+            <p className="text-sm text-red-600">
+              {(prune.error as Error).message}
+            </p>
+          )}
+          {prune.isSuccess && (
+            <p className="text-sm text-green-700">
+              {prune.data.count} 件を掃除し、{prune.data.count} ブロックを回収しました。
+            </p>
+          )}
+          {isFetching && stale.length === 0 ? (
+            <p className="text-sm text-muted-foreground">確認中...</p>
+          ) : stale.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              幽霊エントリはありません。
+            </p>
+          ) : (
+            <>
+              <div className="flex justify-end">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={prune.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `${stale.length} 件の幽霊エントリを削除し、ポートブロックを回収します。よろしいですか？`,
+                      )
+                    ) {
+                      prune.mutate();
+                    }
+                  }}
+                >
+                  {prune.isPending
+                    ? "掃除中..."
+                    : `掃除して回収（${stale.length}件）`}
+                </Button>
+              </div>
+              <Table wrapperClassName="max-h-64">
+                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+                  <TableRow>
+                    <TableHead>リポジトリ</TableHead>
+                    <TableHead>worktree</TableHead>
+                    <TableHead>ポート</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stale.map((s) => (
+                    <TableRow key={`${s.repo}/${s.wt_name}`}>
+                      <TableCell>{s.repo}</TableCell>
+                      <TableCell className="text-xs">{s.wt_name}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {s.port_range || "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          )}
+        </CardContent>
       )}
-      <Table wrapperClassName="mt-3 max-h-64">
-        <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
-          <TableRow>
-            <TableHead>リポジトリ</TableHead>
-            <TableHead>worktree</TableHead>
-            <TableHead>ポート</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {stale.map((s) => (
-            <TableRow key={`${s.repo}/${s.wt_name}`}>
-              <TableCell>{s.repo}</TableCell>
-              <TableCell className="text-xs">{s.wt_name}</TableCell>
-              <TableCell className="font-mono text-xs">
-                {s.port_range || "—"}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    </Card>
   );
 }
 
-// Ports セクションの主カード。幽霊ポートの状態は上部に折り込み、
-// 稼働中ポート一覧をメインコンテンツとして扱う。
+// 稼働中ポート一覧カード。
 function PortsCard() {
   const [showUnknown, setShowUnknown] = useState(false);
   const {
@@ -148,76 +175,68 @@ function PortsCard() {
           </Link>{" "}
           一覧で確認・操作できます。
         </p>
-        <StalePortsSection />
+        {unknownCount > 0 && (
+          <label className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showUnknown}
+              onChange={(e) => setShowUnknown(e.target.checked)}
+            />
+            プロセス不明の行も表示する
+            {showUnknown
+              ? `（不明プロセス${unknownCount}件を表示中）`
+              : `（${unknownCount}件を隠しています）`}
+          </label>
+        )}
       </CardHeader>
       <CardContent>
         {listeners.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             LISTEN 中のポートがありません（ss が無い環境かも）
           </p>
+        ) : visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            プロセス不明の行のみです。上のチェックを入れると表示されます。
+          </p>
         ) : (
-          <>
-            <div className="flex flex-col gap-2 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-xs text-muted-foreground">
-                {visible.length}件を表示中
-                {!showUnknown && unknownCount > 0 && `（不明プロセス${unknownCount}件を隠しています）`}
-              </span>
-              {unknownCount > 0 && (
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={showUnknown}
-                    onChange={(e) => setShowUnknown(e.target.checked)}
-                  />
-                  プロセス不明の行も表示する
-                </label>
-              )}
-            </div>
-            {visible.length === 0 ? (
-              <p className="mt-3 text-sm text-muted-foreground">
-                プロセス不明の行のみです。上のチェックを入れると表示されます。
-              </p>
-            ) : (
-              <Table wrapperClassName="mt-3 max-h-[28rem]">
-                <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
-                  <TableRow>
-                    <TableHead>ポート</TableHead>
-                    <TableHead>プロセス</TableHead>
-                    <TableHead>PID</TableHead>
-                    <TableHead>区分</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visible.map((l) => (
-                    <TableRow key={l.port}>
-                      <TableCell className="font-mono">{l.port}</TableCell>
-                      <TableCell className="text-xs">{l.proc || "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">{l.pid || "—"}</TableCell>
-                      <TableCell>
-                        {l.managed ? (
-                          <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
-                            {`wt: ${l.owner ?? ""}`}
-                          </span>
-                        ) : (
-                          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                            foreign
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </>
+          <Table wrapperClassName="max-h-[28rem]">
+            <TableHeader className="sticky top-0 z-10 bg-background shadow-[0_1px_2px_rgba(0,0,0,0.1)]">
+              <TableRow>
+                <TableHead>ポート</TableHead>
+                <TableHead>プロセス</TableHead>
+                <TableHead>PID</TableHead>
+                <TableHead>区分</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visible.map((l) => (
+                <TableRow key={l.port}>
+                  <TableCell className="font-mono">{l.port}</TableCell>
+                  <TableCell className="text-xs">{l.proc || "—"}</TableCell>
+                  <TableCell className="font-mono text-xs">{l.pid || "—"}</TableCell>
+                  <TableCell>
+                    {l.managed ? (
+                      <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">
+                        {`wt: ${l.owner ?? ""}`}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        foreign
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// GC カード。削除対象（ニュートラル）と危険なオプション（amber）を視覚的に分離し、
-// カード枠は destructive 系の薄い色でGC操作であることを示す。
+// GC カード。危険度はボタンの destructive variant とアイコンだけで示し、
+// カード枠・背景ブロックは他ページと同じニュートラルな見た目に揃える。
 function GcCard() {
   const [opts, setOpts] = useState<GcRequest>({
     done: false,
@@ -245,7 +264,7 @@ function GcCard() {
   };
 
   return (
-    <Card className="border-destructive/30">
+    <Card>
       <CardHeader>
         <CardTitle>GC オプション</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -255,8 +274,8 @@ function GcCard() {
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <section className="space-y-2 rounded-lg border bg-muted/20 p-4">
-          <h3 className="text-sm font-medium">削除対象</h3>
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">削除対象</h3>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -285,16 +304,15 @@ function GcCard() {
           </p>
         </section>
 
-        <section className="space-y-2 rounded-lg border border-amber-300/60 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
-          <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-            危険なオプション
-          </h3>
+        <section className="space-y-2">
+          <h3 className="text-sm font-medium text-muted-foreground">危険なオプション</h3>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={opts.force ?? false}
               onChange={(e) => setOpts({ ...opts, force: e.target.checked })}
             />
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
             dirty な worktree も対象に含める（--force 相当）
           </label>
           <p className="text-xs text-muted-foreground ml-5">
@@ -308,7 +326,7 @@ function GcCard() {
           </Alert>
         )}
       </CardContent>
-      <CardFooter className="flex-col gap-2 rounded-b-xl border-t bg-muted/20 py-4 sm:flex-row sm:justify-end">
+      <CardFooter className="flex-col gap-2 py-4 sm:flex-row sm:justify-end">
         <Button
           variant="outline"
           className="w-full sm:w-auto"
@@ -342,25 +360,10 @@ function GcCard() {
 
 export function MaintenancePage() {
   return (
-    <div className="min-w-0 space-y-12">
-      <section className="min-w-0 space-y-4">
-        <header className="border-b pb-3">
-          <h2 className="text-xl font-semibold tracking-tight">Ports</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            ポートの使用状況と不要な割り当てを確認します。
-          </p>
-        </header>
-        <PortsCard />
-      </section>
-      <section className="min-w-0 space-y-4">
-        <header className="border-b border-destructive/30 pb-3">
-          <h2 className="text-xl font-semibold tracking-tight">GC</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            不要になった worktree を確認し、一括削除します。
-          </p>
-        </header>
-        <GcCard />
-      </section>
+    <div className="space-y-6">
+      <StalePortsCard />
+      <PortsCard />
+      <GcCard />
     </div>
   );
 }

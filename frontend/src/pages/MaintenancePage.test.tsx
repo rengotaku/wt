@@ -37,13 +37,12 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     } as never);
   });
 
-  it("renders both the Ports and GC sections", async () => {
+  it("renders the Ports and GC cards", async () => {
     render(<MaintenancePage />);
     await waitFor(() => {
       expect(screen.getByText("8000")).toBeInTheDocument();
     });
-    expect(screen.getByRole("heading", { name: "Ports" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "GC" })).toBeInTheDocument();
+    expect(screen.getByText("稼働中ポート")).toBeInTheDocument();
     expect(screen.getByText("GC オプション")).toBeInTheDocument();
   });
 
@@ -66,7 +65,7 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     });
     // port 7000 (proc: "") is hidden by default
     expect(screen.queryByText("7000")).not.toBeInTheDocument();
-    expect(screen.getByText(/プロセス不明の行も表示する/)).toBeInTheDocument();
+    expect(screen.getByText("プロセス不明の行も表示する（1件を隠しています）")).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByRole("checkbox", { name: /プロセス不明の行も表示する/ })
@@ -75,6 +74,10 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     await waitFor(() => {
       expect(screen.getByText("7000")).toBeInTheDocument();
     });
+    // 表示中は「隠しています」ではなく「表示中」に文言が切り替わる（codex regression）
+    expect(
+      screen.getByText("プロセス不明の行も表示する（不明プロセス1件を表示中）")
+    ).toBeInTheDocument();
   });
 
   it("lists ghost entries and prunes them on confirm", async () => {
@@ -98,15 +101,60 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     confirmSpy.mockRestore();
   });
 
-  it("shows a compact empty state when there are no ghost entries", async () => {
+  it("keeps the ghost-port card open to show the success message after pruning (regression)", async () => {
+    const { portsApi } = await import("@/api");
+    // 初回取得は1件、掃除後の再取得（invalidateQueries）では0件に変わる。
+    vi.mocked(portsApi.stale)
+      .mockResolvedValueOnce([
+        { repo: "marchedb", wt_name: "marchedb--issue-9", port_base: 9200, port_range: "9200-9204" },
+      ] as never)
+      .mockResolvedValue([] as never);
+    vi.mocked(portsApi.prune).mockResolvedValue({ removed: [], count: 1 } as never);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
     render(<MaintenancePage />);
     await waitFor(() => {
+      expect(screen.getByText("marchedb--issue-9")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /掃除して回収/ }));
+
+    // stale が 0件に変わってもカードが自動で閉じず、成功メッセージが見える
+    await waitFor(() => {
       expect(
-        screen.getByText("幽霊ポート（削除済み worktree の残骸）はありません。")
+        screen.getByText("1 件を掃除し、1 ブロックを回収しました。")
       ).toBeInTheDocument();
     });
-    // 異常時専用の警告パネル（見出し）は正常時には出ない
-    expect(screen.queryByText(/幽霊ポートが\d+件見つかりました/)).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("keeps the ghost-port card collapsed by default (0件) and shows the empty state once opened", async () => {
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("8000")).toBeInTheDocument();
+    });
+    // 0件のときは閉じたまま、件数バッジも出ない
+    expect(screen.queryByText(/^\d+件$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("幽霊エントリはありません。")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("幽霊ポート（削除済み worktree の残骸）"));
+
+    await waitFor(() => {
+      expect(screen.getByText("幽霊エントリはありません。")).toBeInTheDocument();
+    });
+  });
+
+  it("auto-expands the ghost-port card when entries are detected, with a count badge", async () => {
+    const { portsApi } = await import("@/api");
+    vi.mocked(portsApi.stale).mockResolvedValue([
+      { repo: "marchedb", wt_name: "marchedb--issue-9", port_base: 9200, port_range: "9200-9204" },
+    ] as never);
+
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("marchedb--issue-9")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1件")).toBeInTheDocument();
   });
 
   it("runs a GC dry-run preview and shows the output", async () => {
