@@ -42,24 +42,29 @@ function StalePortsCard() {
 
   return (
     <Card>
-      <CardHeader
-        className="cursor-pointer select-none"
-        onClick={() => setManualOpen(!open)}
-      >
-        <CardTitle className="flex items-center gap-2">
-          {open ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-          幽霊ポート（削除済み worktree の残骸）
-          {stale.length > 0 && (
-            <span className="text-amber-600 font-medium">{stale.length}件</span>
-          )}
-        </CardTitle>
+      <CardHeader className="p-0">
+        <button
+          type="button"
+          className="flex w-full flex-col space-y-1.5 p-6 text-left cursor-pointer select-none"
+          onClick={() => setManualOpen(!open)}
+          aria-expanded={open}
+          aria-controls="stale-ports-content"
+        >
+          <CardTitle className="flex items-center gap-2">
+            {open ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            幽霊ポート（削除済み worktree の残骸）
+            {stale.length > 0 && (
+              <span className="text-amber-600 font-medium">{stale.length}件</span>
+            )}
+          </CardTitle>
+        </button>
       </CardHeader>
       {open && (
-        <CardContent className="space-y-3">
+        <CardContent id="stale-ports-content" className="space-y-3">
           <p className="text-sm text-muted-foreground">
             <code>wt tree rm</code> を経由せず消された worktree が{" "}
             <code>.worktrees.json</code> に <code>port_base</code>{" "}
