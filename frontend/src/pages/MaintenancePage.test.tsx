@@ -157,6 +157,37 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     expect(screen.getByText("1件")).toBeInTheDocument();
   });
 
+  it("disables the GC buttons and warns when no filter is set (規制対応)", async () => {
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("GC オプション")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /プレビュー/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "GC 実行" })).toBeDisabled();
+    expect(
+      screen.getByText(/「削除対象」のフィルタを1つ以上指定してください/)
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the GC buttons disabled for 0d/0h (matches backend's positive-duration check, codex regression)", async () => {
+    render(<MaintenancePage />);
+    await waitFor(() => {
+      expect(screen.getByText("GC オプション")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByPlaceholderText("30d / 24h"), {
+      target: { value: "0d" },
+    });
+
+    expect(screen.getByRole("button", { name: /プレビュー/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "GC 実行" })).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("30d / 24h"), {
+      target: { value: "30d" },
+    });
+    expect(screen.getByRole("button", { name: /プレビュー/ })).toBeEnabled();
+  });
+
   it("runs a GC dry-run preview and shows the output", async () => {
     const { treesApi } = await import("@/api");
     vi.mocked(treesApi.gc).mockResolvedValue({
@@ -164,6 +195,7 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     } as never);
 
     render(<MaintenancePage />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /done な PR/ }));
     fireEvent.click(screen.getByRole("button", { name: /プレビュー/ }));
 
     await waitFor(() => {
@@ -185,6 +217,7 @@ describe("MaintenancePage (Ports + GC combined)", () => {
     } as never);
 
     render(<MaintenancePage />);
+    fireEvent.click(screen.getByRole("checkbox", { name: /done な PR/ }));
     fireEvent.click(screen.getByRole("button", { name: "GC 実行" }));
 
     await waitFor(() => {

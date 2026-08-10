@@ -235,6 +235,16 @@ function PortsCard() {
   );
 }
 
+// backend の parseOlderThan（internal/wt/gc/gc.go）と同じ形式・正数判定を
+// フロントでも行う。"0d" / "0h" のようにフォーマットは正しいが期間が0の値を
+// 「フィルタ指定あり」と誤判定しないようにする（backend は olderSecs<=0 を
+// フィルタ未指定として拒否するため、判定基準をここで一致させる）。
+function isPositiveOlderThan(value: string): boolean {
+  const m = /^(\d+)([dh])$/.exec(value.trim());
+  if (!m) return false;
+  return Number(m[1]) > 0;
+}
+
 // GC カード。危険度はボタンの destructive variant とアイコンだけで示し、
 // カード枠・背景ブロックは他ページと同じニュートラルな見た目に揃える。
 function GcCard() {
@@ -260,8 +270,22 @@ function GcCard() {
   });
 
   const run = (execute: boolean) => {
-    gcMutation.mutate({ ...opts, dry_run: !execute, yes: execute });
+    // older_than は前後の空白を含んでいても hasFilter 判定・表示上は許容するが、
+    // 送信値はここで trim する。trim しないまま送ると backend の正規表現
+    // （前後空白不可）に拒否され、フロントで「有効」と判定したのに送信後に
+    // フォーマットエラーになる不整合が起きる。
+    gcMutation.mutate({
+      ...opts,
+      older_than: opts.older_than?.trim() ?? "",
+      dry_run: !execute,
+      yes: execute,
+    });
   };
+
+  // フィルタが1つも無いと「削除対象」の絞り込みが一切効かず、main/master
+  // 以外の全 worktree が対象になる（backend は fail-safe でエラーを返すが、
+  // フロントでも早期に気づかせて実行自体をブロックする）。
+  const hasFilter = Boolean(opts.done) || isPositiveOlderThan(opts.older_than ?? "");
 
   return (
     <Card>
@@ -320,6 +344,14 @@ function GcCard() {
           </p>
         </section>
 
+        {!hasFilter && (
+          <p className="flex items-center gap-1.5 text-xs text-amber-600">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            「削除対象」のフィルタを1つ以上指定してください。未指定のままでは
+            main/master 以外の全 worktree が対象になるため実行できません。
+          </p>
+        )}
+
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -331,7 +363,7 @@ function GcCard() {
           variant="outline"
           className="w-full sm:w-auto"
           onClick={() => run(false)}
-          disabled={gcMutation.isPending}
+          disabled={gcMutation.isPending || !hasFilter}
         >
           プレビュー (dry-run)
         </Button>
@@ -339,7 +371,7 @@ function GcCard() {
           variant="destructive"
           className="w-full sm:w-auto"
           onClick={() => run(true)}
-          disabled={gcMutation.isPending}
+          disabled={gcMutation.isPending || !hasFilter}
         >
           {gcMutation.isPending ? "実行中..." : "GC 実行"}
         </Button>
