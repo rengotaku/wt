@@ -11,19 +11,23 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  /* ブランドカラー（favicon.svg の紫: #863bff）。primary と focus ring に
+     採用し、ヘッダー・アクティブナビ・既定ボタン・フォーカス状態に一貫して
+     反映する。無彩色（shadcn デフォルト）のままだったのを、このツール自身の
+     ロゴカラーに揃える。 */
+  --primary: #863bff;
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: #f3ebff;
+  --accent-foreground: #863bff;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #863bff;
 }
 
 .dark {
@@ -33,19 +37,22 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
+  /* ダークモードは現在トグルが無く未使用だが、将来有効化したときに
+     light 側と一貫したブランドカラーになるよう揃えておく（薄紫の
+     primary に、暗い前景文字）。 */
+  --primary: #b794ff;
   --primary-foreground: oklch(0.205 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: #3a2a5c;
+  --accent-foreground: #d8c2ff;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: #b794ff;
 }
 
 @theme inline {
