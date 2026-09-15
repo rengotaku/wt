@@ -66,9 +66,13 @@ check: lint test
 ## ci: Run lint + diff-check + test with coverage
 ci: lint diff-check test-cov
 
-## install-bin: Build and copy binary to ~/.config/wt/
+## install-bin: Build and install binary to ~/.config/wt/
+# 同一パスへの cp で上書きすると、macOS が持つ実行ファイルの署名キャッシュが
+# 食い違い、以後そのパスの実行が起動直後に SIGKILL される。rename は新しい
+# inode になるため起きないので、一時ファイルへ置いてから mv で差し替える。
 install-bin: build
-	cp $(BIN_DIR)/$(BINARY_NAME) $(HOME)/.config/wt/$(BINARY_NAME)
+	cp $(BIN_DIR)/$(BINARY_NAME) $(HOME)/.config/wt/$(BINARY_NAME).new
+	mv -f $(HOME)/.config/wt/$(BINARY_NAME).new $(HOME)/.config/wt/$(BINARY_NAME)
 
 ## clean: Remove build artifacts (keeps frontend node_modules)
 clean:
