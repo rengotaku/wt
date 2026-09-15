@@ -28,9 +28,10 @@ func repoSyncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
 		Short: "全リポの main/master を git pull --ff-only",
+		// 同期失敗は使い方の誤りではないので usage を出さない。
+		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			repo.Sync()
-			return nil
+			return repo.Sync()
 		},
 	}
 }

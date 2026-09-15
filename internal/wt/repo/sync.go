@@ -56,8 +56,21 @@ func resolveMain(container string) (path, name string) {
 	return "", ""
 }
 
+// indentRest indents every line after the first so that multi-line git errors
+// stay visually attached to the "❌ <repo>" line they belong to.
+func indentRest(msg string) string {
+	lines := strings.Split(msg, "\n")
+	for i := 1; i < len(lines); i++ {
+		lines[i] = "   " + lines[i]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Sync runs git pull --ff-only on every main/master worktree in parallel.
-func Sync() {
+// 同期に失敗したリポが 1 件でもあれば非 0 で終わるよう error を返す。呼び出し側
+// （myroutine の Worktree 同期ステップ等）は終了コードで成否を判定しており、
+// 画面に "❌ N 失敗" と出しただけでは失敗が握りつぶされるため。
+func Sync() error {
 	home := os.Getenv("HOME")
 	dirs := []string{
 		filepath.Join(home, "Workspace"),
@@ -116,7 +129,7 @@ func Sync() {
 		} else {
 			fmt.Println("対象リポなし")
 		}
-		return
+		return nil
 	}
 
 	if len(skipped) > 0 {
@@ -152,11 +165,12 @@ func Sync() {
 
 			switch {
 			case err != nil:
-				firstLine := output
-				if idx := strings.IndexByte(output, '\n'); idx != -1 {
-					firstLine = output[:idx]
+				// 1 行目だけに切り詰めると、fetch 出力がある場合に
+				// "From github.com:..." しか残らず原因が読めない。全文を渡す。
+				if output == "" {
+					output = err.Error()
 				}
-				ch <- syncResult{name: t.name, branch: t.branch, ok: false, msg: firstLine}
+				ch <- syncResult{name: t.name, branch: t.branch, ok: false, msg: output}
 			case strings.Contains(output, "Already up to date"):
 				ch <- syncResult{name: t.name, branch: t.branch, ok: true, msg: "Already up to date"}
 			default:
@@ -179,7 +193,7 @@ func Sync() {
 			fmt.Printf("✅ %s (%s) %s\n", r.name, r.branch, r.msg)
 			success++
 		default:
-			fmt.Printf("❌ %s (%s) %s\n", r.name, r.branch, r.msg)
+			fmt.Printf("❌ %s (%s) %s\n", r.name, r.branch, indentRest(r.msg))
 			fail++
 		}
 	}
@@ -193,4 +207,9 @@ func Sync() {
 		summary += fmt.Sprintf(", ❌ %d 失敗", fail)
 	}
 	fmt.Println(summary)
+
+	if fail > 0 {
+		return fmt.Errorf("%d/%d リポの同期に失敗しました", fail, len(targets))
+	}
+	return nil
 }
