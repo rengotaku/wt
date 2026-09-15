@@ -208,8 +208,11 @@ func Sync() error {
 	}
 	fmt.Println(summary)
 
-	if fail > 0 {
-		return fmt.Errorf("%d/%d リポの同期に失敗しました", fail, len(targets))
+	// warn（別ブランチ checkout で pull skip）も「同期されていない」状態であり、
+	// 呼び出し側から見れば失敗と区別する理由がない。まとめて非 0 にする。
+	if fail > 0 || warn > 0 {
+		return fmt.Errorf("%d/%d リポが同期されていません（失敗 %d / 警告 %d）",
+			fail+warn, len(targets), fail, warn)
 	}
 	return nil
 }
