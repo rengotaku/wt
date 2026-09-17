@@ -35,6 +35,7 @@ wt (cobra CLI)
 |---|---|
 | `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / auto_start / port_base / `_config.dev_services` 等） |
 | `<base>/<repo>/.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` | repo 単位の表示/非表示フラグ（ローカル設定、コミットしない） |
+| `<base>/<repo>/.worktrees.json::_config.branch_pattern（core.EntryConfig.BranchPattern）` | `wt tree add` が作るブランチ名を制約する正規表現。既定 `".*"`（全許可）。完全一致で照合する（`core.ValidateBranchName`） |
 | `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
 | `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |

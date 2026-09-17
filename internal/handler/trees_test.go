@@ -117,7 +117,7 @@ func TestListTrees_HiddenRepo(t *testing.T) {
 
 	// Hide the hidden-repo
 	cfg := core.EntryConfig{Hidden: true}
-	if err := core.SaveConfig(containerHidden, cfg); err != nil {
+	if err := core.SaveConfig(containerHidden, &cfg); err != nil {
 		t.Fatal(err)
 	}
 

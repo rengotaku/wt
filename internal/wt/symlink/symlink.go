@@ -47,7 +47,7 @@ func Add(out io.Writer, repo, path string) error {
 	}
 	cfg.SymlinkCandidates = append(cfg.SymlinkCandidates, path)
 	sort.Strings(cfg.SymlinkCandidates)
-	if err := core.SaveConfig(container, cfg); err != nil {
+	if err := core.SaveConfig(container, &cfg); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "✅ added: %s\n", path)
@@ -74,7 +74,7 @@ func Rm(out io.Writer, repo, path string) error {
 		}
 	}
 	cfg.SymlinkCandidates = filtered
-	if err := core.SaveConfig(container, cfg); err != nil {
+	if err := core.SaveConfig(container, &cfg); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "✅ removed: %s\n", path)

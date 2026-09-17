@@ -111,7 +111,7 @@ func TestListRepos_VisibleBeforeHidden(t *testing.T) {
 			t.Fatal(err)
 		}
 		if r.hidden {
-			if err := core.SaveConfig(container, core.EntryConfig{Hidden: true}); err != nil {
+			if err := core.SaveConfig(container, &core.EntryConfig{Hidden: true}); err != nil {
 				t.Fatal(err)
 			}
 		}

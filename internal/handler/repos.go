@@ -350,7 +350,7 @@ func (h *Handler) SetRepoHidden(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg.Hidden = req.Hidden
-	if err := core.SaveConfig(container, cfg); err != nil {
+	if err := core.SaveConfig(container, &cfg); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

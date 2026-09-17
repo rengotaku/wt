@@ -55,7 +55,7 @@ func makeContainer(t *testing.T) (containerDir, mainDir string) {
 	if err := os.Rename(mainDir, newMain); err != nil {
 		t.Fatal(err)
 	}
-	if err := core.SaveConfig(container, core.EntryConfig{SymlinkCandidates: []string{}}); err != nil {
+	if err := core.SaveConfig(container, &core.EntryConfig{SymlinkCandidates: []string{}}); err != nil {
 		t.Fatal(err)
 	}
 	return container, newMain
@@ -179,7 +179,7 @@ func TestFindGitCryptKey_RegistryPriorityOverGitConfig(t *testing.T) {
 	if err := os.WriteFile(registryKey, []byte("registrykey"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := core.SaveConfig(containerDir, core.EntryConfig{GitCryptKey: registryKey}); err != nil {
+	if err := core.SaveConfig(containerDir, &core.EntryConfig{GitCryptKey: registryKey}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -195,7 +195,7 @@ func TestFindGitCryptKey_RegistryKeyMissing_FallsThrough(t *testing.T) {
 	t.Setenv("HOME", tmpHome)
 
 	// Register a key path that doesn't exist
-	if err := core.SaveConfig(containerDir, core.EntryConfig{GitCryptKey: "/nonexistent/key"}); err != nil {
+	if err := core.SaveConfig(containerDir, &core.EntryConfig{GitCryptKey: "/nonexistent/key"}); err != nil {
 		t.Fatal(err)
 	}
 	// Create home default key as fallback
