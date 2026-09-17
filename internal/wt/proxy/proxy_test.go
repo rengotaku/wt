@@ -71,7 +71,7 @@ func TestRoutes_FromMetadataDefault(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := core.SaveConfig(container, core.EntryConfig{
+	if err := core.SaveConfig(container, &core.EntryConfig{
 		DevServices: []core.DevService{
 			{Name: "api", Cmd: "run-api"},
 			{Name: "web", Cmd: "run-web", Domain: true},

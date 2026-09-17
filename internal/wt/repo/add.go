@@ -88,8 +88,8 @@ func Add(out io.Writer, opts AddOptions) error {
 	}); err != nil {
 		return err
 	}
-	cfg := core.EntryConfig{SymlinkCandidates: []string{}, GitCryptKey: opts.GitCryptKey}
-	if err := core.SaveConfig(container, cfg); err != nil {
+	cfg := core.EntryConfig{SymlinkCandidates: []string{}, GitCryptKey: opts.GitCryptKey, BranchPattern: core.DefaultBranchPattern}
+	if err := core.SaveConfig(container, &cfg); err != nil {
 		return err
 	}
 	if opts.GitCryptKey != "" {

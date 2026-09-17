@@ -310,7 +310,7 @@ func TestEffectiveConfig_Precedence(t *testing.T) {
 	}
 
 	// 2) Repo default only → SourceRepo.
-	if err := core.SaveConfig(container, core.EntryConfig{
+	if err := core.SaveConfig(container, &core.EntryConfig{
 		DevServices: []core.DevService{{Name: "api", Cmd: "run-default"}},
 	}); err != nil {
 		t.Fatal(err)
@@ -415,7 +415,7 @@ func TestServe_WarnsWhenFileShadowed(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ...but a repo default declares a different service, which wins.
-	if err := core.SaveConfig(container, core.EntryConfig{
+	if err := core.SaveConfig(container, &core.EntryConfig{
 		DevServices: []core.DevService{{Name: "api", Cmd: "sleep 30"}},
 	}); err != nil {
 		t.Fatal(err)

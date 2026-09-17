@@ -173,7 +173,7 @@ func scaffoldRepo(out io.Writer, src, targetBase string) error {
 	}); err != nil {
 		return err
 	}
-	if err := core.SaveConfig(container, core.EntryConfig{SymlinkCandidates: []string{}}); err != nil {
+	if err := core.SaveConfig(container, &core.EntryConfig{SymlinkCandidates: []string{}, BranchPattern: core.DefaultBranchPattern}); err != nil {
 		return err
 	}
 	_, _ = fmt.Fprintf(out, "✅ metadata: %s\n", core.MetaFile(container))

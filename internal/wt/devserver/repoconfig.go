@@ -36,7 +36,7 @@ func SaveRepoDefault(container string, cfg Config) error {
 		return err
 	}
 	rc.DevServices = toCore(cfg.Services)
-	return core.SaveConfig(container, rc)
+	return core.SaveConfig(container, &rc)
 }
 
 // ClearRepoDefault removes all repository-default dev services, preserving the
@@ -47,7 +47,7 @@ func ClearRepoDefault(container string) error {
 		return err
 	}
 	rc.DevServices = nil
-	return core.SaveConfig(container, rc)
+	return core.SaveConfig(container, &rc)
 }
 
 // UpsertRepoService adds svc to the repository default, or replaces the existing

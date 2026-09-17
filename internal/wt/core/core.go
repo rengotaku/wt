@@ -125,6 +125,9 @@ type EntryConfig struct {
 	DevServices []DevService `json:"dev_services,omitempty"`
 	// Hidden marks the repository as hidden in the UI.
 	Hidden bool `json:"hidden,omitempty"`
+	// BranchPattern constrains branch names created by `wt tree add` for this
+	// repository. Empty or ".*" allows anything; see branchpattern.go.
+	BranchPattern string `json:"branch_pattern,omitempty"`
 }
 
 // LoadConfig returns the _config block, defaulting to empty when missing.
@@ -145,7 +148,7 @@ func LoadConfig(container string) (EntryConfig, error) {
 }
 
 // SaveConfig writes back the _config block, preserving other entries.
-func SaveConfig(container string, cfg EntryConfig) error {
+func SaveConfig(container string, cfg *EntryConfig) error {
 	meta, err := LoadMeta(container)
 	if err != nil {
 		return err

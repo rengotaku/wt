@@ -131,6 +131,9 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 	issueNum := opts.Issue
 	description := opts.Description
 	branchName := newIssueBranchName(issueNum)
+	if err := core.ValidateBranchName(containerDir, branchName); err != nil {
+		return nil, fmt.Errorf("--issue から自動生成された名前は使えません\n   %w", err)
+	}
 	issueRef := "#" + issueNum
 	worktreeName := opts.Repo + "--" + strings.ReplaceAll(branchName, "/", "-")
 	typeStr := "feature"
@@ -254,6 +257,10 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 		return nil, err
 	}
 	mainName := filepath.Base(mainDir)
+
+	if err := core.ValidateBranchName(containerDir, opts.Branch); err != nil {
+		return nil, err
+	}
 
 	worktreePath := filepath.Join(containerDir, dir)
 	if _, err := os.Stat(worktreePath); err == nil {

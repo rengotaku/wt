@@ -71,7 +71,7 @@ func (h *Handler) UpdateRepoConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.SymlinkCandidates = cleaned
 	cfg.DevServices = req.DevServices
-	if err := core.SaveConfig(container, cfg); err != nil {
+	if err := core.SaveConfig(container, &cfg); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

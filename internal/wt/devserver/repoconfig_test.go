@@ -121,7 +121,7 @@ func TestRepoDefault_SaveValidates(t *testing.T) {
 
 func TestRepoDefault_PreservesOtherConfigFields(t *testing.T) {
 	container := t.TempDir()
-	if err := core.SaveConfig(container, core.EntryConfig{
+	if err := core.SaveConfig(container, &core.EntryConfig{
 		SymlinkCandidates: []string{"node_modules"},
 		GitCryptKey:       "/keys/x",
 	}); err != nil {
