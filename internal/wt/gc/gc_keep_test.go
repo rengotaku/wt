@@ -16,7 +16,7 @@ func TestKeepReason(t *testing.T) {
 		name   string
 		c      changes
 		u      unpushed
-		merged bool
+		landed bool
 		want   string // "" = 削除してよい
 	}{
 		{"clean, all pushed, not merged → delete", changes{}, unpushed{}, false, ""},
@@ -31,7 +31,7 @@ func TestKeepReason(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := keepReason(tt.c, tt.u, tt.merged)
+			got := keepReason(tt.c, tt.u, tt.landed)
 			if tt.want == "" && got != "" {
 				t.Fatalf("got %q, want delete", got)
 			}
@@ -90,6 +90,40 @@ func (f *gcFixture) add(name string) string {
 func exists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+func revParse(t *testing.T, dir string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func TestHeadLanded(t *testing.T) {
+	f := newGCFixture(t)
+	wt := f.add("feat")
+	f.git(wt, "commit", "--allow-empty", "-m", "a")
+	a := revParse(t, wt)
+	f.git(wt, "commit", "--allow-empty", "-m", "b")
+	b := revParse(t, wt)
+
+	if !headLanded(wt, []string{b}) {
+		t.Error("HEAD == merged head → landed")
+	}
+	f.git(wt, "reset", "-q", "--hard", a)
+	if !headLanded(wt, []string{b}) {
+		t.Error("HEAD is an ancestor of merged head → landed")
+	}
+	f.git(wt, "reset", "-q", "--hard", b)
+	f.git(wt, "commit", "--allow-empty", "-m", "after merge")
+	if headLanded(wt, []string{b}) {
+		t.Error("commit added after the merge → not landed")
+	}
+	if headLanded(wt, nil) {
+		t.Error("no merged head known → not landed")
+	}
 }
 
 func TestRunKeepsUnsavedWork(t *testing.T) {

@@ -97,11 +97,12 @@ func unpushedOf(wtPath string) unpushed {
 
 // keepReason returns why a candidate must be kept (without --force), or "" when
 // it is safe to delete. Work that exists nowhere else — uncommitted changes,
-// untracked files, commits on no remote — keeps the worktree. A merged PR is
-// exempt from the unpushed check: after a squash merge the remote branch is
-// often deleted, so its commits are on no remote even though the work landed.
+// untracked files, commits on no remote — keeps the worktree. landed (HEAD is
+// within a merged PR's head) is exempt from the unpushed check: after a squash
+// merge the remote branch is often deleted, so its commits are on no remote
+// even though the work landed. Commits added after the merge are not landed.
 // A failed observation keeps the worktree (fail-closed).
-func keepReason(c changes, u unpushed, merged bool) string {
+func keepReason(c changes, u unpushed, landed bool) string {
 	if c.err != nil {
 		return "判定失敗（git status: " + c.err.Error() + "）"
 	}
@@ -111,7 +112,7 @@ func keepReason(c changes, u unpushed, merged bool) string {
 	if c.untracked > 0 {
 		return fmt.Sprintf("未追跡のファイル %d 件", c.untracked)
 	}
-	if merged {
+	if landed {
 		return ""
 	}
 	if u.err != nil {
@@ -169,13 +170,14 @@ func Run(out io.Writer, opts Options) error {
 
 	// --done: branch→PR state と issue state を repo 単位でキャッシュ。
 	prStateCache := map[string]map[string]string{}
-	issueCache := map[string]map[int]string{} // mainDir → issueNum → state
+	mergedHeadCache := map[string]map[string][]string{} // mainDir → branch → merged PR head OIDs
+	issueCache := map[string]map[int]string{}           // mainDir → issueNum → state
 	if opts.closedFilter() {
 		_, _ = fmt.Fprintln(out, "🧹 closed/merged な issue/PR を判定中...")
 		for i := range items {
 			md := items[i].MainDir
 			if _, ok := prStateCache[md]; !ok {
-				prStateCache[md] = fetchPRStates(md)
+				prStateCache[md], mergedHeadCache[md] = fetchPRStates(md)
 				issueCache[md] = map[int]string{}
 			}
 		}
@@ -189,7 +191,7 @@ func Run(out io.Writer, opts Options) error {
 
 		branch, _ := core.GitOutput(it.WtPath, "branch", "--show-current")
 		info := ""
-		merged := false
+		landed := false
 
 		if opts.closedFilter() {
 			md := it.MainDir
@@ -206,7 +208,8 @@ func Run(out io.Writer, opts Options) error {
 				continue
 			}
 			info += reason
-			merged = prStateCache[md][branch] == "MERGED"
+			landed = prStateCache[md][branch] == "MERGED" &&
+				headLanded(it.WtPath, mergedHeadCache[md][branch])
 		}
 
 		if olderSecs > 0 {
@@ -228,7 +231,7 @@ func Run(out io.Writer, opts Options) error {
 
 		c := cand{entry: *it, branch: branch, info: info}
 		if !opts.Force {
-			if r := keepReason(changesOf(it.WtPath), unpushedOf(it.WtPath), merged); r != "" {
+			if r := keepReason(changesOf(it.WtPath), unpushedOf(it.WtPath), landed); r != "" {
 				c.info = r
 				skips = append(skips, c)
 				continue
@@ -320,36 +323,56 @@ func repoSlug(mainDir string) string {
 	return strings.TrimSuffix(slug, ".git")
 }
 
-// fetchPRStates returns branch→state (OPEN/CLOSED/MERGED) for all PRs of a repo.
-func fetchPRStates(mainDir string) map[string]string {
+// fetchPRStates returns branch→state (OPEN/CLOSED/MERGED) for all PRs of a
+// repo, and branch→head OIDs of its merged PRs.
+func fetchPRStates(mainDir string) (states map[string]string, mergedHeads map[string][]string) {
+	states, mergedHeads = map[string]string{}, map[string][]string{}
 	slug := repoSlug(mainDir)
 	if slug == "" {
-		return map[string]string{}
+		return states, mergedHeads
 	}
 	out, err := exec.Command("gh", "pr", "list",
 		"--state", "all",
-		"--json", "headRefName,state",
+		"--json", "headRefName,headRefOid,state",
 		"--limit", "300",
 		"--repo", slug).Output()
 	if err != nil {
-		return map[string]string{}
+		return states, mergedHeads
 	}
 	var prs []struct {
 		HeadRefName string `json:"headRefName"`
+		HeadRefOid  string `json:"headRefOid"`
 		State       string `json:"state"`
 	}
 	if err := json.Unmarshal(out, &prs); err != nil {
-		return map[string]string{}
+		return states, mergedHeads
 	}
-	states := make(map[string]string, len(prs))
 	for _, p := range prs {
+		if p.State == "MERGED" && p.HeadRefOid != "" {
+			mergedHeads[p.HeadRefName] = append(mergedHeads[p.HeadRefName], p.HeadRefOid)
+		}
 		// 同一ブランチに複数 PR があれば OPEN を優先（安全側）。
 		if cur, ok := states[p.HeadRefName]; ok && cur == "OPEN" {
 			continue
 		}
 		states[p.HeadRefName] = p.State
 	}
-	return states
+	return states, mergedHeads
+}
+
+// headLanded reports whether the worktree's HEAD is the head of a merged PR
+// or an ancestor of one, i.e. no commit was added after the merge.
+func headLanded(wtPath string, mergedHeads []string) bool {
+	head, err := core.GitOutput(wtPath, "rev-parse", "HEAD")
+	if err != nil || head == "" {
+		return false
+	}
+	for _, oid := range mergedHeads {
+		if oid == head || core.GitCheck(wtPath, "merge-base", "--is-ancestor", head, oid) {
+			return true
+		}
+	}
+	return false
 }
 
 // fetchIssueState returns "OPEN"/"CLOSED" for an issue, or "" on error.

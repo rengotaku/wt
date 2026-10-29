@@ -187,7 +187,7 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 - PR が merged 以外（closed・PR なし・`--older-than` のみ）で、どのリモートにも無いコミットがある（`git rev-list HEAD --not --remotes`）
 - `git status` などの判定に失敗した
 
-PR が merged のものはリモートに無いコミットを見ない。squash マージ後にリモートのブランチを消すと、コミットは main にもリモートにも残らないため。
+PR が merged で、HEAD がその PR の head と一致する（または祖先にあたる）ものはリモートに無いコミットを見ない。squash マージ後にリモートのブランチを消すと、コミットは main にもリモートにも残らないため。マージ後にコミットを足した worktree は例外にしない。`git status` は `--untracked-files=normal` を付け、`status.showUntrackedFiles=no` の設定でも未追跡を数える。
 
 `--merged` / `--closed` / `--include-dirty` の分離は撤廃され、`--done` と `--force` に統合された。tmux セッションの管理（`--no-tmux` / `--keep-tmux` / `killTmuxSession`）は撤去されており、`wt tree rm` / `wt tree gc` は tmux を一切参照しない。
 

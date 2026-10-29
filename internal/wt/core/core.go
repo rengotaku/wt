@@ -308,7 +308,8 @@ func IsDirty(wtPath string) bool {
 // worktree. Unlike IsDirty, a failing `git status` is returned as an error so
 // that callers deleting worktrees can fall to the safe side.
 func WorktreeChanges(wtPath string) (uncommitted, untracked int, err error) {
-	out, err := GitOutput(wtPath, "status", "--porcelain")
+	// status.showUntrackedFiles=no の設定でも未追跡を数えるよう明示する
+	out, err := GitOutput(wtPath, "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
 		return 0, 0, err
 	}

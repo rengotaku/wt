@@ -43,6 +43,17 @@ func TestWorktreeChanges(t *testing.T) {
 	}
 }
 
+func TestWorktreeChanges_IgnoresShowUntrackedConfig(t *testing.T) {
+	dir := setupGitRepo(t)
+	gitIn(t, dir, "config", "status.showUntrackedFiles", "no")
+	if err := os.WriteFile(filepath.Join(dir, "memo.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, n, err := core.WorktreeChanges(dir); err != nil || n != 1 {
+		t.Fatalf("showUntrackedFiles=no: got (%d, %v), want (1, nil)", n, err)
+	}
+}
+
 func TestWorktreeChanges_ErrorOnNonRepo(t *testing.T) {
 	if _, _, err := core.WorktreeChanges(t.TempDir()); err == nil {
 		t.Fatal("expected error for a non-git directory (must not report clean)")
