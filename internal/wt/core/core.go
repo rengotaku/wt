@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -301,4 +302,36 @@ func IsDirty(wtPath string) bool {
 		}
 	}
 	return false
+}
+
+// WorktreeChanges counts staged/unstaged entries and untracked entries of a
+// worktree. Unlike IsDirty, a failing `git status` is returned as an error so
+// that callers deleting worktrees can fall to the safe side.
+func WorktreeChanges(wtPath string) (uncommitted, untracked int, err error) {
+	out, err := GitOutput(wtPath, "status", "--porcelain")
+	if err != nil {
+		return 0, 0, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "??") {
+			untracked++
+		} else {
+			uncommitted++
+		}
+	}
+	return uncommitted, untracked, nil
+}
+
+// UnpushedCommits counts commits reachable from HEAD that no remote-tracking
+// ref contains (i.e. commits that would only survive in the reflog once the
+// branch is force-deleted).
+func UnpushedCommits(wtPath string) (int, error) {
+	out, err := GitOutput(wtPath, "rev-list", "--count", "HEAD", "--not", "--remotes")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(out))
 }

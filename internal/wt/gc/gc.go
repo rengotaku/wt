@@ -73,6 +73,56 @@ func closedCandidate(branch string, prState map[string]string, issueState func(i
 	return false, ""
 }
 
+// changes / unpushed are git observations of a worktree; err means the
+// observation itself failed.
+type changes struct {
+	uncommitted, untracked int
+	err                    error
+}
+
+type unpushed struct {
+	n   int
+	err error
+}
+
+func changesOf(wtPath string) changes {
+	u, t, err := core.WorktreeChanges(wtPath)
+	return changes{uncommitted: u, untracked: t, err: err}
+}
+
+func unpushedOf(wtPath string) unpushed {
+	n, err := core.UnpushedCommits(wtPath)
+	return unpushed{n: n, err: err}
+}
+
+// keepReason returns why a candidate must be kept (without --force), or "" when
+// it is safe to delete. Work that exists nowhere else — uncommitted changes,
+// untracked files, commits on no remote — keeps the worktree. A merged PR is
+// exempt from the unpushed check: after a squash merge the remote branch is
+// often deleted, so its commits are on no remote even though the work landed.
+// A failed observation keeps the worktree (fail-closed).
+func keepReason(c changes, u unpushed, merged bool) string {
+	if c.err != nil {
+		return "判定失敗（git status: " + c.err.Error() + "）"
+	}
+	if c.uncommitted > 0 {
+		return fmt.Sprintf("未コミットの変更 %d 件", c.uncommitted)
+	}
+	if c.untracked > 0 {
+		return fmt.Sprintf("未追跡のファイル %d 件", c.untracked)
+	}
+	if merged {
+		return ""
+	}
+	if u.err != nil {
+		return "判定失敗（git rev-list: " + u.err.Error() + "）"
+	}
+	if u.n > 0 {
+		return fmt.Sprintf("リモートに無いコミット %d 件", u.n)
+	}
+	return ""
+}
+
 var olderThanRegex = regexp.MustCompile(`^(\d+)([dh])$`)
 
 // ErrNoFilter is returned by Run when no filter (--done/--merged or
@@ -115,7 +165,7 @@ func Run(out io.Writer, opts Options) error {
 		branch string
 		info   string
 	}
-	var cands []cand
+	var cands, skips []cand
 
 	// --done: branch→PR state と issue state を repo 単位でキャッシュ。
 	prStateCache := map[string]map[string]string{}
@@ -136,12 +186,10 @@ func Run(out io.Writer, opts Options) error {
 		if it.WtName == "main" || it.WtName == "master" {
 			continue
 		}
-		if core.IsDirty(it.WtPath) && !opts.Force {
-			continue
-		}
 
 		branch, _ := core.GitOutput(it.WtPath, "branch", "--show-current")
 		info := ""
+		merged := false
 
 		if opts.closedFilter() {
 			md := it.MainDir
@@ -158,6 +206,7 @@ func Run(out io.Writer, opts Options) error {
 				continue
 			}
 			info += reason
+			merged = prStateCache[md][branch] == "MERGED"
 		}
 
 		if olderSecs > 0 {
@@ -177,12 +226,15 @@ func Run(out io.Writer, opts Options) error {
 			info += "last commit " + date
 		}
 
-		cands = append(cands, cand{entry: *it, branch: branch, info: info})
-	}
-
-	if len(cands) == 0 {
-		_, _ = fmt.Fprintln(out, "条件に合う worktree はありません")
-		return nil
+		c := cand{entry: *it, branch: branch, info: info}
+		if !opts.Force {
+			if r := keepReason(changesOf(it.WtPath), unpushedOf(it.WtPath), merged); r != "" {
+				c.info = r
+				skips = append(skips, c)
+				continue
+			}
+		}
+		cands = append(cands, c)
 	}
 
 	display := func(c cand) string {
@@ -191,6 +243,18 @@ func Run(out io.Writer, opts Options) error {
 			brn += "  "
 		}
 		return fmt.Sprintf("%s/%s   %s%s", c.entry.Repo, c.entry.WtName, brn, c.info)
+	}
+
+	if len(skips) > 0 {
+		_, _ = fmt.Fprintf(out, "⏭️  %d 件をスキップ（--force で削除対象に含める）:\n", len(skips))
+		for i := range skips {
+			_, _ = fmt.Fprintln(out, display(skips[i]))
+		}
+	}
+
+	if len(cands) == 0 {
+		_, _ = fmt.Fprintln(out, "条件に合う worktree はありません")
+		return nil
 	}
 
 	if opts.DryRun || !opts.Yes {
