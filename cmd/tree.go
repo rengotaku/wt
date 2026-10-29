@@ -130,7 +130,7 @@ func treeGcCmd() *cobra.Command {
 	// Safety
 	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "候補のみ列挙")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "確認なしで全候補を削除")
-	c.Flags().BoolVar(&opts.Force, "force", false, "dirty も対象に含める")
+	c.Flags().BoolVar(&opts.Force, "force", false, "未コミット・未追跡のファイル・リモートに無いコミットがあっても削除する")
 	return c
 }
 

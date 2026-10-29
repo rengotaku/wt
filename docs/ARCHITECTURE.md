@@ -179,7 +179,15 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 
 - **Filter**（複数指定は AND）: `--done`（PR merged/closed または issue closed）/ `--merged`（`--done` の後方互換 alias）/ `--older-than=STR`（30d / 24h）
 - **Retention**: `--keep-branch`（ブランチを残す）
-- **Safety**: `--dry-run`（列挙のみ）/ `-y, --yes`（確認省略）/ `--force`（dirty も対象）
+- **Safety**: `--dry-run`（列挙のみ）/ `-y, --yes`（確認省略）/ `--force`（下記の保護を外して削除）
+
+既定では、どこにも残っていない作業がある候補を消さずにスキップし、理由を 1 行ずつ出す（`--dry-run` でも同じ。`internal/wt/gc/gc.go` の `keepReason`）:
+
+- 未コミットの変更がある / 未追跡のファイルがある
+- PR が merged 以外（closed・PR なし・`--older-than` のみ）で、どのリモートにも無いコミットがある（`git rev-list HEAD --not --remotes`）
+- `git status` などの判定に失敗した
+
+PR が merged で、HEAD がその PR の head と一致する（または祖先にあたる）ものはリモートに無いコミットを見ない。squash マージ後にリモートのブランチを消すと、コミットは main にもリモートにも残らないため。マージ後にコミットを足した worktree は例外にしない。`git status` は `--untracked-files=normal` を付け、`status.showUntrackedFiles=no` の設定でも未追跡を数える。
 
 `--merged` / `--closed` / `--include-dirty` の分離は撤廃され、`--done` と `--force` に統合された。tmux セッションの管理（`--no-tmux` / `--keep-tmux` / `killTmuxSession`）は撤去されており、`wt tree rm` / `wt tree gc` は tmux を一切参照しない。
 
