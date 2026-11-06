@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -140,8 +142,50 @@ var ErrNoFilter = errors.New(
 		"未指定のまま実行すると main/master 以外の全 worktree が対象になります",
 )
 
+// repoRef identifies a repository by its container name and main worktree.
+type repoRef struct{ Repo, MainDir string }
+
+// listRepos enumerates repositories the same way tree.RmEntries walks
+// containers, but independently of whether any removable worktree remains.
+func listRepos() []repoRef {
+	var repos []repoRef
+	for _, base := range core.WorkspaceDirs() {
+		containers, _ := filepath.Glob(filepath.Join(base, "*"))
+		sort.Strings(containers)
+		for _, container := range containers {
+			if mainDir, _ := core.ResolveMain(container); mainDir != "" {
+				repos = append(repos, repoRef{Repo: filepath.Base(container), MainDir: mainDir})
+			}
+		}
+	}
+	return repos
+}
+
+// deps are the external observations/actions Run depends on; tests inject fakes.
+type deps struct {
+	rmEntries    func() ([]tree.RmEntry, error)
+	repos        func() []repoRef
+	prStates     func(mainDir string) (map[string]string, map[string][]string)
+	issueState   func(mainDir string, n int) string
+	probe        func(mainDir string) branchProbe
+	deleteBranch func(mainDir, branch string) error
+}
+
+func realDeps() deps {
+	return deps{
+		rmEntries:    tree.RmEntries,
+		repos:        listRepos,
+		prStates:     fetchPRStates,
+		issueState:   fetchIssueState,
+		probe:        gitBranchProbe,
+		deleteBranch: func(mainDir, branch string) error { return core.GitRun(mainDir, "branch", "-D", branch) },
+	}
+}
+
 // Run executes the cross-repo GC workflow.
-func Run(out io.Writer, opts Options) error {
+func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps()) }
+
+func run(out io.Writer, opts Options, d deps) error {
 	olderSecs, err := parseOlderThan(opts.OlderThan)
 	if err != nil {
 		return err
@@ -155,9 +199,17 @@ func Run(out io.Writer, opts Options) error {
 		return ErrNoFilter
 	}
 
-	items, err := tree.RmEntries()
+	items, err := d.rmEntries()
 	if err != nil {
-		return err
+		// 削除可能な worktree が無くても、--done ならブランチ走査は続ける。
+		if !opts.branchCleanup() {
+			return err
+		}
+		items = nil
+	}
+	var repos []repoRef
+	if opts.branchCleanup() {
+		repos = d.repos()
 	}
 
 	// --merged は --done の後方互換 alias。使ったら通知する。
@@ -178,12 +230,17 @@ func Run(out io.Writer, opts Options) error {
 	issueCache := map[string]map[int]string{}           // mainDir → issueNum → state
 	if opts.closedFilter() {
 		_, _ = fmt.Fprintln(out, "🧹 closed/merged な issue/PR を判定中...")
-		for i := range items {
-			md := items[i].MainDir
+		ensure := func(md string) {
 			if _, ok := prStateCache[md]; !ok {
-				prStateCache[md], mergedHeadCache[md] = fetchPRStates(md)
+				prStateCache[md], mergedHeadCache[md] = d.prStates(md)
 				issueCache[md] = map[int]string{}
 			}
+		}
+		for i := range items {
+			ensure(items[i].MainDir)
+		}
+		for _, r := range repos {
+			ensure(r.MainDir)
 		}
 	}
 
@@ -203,7 +260,7 @@ func Run(out io.Writer, opts Options) error {
 				if st, ok := issueCache[md][n]; ok {
 					return st
 				}
-				st := fetchIssueState(md, n)
+				st := d.issueState(md, n)
 				issueCache[md][n] = st
 				return st
 			}
@@ -248,8 +305,8 @@ func Run(out io.Writer, opts Options) error {
 	var bCands, bSkips []branchCand
 	if opts.branchCleanup() {
 		seen := map[string]bool{}
-		for i := range items {
-			md := items[i].MainDir
+		for _, r := range repos {
+			md := r.MainDir
 			if seen[md] {
 				continue
 			}
@@ -258,14 +315,14 @@ func Run(out io.Writer, opts Options) error {
 				if st, ok := issueCache[md][n]; ok {
 					return st
 				}
-				st := fetchIssueState(md, n)
+				st := d.issueState(md, n)
 				issueCache[md][n] = st
 				return st
 			}
-			bc, bs, err := branchesWithoutWorktree(items[i].Repo, md, gitBranchProbe(md),
+			bc, bs, err := branchesWithoutWorktree(r.Repo, md, d.probe(md),
 				prStateCache[md], mergedHeadCache[md], issueState, olderSecs, opts.Force)
 			if err != nil {
-				_, _ = fmt.Fprintf(out, "⚠️  %s のブランチ一覧の取得に失敗: %v\n", items[i].Repo, err)
+				_, _ = fmt.Fprintf(out, "⚠️  %s のブランチ一覧の取得に失敗: %v\n", r.Repo, err)
 				continue
 			}
 			bCands = append(bCands, bc...)
@@ -339,7 +396,7 @@ func Run(out io.Writer, opts Options) error {
 	}
 	for i := range bCands {
 		c := &bCands[i]
-		if err := core.GitRun(c.mainDir, "branch", "-D", c.branch); err != nil {
+		if err := d.deleteBranch(c.mainDir, c.branch); err != nil {
 			_, _ = fmt.Fprintf(out, "⚠️  ブランチ削除に失敗: %s/%s: %v\n", c.repo, c.branch, err)
 			continue
 		}

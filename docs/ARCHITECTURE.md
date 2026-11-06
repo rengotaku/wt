@@ -189,7 +189,7 @@ danger_mb = 4096  # 既定 4GiB（#92 実測: 5 worktree で 21.5GiB ≒ 1worktr
 
 PR が merged で、HEAD がその PR の head と一致する（または祖先にあたる）ものはリモートに無いコミットを見ない。squash マージ後にリモートのブランチを消すと、コミットは main にもリモートにも残らないため。マージ後にコミットを足した worktree は例外にしない。`git status` は `--untracked-files=normal` を付け、`status.showUntrackedFiles=no` の設定でも未追跡を数える。
 
-`--done` / `--merged` 指定時は、worktree に紐づかないローカルブランチ（`git for-each-ref refs/heads`。main/master といずれかの worktree でチェックアウト中のものは除く）も同じ `closedCandidate` 判定で候補にし、別見出し「worktree の無いブランチ」で表示して `git branch -D` で削除する（`internal/wt/gc/branches.go`）。ブランチ先端に merged PR の head にもリモートにも無いコミットがあればスキップし、`--force` で強行する。`--older-than` 単独・`--keep-branch` 指定時は対象にしない。
+`--done` / `--merged` 指定時は、worktree に紐づかないローカルブランチ（`git for-each-ref refs/heads`。main/master といずれかの worktree でチェックアウト中のものは除く）も同じ `closedCandidate` 判定で候補にし、別見出し「worktree の無いブランチ」で表示して `git branch -D` で削除する（`internal/wt/gc/branches.go`）。ブランチ走査の対象リポジトリは worktree 候補（`tree.RmEntries`）とは独立に `listRepos` で列挙するため、main だけが残ったリポジトリや削除可能な worktree が 0 件の状態でも走査される（`--done` 無しで 0 件なら従来どおり「削除可能なworktreeがありません」エラー）。ブランチ先端に merged PR の head にもリモートにも無いコミットがあればスキップし、`--force` で強行する。`--older-than` 単独・`--keep-branch` 指定時は対象にしない。
 
 `--merged` / `--closed` / `--include-dirty` の分離は撤廃され、`--done` と `--force` に統合された。tmux セッションの管理（`--no-tmux` / `--keep-tmux` / `killTmuxSession`）は撤去されており、`wt tree rm` / `wt tree gc` は tmux を一切参照しない。
 
