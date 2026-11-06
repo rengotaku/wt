@@ -34,6 +34,10 @@ type Options struct {
 // closedFilter reports whether the --done family (--done / --merged alias) is on.
 func (o Options) closedFilter() bool { return o.Done || o.Merged }
 
+// branchCleanup reports whether worktree-less branches are GC targets:
+// only with --done/--merged, and never with --keep-branch.
+func (o Options) branchCleanup() bool { return o.closedFilter() && !o.KeepBranch }
+
 var issueNumRe = regexp.MustCompile(`issue[-_]?(\d+)`)
 
 // issueNumFromBranch extracts an issue number from a branch like
@@ -240,6 +244,38 @@ func Run(out io.Writer, opts Options) error {
 		cands = append(cands, c)
 	}
 
+	// --done: worktree の無いローカルブランチ（--keep-branch 時は対象にしない）。
+	var bCands, bSkips []branchCand
+	if opts.branchCleanup() {
+		seen := map[string]bool{}
+		for i := range items {
+			md := items[i].MainDir
+			if seen[md] {
+				continue
+			}
+			seen[md] = true
+			issueState := func(n int) string {
+				if st, ok := issueCache[md][n]; ok {
+					return st
+				}
+				st := fetchIssueState(md, n)
+				issueCache[md][n] = st
+				return st
+			}
+			bc, bs, err := branchesWithoutWorktree(items[i].Repo, md, gitBranchProbe(md),
+				prStateCache[md], mergedHeadCache[md], issueState, olderSecs, opts.Force)
+			if err != nil {
+				_, _ = fmt.Fprintf(out, "⚠️  %s のブランチ一覧の取得に失敗: %v\n", items[i].Repo, err)
+				continue
+			}
+			bCands = append(bCands, bc...)
+			bSkips = append(bSkips, bs...)
+		}
+	}
+	bDisplay := func(c branchCand) string {
+		return fmt.Sprintf("%s   %s  %s", c.repo, c.branch, c.info)
+	}
+
 	display := func(c cand) string {
 		brn := c.branch
 		if brn != "" {
@@ -255,15 +291,30 @@ func Run(out io.Writer, opts Options) error {
 		}
 	}
 
-	if len(cands) == 0 {
+	if len(bSkips) > 0 {
+		_, _ = fmt.Fprintf(out, "⏭️  worktree の無いブランチ %d 件をスキップ（--force で削除対象に含める）:\n", len(bSkips))
+		for i := range bSkips {
+			_, _ = fmt.Fprintln(out, bDisplay(bSkips[i]))
+		}
+	}
+
+	if len(cands) == 0 && len(bCands) == 0 {
 		_, _ = fmt.Fprintln(out, "条件に合う worktree はありません")
 		return nil
 	}
 
 	if opts.DryRun || !opts.Yes {
-		_, _ = fmt.Fprintf(out, "🔍 %d 件の候補:\n", len(cands))
-		for i := range cands {
-			_, _ = fmt.Fprintln(out, display(cands[i]))
+		if len(cands) > 0 {
+			_, _ = fmt.Fprintf(out, "🔍 %d 件の候補:\n", len(cands))
+			for i := range cands {
+				_, _ = fmt.Fprintln(out, display(cands[i]))
+			}
+		}
+		if len(bCands) > 0 {
+			_, _ = fmt.Fprintf(out, "🔍 worktree の無いブランチ %d 件:\n", len(bCands))
+			for i := range bCands {
+				_, _ = fmt.Fprintln(out, bDisplay(bCands[i]))
+			}
 		}
 		if !opts.Yes && !opts.DryRun {
 			_, _ = fmt.Fprintln(out, "実行するには --yes を指定してください")
@@ -285,6 +336,14 @@ func Run(out io.Writer, opts Options) error {
 		iterOpts.Branch = c.branch
 		iterOpts.Repo = c.entry.Repo
 		_ = tree.Rm(out, iterOpts)
+	}
+	for i := range bCands {
+		c := &bCands[i]
+		if err := core.GitRun(c.mainDir, "branch", "-D", c.branch); err != nil {
+			_, _ = fmt.Fprintf(out, "⚠️  ブランチ削除に失敗: %s/%s: %v\n", c.repo, c.branch, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "✅ 削除: %s/%s (branch)\n", c.repo, c.branch)
 	}
 	return nil
 }

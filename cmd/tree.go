@@ -107,6 +107,7 @@ func treeGcCmd() *cobra.Command {
 
   Filter    どの worktree を対象にするか（複数指定は AND）
     --done            PR merged/closed または issue closed の worktree
+                      （worktree の無いローカルブランチも対象。--keep-branch 時は除く）
     --merged          --done の後方互換 alias
     --older-than=STR  最終コミットが STR (30d, 24h) 以上前
 
