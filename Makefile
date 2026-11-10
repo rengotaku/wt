@@ -14,9 +14,9 @@ install:
 	cd $(FRONTEND_DIR) && npm ci
 
 ## build-frontend: Build React SPA into internal/static/dist
+# .gitkeep は vite のプラグイン（frontend/vite.config.ts）がビルド後に書き戻す
 build-frontend:
 	cd $(FRONTEND_DIR) && npm run build
-	@touch internal/static/dist/.gitkeep
 
 ## build: Build the monolithic binary (frontend embed + Go)
 # ldflags inject buildinfo so wt web can show a "binary may be stale" badge

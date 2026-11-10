@@ -215,5 +215,6 @@ PR が merged で、HEAD がその PR の head と一致する（または祖先
 
 - `make ci` = golangci-lint + go mod diff-check + `go test -cover ./...`
 - CI はさらに `cd frontend && npm ci && npm run build`（tsc 込み）を回す — push 前に `make build` も緑にすること
+- `npm run build` は `internal/static/dist/.gitkeep` を消さない（`frontend/vite.config.ts` のプラグインが書き戻す）。消えると次の `git pull`（rebase）が未コミット変更で失敗する（#163）。CI はビルド後に `internal/static/dist` が dirty でないことを確認する
 - フロントテストは `cd frontend && npx vitest run`（CI 対象外だがローカルで回す）
 - ローカルで `TestProxyController_StartStop` が落ちる場合は稼働中 proxy の :8088 占有が原因（環境起因）
