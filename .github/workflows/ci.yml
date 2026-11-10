@@ -31,6 +31,14 @@ jobs:
       - name: Build frontend (for go:embed)
         run: cd frontend && npm ci && npm run build
 
+      # vite build が追跡下の internal/static/dist/.gitkeep を消すと、wt のクローンで
+      # 次の git pull（rebase）が未コミット変更で失敗する。ビルド後に作業ツリーが
+      # 汚れないことを機械的に確かめる。See #163.
+      - name: Verify frontend build leaves the work tree clean
+        run: |
+          test -f internal/static/dist/.gitkeep
+          test -z "$(git status --porcelain internal/static/dist)"
+
       - name: Lint
         uses: golangci/golangci-lint-action@v7
         with:
