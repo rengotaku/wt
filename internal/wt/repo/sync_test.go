@@ -43,3 +43,22 @@ func TestLoadSyncSkipList(t *testing.T) {
 		}
 	})
 }
+
+func TestHasUncommitted(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"空", "", false},
+		{"改行だけ", "\n\n", false},
+		{"空白だけ", "  \n\t\n", false},
+		{"変更あり", " M internal/repo.go\n", true},
+		{"追加あり", "A  new.go\n M old.go\n", true},
+	}
+	for _, c := range cases {
+		if got := hasUncommitted(c.in); got != c.want {
+			t.Errorf("%s: hasUncommitted(%q) = %v, want %v", c.name, c.in, got, c.want)
+		}
+	}
+}
