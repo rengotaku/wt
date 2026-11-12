@@ -22,7 +22,19 @@ type syncResult struct {
 	branch string
 	ok     bool
 	warn   bool
+	skip   bool
 	msg    string
+}
+
+// hasUncommitted は git status --porcelain の出力に、pull を止めるべき
+// 未コミットの変更（tracked の変更）があるかを返す。
+func hasUncommitted(porcelain string) bool {
+	for _, line := range strings.Split(porcelain, "\n") {
+		if strings.TrimSpace(line) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // loadSyncSkipList reads ~/.config/wt/sync-skip and returns the set of repo
@@ -157,6 +169,19 @@ func Sync() error {
 				return
 			}
 
+			// 未コミットの変更があると pull は必ず失敗する。並行して作業中のリポジトリは
+			// 普通にあるので、失敗ではなくスキップ（⏭）として扱い、夜間の同期を止めない。
+			statusOut, _ := exec.Command("git", "-C", t.path, "status", "--porcelain", "--untracked-files=no").Output()
+			if hasUncommitted(string(statusOut)) {
+				ch <- syncResult{
+					name:   t.name,
+					branch: t.branch,
+					skip:   true,
+					msg:    "未コミットの変更があるため pull skip",
+				}
+				return
+			}
+
 			oldHead, _ := exec.Command("git", "-C", t.path, "rev-parse", "HEAD").Output()
 
 			cmd := exec.Command("git", "-C", t.path, "pull", "--ff-only")
@@ -182,10 +207,13 @@ func Sync() error {
 		}(t)
 	}
 
-	success, fail, warn := 0, 0, 0
+	success, fail, warn, skip := 0, 0, 0, 0
 	for range targets {
 		r := <-ch
 		switch {
+		case r.skip:
+			fmt.Printf("⏭  %s (%s) %s\n", r.name, r.branch, r.msg)
+			skip++
 		case r.warn:
 			fmt.Printf("⚠️  %s (%s) %s\n", r.name, r.branch, r.msg)
 			warn++
@@ -200,6 +228,9 @@ func Sync() error {
 
 	fmt.Println()
 	summary := fmt.Sprintf("✅ %d/%d 完了", success, len(targets))
+	if skip > 0 {
+		summary += fmt.Sprintf(", ⏭ %d スキップ", skip)
+	}
 	if warn > 0 {
 		summary += fmt.Sprintf(", ⚠️ %d 警告", warn)
 	}
