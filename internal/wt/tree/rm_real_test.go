@@ -58,28 +58,117 @@ func setupWorktreeForScan(t *testing.T) string {
 	return dir
 }
 
-func TestListRealDirs_ListsUntrackedAndIgnoredSkipsSymlinks(t *testing.T) {
+func TestScanWorktree_ClassifiesSymlinksAndDirs(t *testing.T) {
 	dir := setupWorktreeForScan(t)
 
-	got := make([]string, 0)
-	for _, d := range listRealDirs(dir) {
-		got = append(got, d.Path)
+	s := scanWorktree(dir, true)
+	if !s.Measured {
+		t.Fatal("Measured = false, want true")
+	}
+
+	wantLinks := []symlinkEntry{{Path: "linked", Target: "../main/node_modules"}}
+	if !reflect.DeepEqual(s.Symlinks, wantLinks) {
+		t.Errorf("Symlinks = %+v, want %+v", s.Symlinks, wantLinks)
+	}
+
+	var paths []string
+	for _, d := range s.Dirs {
+		paths = append(paths, d.Path)
 		if d.Size <= 0 {
 			t.Errorf("%s のサイズが測れていない: %d", d.Path, d.Size)
 		}
 	}
-
-	want := []string{".venv", "node_modules"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("listRealDirs = %v, want %v", got, want)
+	if want := []string{".venv", "node_modules"}; !reflect.DeepEqual(paths, want) {
+		t.Errorf("Dirs = %v, want %v", paths, want)
 	}
 }
 
-func TestPerformDelete_DryRun_PrintsRealDirs(t *testing.T) {
+func TestScanWorktree_NoSize(t *testing.T) {
+	dir := setupWorktreeForScan(t)
+
+	s := scanWorktree(dir, false)
+	if s.Measured {
+		t.Error("Measured = true, want false")
+	}
+	for _, d := range s.Dirs {
+		if d.Size != 0 {
+			t.Errorf("%s のサイズ = %d, want 0（--no-size）", d.Path, d.Size)
+		}
+	}
+}
+
+func TestRenderScan_FormatsAndWarns(t *testing.T) {
+	s := rmScan{
+		Symlinks: []symlinkEntry{{Path: ".venv", Target: "../main/.venv"}},
+		Dirs: []realDir{
+			{Path: "cache", Size: 5 << 20},
+			{Path: ".venv", Size: 3_000_000_000},
+		},
+		Measured: true,
+	}
+
+	var buf bytes.Buffer
+	renderScan(&buf, "myrepo", s, false)
+	out := buf.String()
+
+	for _, want := range []string{
+		"symlink: .venv -> ../main/.venv",
+		"2.8GB",
+		"5.0MB",
+		"実体の合計: 2.8GB",
+		"wt symlink add myrepo .venv",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出力に無い:\n%s", want, out)
+		}
+	}
+	if strings.Index(out, ".venv") > strings.Index(out, "cache") {
+		t.Errorf("サイズの大きい順になっていない:\n%s", out)
+	}
+}
+
+func TestRenderScan_TopFive(t *testing.T) {
+	s := rmScan{Measured: true}
+	for i, size := range []int64{600, 500, 400, 300, 200, 100} {
+		s.Dirs = append(s.Dirs, realDir{Path: "dir" + string(rune('1'+i)), Size: size})
+	}
+
+	var buf bytes.Buffer
+	renderScan(&buf, "myrepo", s, false)
+	out := buf.String()
+
+	if !strings.Contains(out, "他 1 件") {
+		t.Errorf("上位 5 件の案内が無い:\n%s", out)
+	}
+	if strings.Contains(out, "dir6") {
+		t.Errorf("6 件目が表示されている:\n%s", out)
+	}
+}
+
+func TestRenderScan_NoSizeAndQuiet(t *testing.T) {
+	s := rmScan{Dirs: []realDir{{Path: ".venv"}}}
+
+	var sized bytes.Buffer
+	renderScan(&sized, "myrepo", s, false)
+	if strings.Contains(sized.String(), "実体の合計") {
+		t.Errorf("--no-size なのに合計が出ている:\n%s", sized.String())
+	}
+	if strings.Contains(sized.String(), "1.0KB") || strings.Contains(sized.String(), "GB") {
+		t.Errorf("--no-size なのにサイズが出ている:\n%s", sized.String())
+	}
+
+	var quiet bytes.Buffer
+	renderScan(&quiet, "myrepo", s, true)
+	if quiet.Len() != 0 {
+		t.Errorf("--quiet なのに出力がある: %q", quiet.String())
+	}
+}
+
+func TestPerformDelete_DryRun_PrintsScan(t *testing.T) {
 	dir := setupWorktreeForScan(t)
 
 	var buf bytes.Buffer
-	target := RmEntry{WtName: "wtx", WtPath: dir, MainDir: dir, Container: filepath.Dir(dir)}
+	target := RmEntry{WtName: "wtx", Repo: "myrepo", WtPath: dir, MainDir: dir, Container: filepath.Dir(dir)}
 	// Untracked .venv makes the worktree dirty, so force is needed to reach the
 	// dry-run branch.
 	if err := performDelete(&buf, RmOptions{DryRun: true, Force: true}, &target); err != nil {
@@ -87,20 +176,20 @@ func TestPerformDelete_DryRun_PrintsRealDirs(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "削除予定: "+dir) {
-		t.Errorf("削除予定が出ていない:\n%s", out)
+	for _, want := range []string{
+		"削除予定: " + dir,
+		"symlink: linked -> ../main/node_modules",
+		"実体:",
+		".venv",
+		"node_modules",
+		"実体の合計:",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q が出力に無い:\n%s", want, out)
+		}
 	}
-	if !strings.Contains(out, "消える実体:") || !strings.Contains(out, ".venv") {
-		t.Errorf("消える実体が %s に出ていない:\n%s", ".venv", out)
-	}
-	if !strings.Contains(out, "node_modules") {
-		t.Errorf("ignored ディレクトリが出ていない:\n%s", out)
-	}
-	if strings.Contains(out, "linked") {
-		t.Errorf("symlink が消える実体として出ている:\n%s", out)
-	}
-	if strings.Contains(out, "src") {
-		t.Errorf("tracked ディレクトリが消える実体として出ている:\n%s", out)
+	if strings.Contains(out, "src/main.go") || strings.Contains(out, "README.md") {
+		t.Errorf("tracked ファイルが実体として出ている:\n%s", out)
 	}
 }
 
