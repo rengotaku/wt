@@ -25,6 +25,8 @@ type RmOptions struct {
 	Force      bool   // --force
 	DryRun     bool   // --dry-run
 	Yes        bool   // --yes (--merged 時に必須)
+	Quiet      bool   // --quiet: 削除前の一覧を出さない
+	NoSize     bool   // --no-size: サイズ計算（du）をスキップする
 	Positional []string
 }
 
@@ -129,9 +131,12 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	if opts.DryRun {
 		_, _ = fmt.Fprintf(out, "🔍 [dry-run] 削除予定: %s\n", t.WtPath)
-		printRealDirs(out, t.WtPath)
+		renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize), opts.Quiet)
 		return nil
 	}
+
+	// 削除の直前にも同じ一覧を出す（--yes でも）
+	renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize), opts.Quiet)
 
 	branch := branchOfWorktree(t.MainDir, t.WtPath)
 
@@ -152,14 +157,71 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 // symlink into the main worktree.
 type realDir struct {
 	Path string // relative to the worktree
-	Size int64  // bytes; 0 when du could not measure it
+	Size int64  // bytes; 0 when not measured or when du failed
+}
+
+// symlinkEntry is a worktree-level symlink. Removing it loses only the link, so
+// it is reported separately from the directories whose contents disappear.
+type symlinkEntry struct {
+	Path   string
+	Target string
+}
+
+// rmScan is what `wt tree rm` reports before a worktree disappears.
+type rmScan struct {
+	Symlinks []symlinkEntry
+	Dirs     []realDir
+	Measured bool // false when --no-size skipped du
+}
+
+const (
+	// realDirShownMax caps how many directories are printed; the rest still
+	// count toward the total and the warning.
+	realDirShownMax = 5
+	// largeRealDirSize is the threshold for warning that an ignored directory is
+	// large enough to be worth sharing with main instead of deleting.
+	largeRealDirSize = 1 << 30 // 1GB
+)
+
+// scanWorktree classifies what a worktree holds before deletion: top-level
+// symlinks and every untracked/ignored real directory. Nested directories are
+// included because node_modules usually sits under frontend/, not at the root.
+// withSize=false skips du.
+func scanWorktree(wtPath string, withSize bool) rmScan {
+	var s rmScan
+	s.Measured = withSize
+
+	if entries, err := os.ReadDir(wtPath); err == nil {
+		for _, e := range entries {
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			target, rerr := os.Readlink(filepath.Join(wtPath, e.Name()))
+			if rerr != nil {
+				target = "?"
+			}
+			s.Symlinks = append(s.Symlinks, symlinkEntry{Path: e.Name(), Target: target})
+		}
+	}
+	sort.Slice(s.Symlinks, func(i, j int) bool { return s.Symlinks[i].Path < s.Symlinks[j].Path })
+	s.Dirs = listRealDirs(wtPath, withSize)
+	return s
+}
+
+// total returns the combined size of every real directory.
+func (s rmScan) total() int64 {
+	var sum int64
+	for _, d := range s.Dirs {
+		sum += d.Size
+	}
+	return sum
 }
 
 // listRealDirs returns the untracked and ignored real directories inside wtPath.
 // Symlinked candidates (.claude, .venv, node_modules, ...) are files from git's
 // point of view, so they never carry a trailing slash here and stay out of the
-// list. Sorted for stable output.
-func listRealDirs(wtPath string) []realDir {
+// list. Sorted by path for stable output when sizes are not measured.
+func listRealDirs(wtPath string, withSize bool) []realDir {
 	seen := map[string]struct{}{}
 	var paths []string
 	for _, args := range [][]string{
@@ -193,7 +255,11 @@ func listRealDirs(wtPath string) []realDir {
 
 	dirs := make([]realDir, 0, len(paths))
 	for _, p := range paths {
-		dirs = append(dirs, realDir{Path: p, Size: dirSize(filepath.Join(wtPath, p))})
+		var size int64
+		if withSize {
+			size = dirSize(filepath.Join(wtPath, p))
+		}
+		dirs = append(dirs, realDir{Path: p, Size: size})
 	}
 	return dirs
 }
@@ -229,16 +295,51 @@ func humanSize(b int64) string {
 	return fmt.Sprintf("%.1f%cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// printRealDirs lists what will be deleted along with the worktree. It is shown
-// only for dry-run: the point is to make an unregistered large directory visible
-// before it is gone, not to slow down the ordinary listing.
-func printRealDirs(out io.Writer, wtPath string) {
-	for _, d := range listRealDirs(wtPath) {
-		size := "?"
-		if d.Size > 0 {
+// renderScan prints the scan. quiet suppresses it (the caller still prints the
+// target path). Directories are listed largest first and capped at
+// realDirShownMax; the total and the 1GB warning cover every directory found.
+func renderScan(out io.Writer, repo string, s rmScan, quiet bool) {
+	if quiet {
+		return
+	}
+	for _, l := range s.Symlinks {
+		_, _ = fmt.Fprintf(out, "   symlink: %s -> %s\n", l.Path, l.Target)
+	}
+	if len(s.Dirs) == 0 {
+		return
+	}
+
+	sorted := append([]realDir(nil), s.Dirs...)
+	if s.Measured {
+		sort.Slice(sorted, func(i, j int) bool {
+			if sorted[i].Size != sorted[j].Size {
+				return sorted[i].Size > sorted[j].Size
+			}
+			return sorted[i].Path < sorted[j].Path
+		})
+	}
+	shown := sorted
+	if len(shown) > realDirShownMax {
+		shown = shown[:realDirShownMax]
+	}
+	for _, d := range shown {
+		size := "-"
+		if s.Measured {
 			size = humanSize(d.Size)
 		}
-		_, _ = fmt.Fprintf(out, "   消える実体: %8s  %s\n", size, d.Path)
+		_, _ = fmt.Fprintf(out, "   実体:    %8s  %s\n", size, d.Path)
+	}
+	if len(sorted) > len(shown) {
+		_, _ = fmt.Fprintf(out, "   （他 %d 件。サイズ上位 %d 件を表示）\n", len(sorted)-len(shown), realDirShownMax)
+	}
+	if s.Measured {
+		_, _ = fmt.Fprintf(out, "   実体の合計: %s\n", humanSize(s.total()))
+	}
+	for _, d := range sorted {
+		if s.Measured && d.Size >= largeRealDirSize {
+			_, _ = fmt.Fprintf(out, "⚠️ 実体の %s (%s) は削除されます。main と共有するなら wt symlink add %s %s で候補に登録してください\n",
+				d.Path, humanSize(d.Size), repo, d.Path)
+		}
 	}
 }
 
@@ -343,7 +444,7 @@ func rmMerged(out io.Writer, opts RmOptions) error {
 		for i := range cands {
 			_, _ = fmt.Fprintln(out, display(cands[i]))
 			if opts.DryRun {
-				printRealDirs(out, cands[i].entry.WtPath)
+				renderScan(out, cands[i].entry.Repo, scanWorktree(cands[i].entry.WtPath, !opts.NoSize), opts.Quiet)
 			}
 		}
 		if !opts.Yes && !opts.DryRun {
