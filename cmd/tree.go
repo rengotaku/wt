@@ -136,7 +136,7 @@ func treeRmCmd() *cobra.Command {
 	c.Flags().BoolVar(&opts.KeepBranch, "keep-branch", false, "ブランチを残す")
 	c.Flags().BoolVar(&opts.Merged, "merged", false, "マージ済み worktree を一括削除")
 	c.Flags().BoolVar(&opts.Force, "force", false, "dirty でも強行")
-	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "削除せず候補のみ表示")
+	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "削除せず候補と消える実体（サイズ付き）を表示")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "--merged 時に確認なしで全削除")
 	return c
 }
