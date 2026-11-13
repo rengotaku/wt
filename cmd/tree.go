@@ -3,9 +3,11 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"wt/internal/wt/core"
 	"wt/internal/wt/gc"
 	"wt/internal/wt/tree"
 )
@@ -47,11 +49,41 @@ func treeRmListCmd() *cobra.Command {
 	}
 }
 
+// treeAddLong is the base help text for `wt tree add`. The current symlink
+// candidates are appended by the help func below, because they live in
+// .worktrees.json outside the repository and cannot be discovered by grepping
+// the repo.
+const treeAddLong = `_config.symlink_candidates に登録されたパスを worktree に symlink する。
+
+既定で有効。無効化するときは --no-symlink を付ける。候補は wt symlink add <repo> <path> で登録する。`
+
+// symlinkCandidatesSection renders the help appendix that lists the symlink
+// candidates registered for the target repository. Anything that goes wrong is
+// reported as text, never as an error: `--help` must not fail.
+func symlinkCandidatesSection(repo string) string {
+	if repo == "" {
+		return "symlink 候補: --repo <repo> を付けて実行すると、そのリポジトリの現在の候補を表示する\n  （確認だけなら wt symlink ls <repo>）"
+	}
+	container, err := core.FindContainer(repo)
+	if err != nil {
+		return fmt.Sprintf("symlink 候補: 取得できません（%v）", err)
+	}
+	cfg, err := core.LoadConfig(container)
+	if err != nil {
+		return fmt.Sprintf("symlink 候補: 取得できません（%v）", err)
+	}
+	if len(cfg.SymlinkCandidates) == 0 {
+		return fmt.Sprintf("このリポジトリの symlink 候補: 候補なし（wt symlink add %s <path> で追加）", repo)
+	}
+	return fmt.Sprintf("このリポジトリの symlink 候補: %s", strings.Join(cfg.SymlinkCandidates, " "))
+}
+
 func treeAddCmd() *cobra.Command {
 	var opts tree.AddOptions
 	c := &cobra.Command{
 		Use:   "add [args...]",
 		Short: "worktree を作成",
+		Long:  treeAddLong,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Positional = args
 			res, err := tree.Add(os.Stdin, cmd.OutOrStdout(), &opts)
@@ -71,8 +103,21 @@ func treeAddCmd() *cobra.Command {
 	c.Flags().StringVar(&opts.Branch, "branch", "", "ブランチ名（直接指定）")
 	c.Flags().StringVar(&opts.BranchType, "type", "feature", "--branch 時の type")
 	c.Flags().StringVar(&opts.IssueURL, "issue", "", "GitHub Issue URL")
-	c.Flags().BoolVar(&opts.Symlink, "symlink", false, "_config.symlink_candidates を symlink")
+	c.Flags().BoolVar(&opts.Symlink, "symlink", false, "互換用（既定で symlink されるため実質 no-op）")
+	// 既定で symlink されるようになったので、このフラグは互換のためだけに残す。
+	// MarkDeprecated は help から隠し、使ったときだけ stderr に案内を出す。
+	_ = c.Flags().MarkDeprecated("symlink", "既定で symlink されます。無効化するには --no-symlink を使ってください")
+	c.Flags().BoolVar(&opts.NoSymlink, "no-symlink", false, "_config.symlink_candidates による symlink を作らない")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "後方互換用フラグ（現在は常に非対話）")
+
+	// --help にこのリポジトリの候補を出す。cobra は flags をパースしてから
+	// help を呼ぶので、ここから --repo の値が読める。
+	defaultHelp := c.HelpFunc()
+	c.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		repo, _ := cmd.Flags().GetString("repo")
+		cmd.Long = treeAddLong + "\n\n" + symlinkCandidatesSection(repo)
+		defaultHelp(cmd, args)
+	})
 	return c
 }
 
