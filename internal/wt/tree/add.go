@@ -35,7 +35,10 @@ type AddOptions struct {
 	Repo        string
 	Issue       string
 	Description string
+	// Symlink is accepted for backward compatibility only. Symlinking is on by
+	// default now, so the flag changes nothing; use NoSymlink to turn it off.
 	Symlink     bool
+	NoSymlink   bool   // --no-symlink: do not link _config.symlink_candidates
 	Yes         bool   // accepted for backward compatibility; behavior is non-interactive regardless
 	Branch      string // --branch <name>
 	BranchType  string // --type for --branch mode (default "feature")
@@ -48,6 +51,96 @@ type AddOptions struct {
 type AddResult struct {
 	WorktreePath string
 	BranchName   string
+}
+
+// symlinkPlan is the resolved view of _config.symlink_candidates for one
+// `wt tree add` run. The plan block and the actual creation both read this
+// struct, so the printed plan cannot drift from what gets created.
+type symlinkPlan struct {
+	Disabled bool     // --no-symlink
+	Targets  []string // candidates that exist as directories in main
+	Missing  []string // candidates registered but absent from main
+}
+
+// resolveSymlinkPlan reads _config.symlink_candidates and splits it into paths
+// that exist as directories in main and paths that do not. A config read error
+// yields an empty plan: `wt tree add` must not fail here, and the plan line then
+// reports 候補なし.
+func resolveSymlinkPlan(containerDir, mainDir string, noSymlink bool) symlinkPlan {
+	if noSymlink {
+		return symlinkPlan{Disabled: true}
+	}
+	cfg, err := core.LoadConfig(containerDir)
+	if err != nil {
+		return symlinkPlan{}
+	}
+	var plan symlinkPlan
+	for _, c := range cfg.SymlinkCandidates {
+		if fi, statErr := os.Stat(filepath.Join(mainDir, c)); statErr == nil && fi.IsDir() {
+			plan.Targets = append(plan.Targets, c)
+			continue
+		}
+		plan.Missing = append(plan.Missing, c)
+	}
+	return plan
+}
+
+// line renders the one-line symlink summary of the plan block. The four states
+// (on / off / empty / registered-but-absent) must stay distinguishable: a
+// registered candidate that is missing from main would otherwise be dropped
+// silently, which is the failure this display exists to expose.
+func (p symlinkPlan) line(repo string) string {
+	switch {
+	case p.Disabled:
+		return "なし（--no-symlink）"
+	case len(p.Targets) > 0 && len(p.Missing) > 0:
+		return fmt.Sprintf("%s（main に無い候補: %s）", strings.Join(p.Targets, " "), strings.Join(p.Missing, " "))
+	case len(p.Targets) > 0:
+		return strings.Join(p.Targets, " ")
+	case len(p.Missing) > 0:
+		return fmt.Sprintf("なし（候補 %s が main に無い）", strings.Join(p.Missing, " "))
+	default:
+		return fmt.Sprintf("候補なし（wt symlink add %s <path> で追加）", repo)
+	}
+}
+
+// printPlan writes the block that tells the caller what is about to happen.
+// Both the --issue/positional path and the --branch path use it.
+func printPlan(out io.Writer, repo, branch, worktreePath, description string, plan symlinkPlan) {
+	_, _ = fmt.Fprintln(out, "")
+	_, _ = fmt.Fprintln(out, "─────────────────────────────────────")
+	_, _ = fmt.Fprintf(out, "リポジトリ: %s\n", repo)
+	_, _ = fmt.Fprintf(out, "ブランチ:   %s\n", branch)
+	_, _ = fmt.Fprintf(out, "worktree:   %s\n", worktreePath)
+	if description != "" {
+		_, _ = fmt.Fprintf(out, "説明:       %s\n", description)
+	}
+	_, _ = fmt.Fprintf(out, "symlink:    %s\n", plan.line(repo))
+	_, _ = fmt.Fprintln(out, "─────────────────────────────────────")
+}
+
+// createCandidateSymlinks links each target inside worktreePath to the sibling
+// main worktree and returns the targets it created. A failure is reported as a
+// warning rather than swallowed: a failed link used to look identical to a
+// successful run, with the real directory left in place.
+func createCandidateSymlinks(out io.Writer, worktreePath, mainName string, targets []string) []string {
+	var created []string
+	for _, target := range targets {
+		if parent := filepath.Dir(target); parent != "." {
+			_ = os.MkdirAll(filepath.Join(worktreePath, parent), 0o755)
+		}
+		depth := strings.Count(target, "/") + 1
+		relPrefix := strings.Repeat("../", depth)
+		link := filepath.Join(worktreePath, target)
+		src := relPrefix + mainName + "/" + target
+		if err := os.Symlink(src, link); err != nil {
+			_, _ = fmt.Fprintf(out, "⚠️  symlink を作成できません: %s (%v)\n", target, err)
+			continue
+		}
+		_, _ = fmt.Fprintf(out, "🔗 %s → %s\n", target, src)
+		created = append(created, target)
+	}
+	return created
 }
 
 // issueURLRegex matches https://github.com/<owner>/<repo>/issues/<num>.
@@ -80,7 +173,6 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 		if opts.Description == "" {
 			opts.Description = title
 		}
-		opts.Symlink = true
 	}
 
 	// ── --branch モード（remote/local どちらにも対応） ──
@@ -138,35 +230,13 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 	worktreeName := opts.Repo + "--" + strings.ReplaceAll(branchName, "/", "-")
 	typeStr := "feature"
 
-	// ── シンボリックリンク（--symlink 指定時のみ、確認なし） ──
-	cfg, _ := core.LoadConfig(containerDir)
-	candidates := cfg.SymlinkCandidates
-	var symlinkTargets []string
-	doSymlink := false
-	if opts.Symlink && len(candidates) > 0 {
-		doSymlink = true
-		for _, c := range candidates {
-			if fi, err := os.Stat(filepath.Join(mainDir, c)); err == nil && fi.IsDir() {
-				symlinkTargets = append(symlinkTargets, c)
-			}
-		}
-	}
+	// ── symlink 候補の解決（既定で有効、--no-symlink で無効） ──
+	plan := resolveSymlinkPlan(containerDir, mainDir, opts.NoSymlink)
 
 	worktreePath := filepath.Join(containerDir, worktreeName)
 
 	// ── プラン表示 ──
-	_, _ = fmt.Fprintln(out, "")
-	_, _ = fmt.Fprintln(out, "─────────────────────────────────────")
-	_, _ = fmt.Fprintf(out, "リポジトリ: %s\n", opts.Repo)
-	_, _ = fmt.Fprintf(out, "ブランチ:   %s\n", branchName)
-	_, _ = fmt.Fprintf(out, "worktree:   %s\n", worktreePath)
-	if description != "" {
-		_, _ = fmt.Fprintf(out, "説明:       %s\n", description)
-	}
-	if len(symlinkTargets) > 0 {
-		_, _ = fmt.Fprintf(out, "symlink:    %s\n", strings.Join(symlinkTargets, " "))
-	}
-	_, _ = fmt.Fprintln(out, "─────────────────────────────────────")
+	printPlan(out, opts.Repo, branchName, worktreePath, description, plan)
 
 	// ── worktree 作成 ──
 	_, _ = fmt.Fprintln(out, "")
@@ -184,21 +254,7 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 	}
 
 	// ── シンボリックリンク作成 ──
-	if doSymlink {
-		for _, target := range symlinkTargets {
-			parent := filepath.Dir(target)
-			if parent != "." {
-				_ = os.MkdirAll(filepath.Join(worktreePath, parent), 0o755)
-			}
-			depth := strings.Count(target, "/") + 1
-			relPrefix := strings.Repeat("../", depth)
-			link := filepath.Join(worktreePath, target)
-			src := relPrefix + mainName + "/" + target
-			if err := os.Symlink(src, link); err == nil {
-				_, _ = fmt.Fprintf(out, "🔗 %s → %s\n", target, src)
-			}
-		}
-	}
+	symlinkTargets := createCandidateSymlinks(out, worktreePath, mainName, plan.Targets)
 
 	// ── .claude シンボリックリンク（暗黙） ──
 	claudeSrc := filepath.Join(mainDir, ".claude")
@@ -267,6 +323,12 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 		return nil, fmt.Errorf("既に存在します: %s", worktreePath)
 	}
 
+	// ── symlink 候補の解決（既定で有効、--no-symlink で無効） ──
+	plan := resolveSymlinkPlan(containerDir, mainDir, opts.NoSymlink)
+
+	// ── プラン表示 ──
+	printPlan(out, opts.Repo, opts.Branch, worktreePath, "", plan)
+
 	switch {
 	case core.GitCheck(mainDir, "rev-parse", "--verify", "--quiet", opts.Branch):
 		if err := addWorktreeExistingBranch(out, mainDir, worktreePath, opts.Branch, containerDir); err != nil {
@@ -286,26 +348,8 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 		}
 	}
 
-	// ── --symlink 指定時のみ symlink を作成 ──
-	if opts.Symlink {
-		cfg, _ := core.LoadConfig(containerDir)
-		for _, target := range cfg.SymlinkCandidates {
-			if fi, err := os.Stat(filepath.Join(mainDir, target)); err != nil || !fi.IsDir() {
-				continue
-			}
-			parent := filepath.Dir(target)
-			if parent != "." {
-				_ = os.MkdirAll(filepath.Join(worktreePath, parent), 0o755)
-			}
-			depth := strings.Count(target, "/") + 1
-			relPrefix := strings.Repeat("../", depth)
-			link := filepath.Join(worktreePath, target)
-			src := relPrefix + mainName + "/" + target
-			if err := os.Symlink(src, link); err == nil {
-				_, _ = fmt.Fprintf(out, "🔗 %s → %s\n", target, src)
-			}
-		}
-	}
+	// ── シンボリックリンク作成 ──
+	_ = createCandidateSymlinks(out, worktreePath, mainName, plan.Targets)
 
 	// ── .claude シンボリックリンク（暗黙） ──
 	claudeSrc := filepath.Join(mainDir, ".claude")
