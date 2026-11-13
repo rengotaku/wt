@@ -6,8 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"wt/internal/wt/core"
@@ -126,6 +129,7 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	if opts.DryRun {
 		_, _ = fmt.Fprintf(out, "🔍 [dry-run] 削除予定: %s\n", t.WtPath)
+		printRealDirs(out, t.WtPath)
 		return nil
 	}
 
@@ -141,6 +145,101 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	_, _ = fmt.Fprintf(out, "✅ 削除: %s\n", t.WtPath)
 	return nil
+}
+
+// realDir is a directory that disappears with the worktree but that git cannot
+// restore: it is untracked or ignored, and it is a real directory rather than a
+// symlink into the main worktree.
+type realDir struct {
+	Path string // relative to the worktree
+	Size int64  // bytes; 0 when du could not measure it
+}
+
+// listRealDirs returns the untracked and ignored real directories inside wtPath.
+// Symlinked candidates (.claude, .venv, node_modules, ...) are files from git's
+// point of view, so they never carry a trailing slash here and stay out of the
+// list. Sorted for stable output.
+func listRealDirs(wtPath string) []realDir {
+	seen := map[string]struct{}{}
+	var paths []string
+	for _, args := range [][]string{
+		{"ls-files", "--others", "--directory", "--exclude-standard"},
+		{"ls-files", "--others", "--directory", "--ignored", "--exclude-standard"},
+	} {
+		out, err := core.GitOutput(wtPath, args...)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(out, "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasSuffix(line, "/") {
+				continue
+			}
+			p := strings.TrimSuffix(line, "/")
+			if _, ok := seen[p]; ok {
+				continue
+			}
+			// Belt and braces: a symlinked directory must never be reported as
+			// something that disappears, because removing the link is cheap and
+			// the target lives in the main worktree.
+			if fi, statErr := os.Lstat(filepath.Join(wtPath, p)); statErr != nil || fi.Mode()&os.ModeSymlink != 0 {
+				continue
+			}
+			seen[p] = struct{}{}
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+
+	dirs := make([]realDir, 0, len(paths))
+	for _, p := range paths {
+		dirs = append(dirs, realDir{Path: p, Size: dirSize(filepath.Join(wtPath, p))})
+	}
+	return dirs
+}
+
+// dirSize returns the size of path in bytes, or 0 when du fails.
+func dirSize(path string) int64 {
+	out, err := exec.Command("du", "-sk", path).Output()
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return 0
+	}
+	kb, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return kb * 1024
+}
+
+// humanSize renders bytes as B/KB/MB/GB, with one decimal above 1KB.
+func humanSize(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%dB", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// printRealDirs lists what will be deleted along with the worktree. It is shown
+// only for dry-run: the point is to make an unregistered large directory visible
+// before it is gone, not to slow down the ordinary listing.
+func printRealDirs(out io.Writer, wtPath string) {
+	for _, d := range listRealDirs(wtPath) {
+		size := "?"
+		if d.Size > 0 {
+			size = humanSize(d.Size)
+		}
+		_, _ = fmt.Fprintf(out, "   消える実体: %8s  %s\n", size, d.Path)
+	}
 }
 
 // branchOfWorktree returns the branch name attached to wtPath via git worktree list.
@@ -243,6 +342,9 @@ func rmMerged(out io.Writer, opts RmOptions) error {
 		_, _ = fmt.Fprintf(out, "🔍 %d 件の候補:\n", len(cands))
 		for i := range cands {
 			_, _ = fmt.Fprintln(out, display(cands[i]))
+			if opts.DryRun {
+				printRealDirs(out, cands[i].entry.WtPath)
+			}
 		}
 		if !opts.Yes && !opts.DryRun {
 			_, _ = fmt.Fprintln(out, "実行するには --yes を指定してください")
