@@ -129,6 +129,10 @@ type EntryConfig struct {
 	// BranchPattern constrains branch names created by `wt tree add` for this
 	// repository. Empty or ".*" allows anything; see branchpattern.go.
 	BranchPattern string `json:"branch_pattern,omitempty"`
+	// AIPolicy is the repository's AI work policy file, relative to the
+	// container. Empty means no policy. Stored here (outside the repo) so it is
+	// never committed; resolved by `wt policy`.
+	AIPolicy string `json:"ai_policy,omitempty"`
 }
 
 // LoadConfig returns the _config block, defaulting to empty when missing.

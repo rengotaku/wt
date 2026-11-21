@@ -8,6 +8,7 @@ git worktree 管理 CLI + Web UI。単一 Go バイナリ（React SPA を go:emb
 wt (cobra CLI)
 ├── tree / repo / symlink / gc   worktree・リポジトリ管理
 ├── dev / serve / ports          dev サービス定義・起動・ポート管理
+├── policy                       リポジトリごとの AI 作業方針の解決
 ├── proxy                        ドメインルーティング (:8088、`wt web` に内蔵。単独起動も可)
 └── web                          SPA + JSON API (:8090、内蔵 proxy を既定 ON で同時起動)
 ```
@@ -36,9 +37,14 @@ wt (cobra CLI)
 | `<base>/<repo>/.worktrees.json` | worktree エントリ（type / created / branch / pinned / auto_start / port_base / `_config.dev_services` 等） |
 | `<base>/<repo>/.worktrees.json::_config.hidden（core.EntryConfig.Hidden）` | repo 単位の表示/非表示フラグ（ローカル設定、コミットしない） |
 | `<base>/<repo>/.worktrees.json::_config.branch_pattern（core.EntryConfig.BranchPattern）` | `wt tree add` が作るブランチ名を制約する正規表現。既定 `".*"`（全許可）。完全一致で照合する（`core.ValidateBranchName`） |
+| `<base>/<repo>/.worktrees.json::_config.ai_policy（core.EntryConfig.AIPolicy）` | リポジトリの AI 作業方針ファイル（コンテナ相対、既定は `.wt/ai-policy.md`）。`wt policy` が解決する。リポジトリには置かない |
 | `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
 | `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
+
+## AI 作業方針（`wt policy`）
+
+方針本文はコンテナに置き、リポジトリには置かない。`wt policy show` は未設定なら無出力で exit 0、設定済みでファイルが無ければ exit 1（設定ミスを隠さない）。`wt policy init` はテンプレートを作り `_config.ai_policy` を設定する（既存ファイルは上書きしない）。パスはコンテナ内に制限し、絶対パスと `..` を拒否する（`internal/wt/policy`）。`CLAUDE.md` / `AGENTS.md` は利用ユーザのグローバル方針であり、wt は生成も読み書きもしない。
 
 ## dev サービスのライフサイクル
 
