@@ -24,6 +24,10 @@ wt dev rm <name>            dev サービスを削除
 wt dev show [--json]        実効 dev 設定とソース・警告を表示
 wt dev validate             repo 既定 dev 設定を検証
 wt dev clear                repo 既定 dev サービスを全削除
+
+wt policy show              リポジトリの方針を表示（未設定なら無出力）
+wt policy path              方針ファイルの絶対パス
+wt policy init              方針ファイルのテンプレートを作成
 ```
 
 ## dev サービス設定（`wt dev`）
@@ -58,6 +62,23 @@ dev 設定は次の優先順で実効化されます（`wt dev show` が実効�
 
 上位レイヤがあると下位は使われません（例: worktree 上書きがあると `wt dev` の repo 既定は
 その worktree には反映されません）。`wt dev show` はこの状況を警告します。
+
+## リポジトリごとの AI 作業方針（`wt policy`）
+
+リポジトリごとの AI 作業方針を、リポジトリの外（コンテナ）に置きます。
+
+- 保存先: `_config.ai_policy`（`.worktrees.json`、既定は `.wt/ai-policy.md`）
+- wt は保存と解決だけを担当します。`CLAUDE.md` / `AGENTS.md` は生成も読み書きもしません
+- 読み込みは利用ユーザのグローバル方針が `wt policy show` を呼びます
+
+```bash
+wt policy init          # .wt/ai-policy.md のテンプレートを作成
+wt policy show          # 本文を表示（未設定なら無出力・exit 0）
+wt policy show --repo myrepo
+wt policy path          # 絶対パス（未設定なら exit 1）
+```
+
+`_config.ai_policy` はコンテナからの相対パスです。`../` などコンテナの外を指す指定は拒否します。
 
 ## プロセス・メモリ使用量の監視
 
