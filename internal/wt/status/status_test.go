@@ -23,7 +23,7 @@ func sampleInput() *Input {
 				Ports: []ports.PortState{{Port: 9010, Running: true, PID: 12}}},
 			{Repo: "lib", WtName: "lib--gone", Branch: "gone", PortBase: 9015, Exists: false},
 		},
-		AutoStart: map[string]bool{"app/app--feat": true},
+		AutoStart: map[string]bool{"/w/app/app--feat": true},
 		Routes:    []proxy.Route{{Repo: "app", WtName: "app--feat", Label: "feat", Port: 9000}},
 		Daemon:    Daemon{Running: true, PID: 4242},
 		Proxy:     settings.Proxy{Enabled: true, Port: 8088, Bind: "127.0.0.1"},

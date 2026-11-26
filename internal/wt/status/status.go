@@ -5,6 +5,7 @@ package status
 
 import (
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -71,7 +72,7 @@ type Report struct {
 // assembly can be tested without touching the machine.
 type Input struct {
 	Rows      []ports.Row
-	AutoStart map[string]bool // key: repo + "/" + worktree
+	AutoStart map[string]bool // key: worktree path
 	Routes    []proxy.Route
 	Daemon    Daemon
 	Proxy     settings.Proxy
@@ -92,25 +93,20 @@ func Collect() (Report, error) {
 	return Build(&in), nil
 }
 
+// autoStartFlags reads each worktree's AutoStart from its own container (the
+// parent dir of the worktree path), so same-named repos under different
+// workspace dirs don't mix. Keyed by worktree path.
 func autoStartFlags(rows []ports.Row) map[string]bool {
 	out := map[string]bool{}
-	loaded := map[string]bool{}
+	loaded := map[string]map[string]core.Entry{}
 	for _, r := range rows {
-		if loaded[r.Repo] {
-			continue
+		container := filepath.Dir(r.Path)
+		entries, ok := loaded[container]
+		if !ok {
+			entries, _ = core.LoadEntries(container)
+			loaded[container] = entries
 		}
-		loaded[r.Repo] = true
-		container, err := core.FindContainer(r.Repo)
-		if err != nil {
-			continue
-		}
-		entries, err := core.LoadEntries(container)
-		if err != nil {
-			continue
-		}
-		for name := range entries {
-			out[r.Repo+"/"+name] = entries[name].AutoStart
-		}
+		out[r.Path] = entries[r.WtName].AutoStart
 	}
 	return out
 }
@@ -144,7 +140,7 @@ func Build(in *Input) Report {
 			Path:      r.Path,
 			State:     stateOf(r),
 			Ports:     StateNone,
-			AutoStart: in.AutoStart[key],
+			AutoStart: in.AutoStart[r.Path],
 			URL:       urls[key],
 			Services:  []Service{},
 		}

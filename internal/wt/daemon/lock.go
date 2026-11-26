@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // LockPath is the lock file shared by every wt daemon of this user.
@@ -30,11 +31,12 @@ func Acquire(path string) (*os.File, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	// O_NOFOLLOW: never truncate/write through a symlink planted at the path.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockExclusive(f); err != nil {
 		_ = f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, fmt.Errorf("wt daemon は既に起動しています（lock: %s）", path)
@@ -47,6 +49,21 @@ func Acquire(path string) (*os.File, error) {
 		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
 	}
 	return f, nil
+}
+
+// lockExclusive takes the lock without blocking on a running daemon, but
+// retries briefly: Probe holds a shared lock for a moment, and a daemon
+// starting at that instant must not mistake it for another daemon.
+func lockExclusive(f *os.File) error {
+	var err error
+	for i := 0; i < 10; i++ {
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return err
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return err
 }
 
 // Probe reports whether a daemon currently holds the lock at path, and its
