@@ -20,9 +20,7 @@ type RmOptions struct {
 	KeepBranch bool   // --keep-branch
 	Force      bool   // --force
 	DryRun     bool   // --dry-run
-	Quiet      bool   // --quiet: 削除前の一覧を出さない
-	NoSize     bool   // --no-size: サイズ計算（du）をスキップする
-	Positional []string
+	NoSize     bool   // サイズ計算（du）をしない。worktree rm は true、gc は false
 	// StrictBranch makes a failed branch deletion an error (*BranchKeptError)
 	// after the worktree and its entry are gone. Without it the failure is
 	// only a warning, as the old commands print it.
@@ -79,12 +77,12 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	if opts.DryRun {
 		_, _ = fmt.Fprintf(out, "🔍 [dry-run] 削除予定: %s\n", t.WtPath)
-		renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize), opts.Quiet)
+		renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize))
 		return nil
 	}
 
 	// 削除の直前にも同じ一覧を出す（--yes でも）
-	renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize), opts.Quiet)
+	renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize))
 
 	branch := branchOfWorktree(t.MainDir, t.WtPath)
 	if opts.Branch != "" && branch != opts.Branch {
@@ -139,7 +137,7 @@ type symlinkEntry struct {
 type rmScan struct {
 	Symlinks []symlinkEntry
 	Dirs     []realDir
-	Measured bool // false when --no-size skipped du
+	Measured bool // false when NoSize skipped du
 }
 
 const (
@@ -263,13 +261,9 @@ func humanSize(b int64) string {
 	return fmt.Sprintf("%.1f%cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
-// renderScan prints the scan. quiet suppresses it (the caller still prints the
-// target path). Directories are listed largest first and capped at
+// renderScan prints the scan. Directories are listed largest first and capped at
 // realDirShownMax; the total and the 1GB warning cover every directory found.
-func renderScan(out io.Writer, repo string, s rmScan, quiet bool) {
-	if quiet {
-		return
-	}
+func renderScan(out io.Writer, repo string, s rmScan) {
 	for _, l := range s.Symlinks {
 		_, _ = fmt.Fprintf(out, "   symlink: %s -> %s\n", l.Path, l.Target)
 	}
