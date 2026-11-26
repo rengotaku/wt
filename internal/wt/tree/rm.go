@@ -46,6 +46,13 @@ func (e *BranchKeptError) Unwrap() error { return e.Err }
 
 // RemoveAt deletes the worktree wtName of the given container — the exact
 // target the caller resolved, not a name looked up again across workspaces.
+// RemoveEntry deletes exactly the scanned worktree t (its WtPath, which may be
+// outside the container). With opts.Branch set, it refuses when the worktree
+// is no longer on that branch.
+func RemoveEntry(out io.Writer, opts RmOptions, t *RmEntry) error {
+	return performDelete(out, opts, t)
+}
+
 func RemoveAt(out io.Writer, opts RmOptions, repo, container, wtName string) error {
 	mainDir, _ := core.ResolveMain(container)
 	if mainDir == "" {
@@ -82,6 +89,9 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 	renderScan(out, t.Repo, scanWorktree(t.WtPath, !opts.NoSize), opts.Quiet)
 
 	branch := branchOfWorktree(t.MainDir, t.WtPath)
+	if opts.Branch != "" && branch != opts.Branch {
+		return fmt.Errorf("ブランチが変わっているため消しません: %s（%s → %s）", t.WtPath, opts.Branch, branch)
+	}
 
 	// Stop before touching the registry if git refuses (locked worktree etc.):
 	// otherwise the directory stays but wt forgets it.
@@ -97,8 +107,12 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 		}
 	}
 
-	if err := core.DeleteEntry(t.Container, t.WtName); err != nil {
-		return fmt.Errorf("登録の削除に失敗しました: %s: %w", t.WtName, err)
+	// The registry is keyed by the folder name under the container. A
+	// worktree outside the container with the same name is not that entry.
+	if samePath(filepath.Join(t.Container, t.WtName), t.WtPath) {
+		if err := core.DeleteEntry(t.Container, t.WtName); err != nil {
+			return fmt.Errorf("登録の削除に失敗しました: %s: %w", t.WtName, err)
+		}
 	}
 
 	_, _ = fmt.Fprintf(out, "✅ 削除: %s\n", t.WtPath)
@@ -317,4 +331,16 @@ func branchOfWorktree(mainDir, wtPath string) string {
 		}
 	}
 	return ""
+}
+
+// samePath compares two paths after resolving symlinks of their parents (the
+// worktree itself is already gone when this is called).
+func samePath(a, b string) bool {
+	resolve := func(p string) string {
+		if d, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+			return filepath.Join(d, filepath.Base(p))
+		}
+		return filepath.Clean(p)
+	}
+	return resolve(a) == resolve(b)
 }

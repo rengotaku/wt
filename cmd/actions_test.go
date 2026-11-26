@@ -129,3 +129,12 @@ func TestServiceLogs_OnlyKnownServices(t *testing.T) {
 		}
 	}
 }
+
+// Bare `wt daemon` used to run the daemon; an old service definition must fail.
+func TestDaemonBareFails(t *testing.T) {
+	root := &cobra.Command{Use: "wt", SilenceErrors: true, SilenceUsage: true}
+	registerDaemonCmd(root)
+	if _, err := runCmd(root, "daemon"); clierr.ExitCode(err) != 2 {
+		t.Errorf("bare daemon: got %v, want exit 2", err)
+	}
+}

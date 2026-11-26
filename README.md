@@ -60,7 +60,7 @@ wt policy path / init                                  方針ファイルの絶�
 | `tree ls` / `status` / `ports` | `worktree ls --all`（常駐は `daemon status`） |
 | `tree add --repo R ...` | `worktree add R ...`（結果の `path` 行が作った worktree） |
 | `tree rm` / `gc` / `autostart` | `worktree rm` / `gc` / `set R/W autostart=on\|off` |
-| `tree fix`、`repo rescue-main`、`ports alloc` / `prune` | `doctor --fix` |
+| `tree fix`、`repo rescue-main`、`ports alloc` / `prune` | `doctor`（見るだけ。`stale_port` などの行で候補が分かる）、`doctor [<repo>] --fix`（見つけた全種類を直す） |
 | `serve` / `down` | `service up` / `down` |
 | `symlink ls` / `add` / `rm` | `repo show`、`repo config add` / `rm R symlink P` |
 | `dev add` / `rm` / `clear` / `show` / `validate` | `repo config add` / `rm R service ...`、`repo show`、`worktree show --json`、`doctor` |

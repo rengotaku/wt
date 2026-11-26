@@ -37,6 +37,11 @@ func registerDaemonCmd(parent *cobra.Command) {
 	c := &cobra.Command{
 		Use:   "daemon",
 		Short: "常駐（内蔵 proxy・AutoStart・reaper）を動かす・状態を見る",
+		// Bare `wt daemon` used to run the daemon. An old LaunchAgent /
+		// systemd unit must fail visibly instead of exiting 0 with help.
+		RunE: func(*cobra.Command, []string) error {
+			return clierr.Usagef("常駐を起動するのは wt daemon run です（引数なしの wt daemon は廃止しました）")
+		},
 	}
 	c.AddCommand(newDaemonRunCmd("run", "内蔵 proxy・AutoStart・reaper を常駐実行する（--proxy-only で proxy だけ）"))
 	c.AddCommand(daemonStatusCmd())

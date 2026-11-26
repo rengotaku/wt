@@ -124,6 +124,14 @@ func checkMainBranch(d *deps, progress io.Writer, container string, fix bool) (F
 	if !fix {
 		return f, true
 	}
+	// The repair resolves the repository by name. With a same-named
+	// repository in the other workspace that may be another container:
+	// then repairing would report this one fixed without touching it.
+	if !resolvesTo(name, container) {
+		f.Status = StatusFixFailed
+		f.Detail += ": 同じ名前のリポジトリが別のワークスペースにあり、名前で引くと別のコンテナになるため自動では直さない"
+		return f, true
+	}
 	if err := d.rescueMain(progress, name); err != nil {
 		f.Status, f.Detail = StatusFixFailed, f.Detail+": "+err.Error()
 		return f, true
@@ -223,6 +231,17 @@ func checkServiceConfig(container string) (Finding, bool) {
 			Detail: err.Error() + "（wt repo config で直す）"}, true
 	}
 	return Finding{}, false
+}
+
+// resolvesTo reports whether looking up name finds container.
+func resolvesTo(name, container string) bool {
+	found, err := core.FindContainer(name)
+	if err != nil {
+		return false
+	}
+	a, errA := filepath.EvalSymlinks(found)
+	b, errB := filepath.EvalSymlinks(container)
+	return errA == nil && errB == nil && a == b
 }
 
 func isDir(p string) bool {

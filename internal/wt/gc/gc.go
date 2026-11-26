@@ -448,9 +448,12 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 			results = append(results, c.resultWith(ResultFailed, "ブランチ不明"))
 			continue
 		}
-		// Delete the scanned path, not whatever the names resolve to now:
-		// a same-named repo in the other workspace may come first.
-		if err := tree.RemoveAt(out, rmOpts, c.entry.Repo, c.entry.Container, c.entry.WtName); err != nil {
+		// Delete the scanned worktree itself (its path, which may be outside
+		// the container), and only while it is still on the scanned branch:
+		// rebuilding the path from names can hit another worktree.
+		iterOpts := rmOpts
+		iterOpts.Branch = c.branch
+		if err := tree.RemoveEntry(out, iterOpts, &c.entry); err != nil {
 			var kept *tree.BranchKeptError
 			if !errors.As(err, &kept) {
 				_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
