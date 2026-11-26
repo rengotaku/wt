@@ -116,13 +116,40 @@ func portFromLocalAddr(addr string) (int, bool) {
 }
 
 // Established returns band ports [start,end] that appear as the local OR peer
-// endpoint of an ESTABLISHED TCP socket. ss 不在時は空 map(degrade, nil err)。
+// endpoint of an ESTABLISHED TCP socket. It uses `ss` (Linux) and falls back to
+// `lsof -Fn` (macOS has no ss; without the fallback every port looked idle and
+// the idle reaper stopped in-use AutoStart worktrees, #185). If neither works
+// the result is an empty map (degrade, nil err).
 func Established(start, end int) (map[int]bool, error) {
-	out, err := exec.Command("ss", "-tnH", "state", "established").Output()
-	if err != nil {
-		return map[int]bool{}, nil //nolint:nilerr // ss missing → degrade
+	if out, err := exec.Command("ss", "-tnH", "state", "established").Output(); err == nil {
+		return parseEstablished(string(out), start, end), nil
 	}
-	return parseEstablished(string(out), start, end), nil
+	if out, err := exec.Command("lsof", "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-Fn").Output(); err == nil {
+		return parseLsofEstablished(string(out), start, end), nil
+	}
+	return map[int]bool{}, nil
+}
+
+// parseLsofEstablished parses `lsof -Fn` output, whose "n" lines look like
+// "127.0.0.1:9000->127.0.0.1:54321", returning ports in [start, end] that
+// appear on either side.
+func parseLsofEstablished(out string, start, end int) map[int]bool {
+	res := map[int]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "n") {
+			continue
+		}
+		local, peer, ok := strings.Cut(line[1:], "->")
+		if !ok {
+			continue
+		}
+		for _, addr := range []string{local, peer} {
+			if port, ok := portFromLocalAddr(addr); ok && port >= start && port <= end {
+				res[port] = true
+			}
+		}
+	}
+	return res
 }
 
 // parseEstablished parses `ss -tnH state established` output, returning ports

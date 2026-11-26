@@ -24,7 +24,7 @@ wt (cobra CLI)
 | `internal/wt/core/` | コンテナ（`<base>/<repo>/`）と `.worktrees.json` の読み書き。リポジトリ名は `ValidateRepoName` で 1 階層の名前に限る（#180） |
 | `internal/wt/tree/` | worktree の add / rm / update / list / AutoStart 切替（`SetAutoStart`） |
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
-| `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
+| `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（Linux は `ss`、無ければ `lsof`。macOS は `lsof`）・doctor |
 | `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
 | `internal/wt/status/` | `wt status` の集計（`Collect` / `Build`）と出力（`WriteTSV` / `WriteJSON` / `WriteRich`） |
 | `internal/wt/daemon/` | `wt daemon` の二重起動防止の lock（PID を書く）と、動いているかの確認（`Probe`） |
