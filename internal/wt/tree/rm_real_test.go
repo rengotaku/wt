@@ -108,7 +108,7 @@ func TestRenderScan_FormatsAndWarns(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	renderScan(&buf, "myrepo", s, false)
+	renderScan(&buf, "myrepo", s)
 	out := buf.String()
 
 	for _, want := range []string{
@@ -134,7 +134,7 @@ func TestRenderScan_TopFive(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	renderScan(&buf, "myrepo", s, false)
+	renderScan(&buf, "myrepo", s)
 	out := buf.String()
 
 	if !strings.Contains(out, "他 1 件") {
@@ -145,22 +145,16 @@ func TestRenderScan_TopFive(t *testing.T) {
 	}
 }
 
-func TestRenderScan_NoSizeAndQuiet(t *testing.T) {
+func TestRenderScan_NoSize(t *testing.T) {
 	s := rmScan{Dirs: []realDir{{Path: ".venv"}}}
 
 	var sized bytes.Buffer
-	renderScan(&sized, "myrepo", s, false)
+	renderScan(&sized, "myrepo", s)
 	if strings.Contains(sized.String(), "実体の合計") {
 		t.Errorf("--no-size なのに合計が出ている:\n%s", sized.String())
 	}
 	if strings.Contains(sized.String(), "1.0KB") || strings.Contains(sized.String(), "GB") {
 		t.Errorf("--no-size なのにサイズが出ている:\n%s", sized.String())
-	}
-
-	var quiet bytes.Buffer
-	renderScan(&quiet, "myrepo", s, true)
-	if quiet.Len() != 0 {
-		t.Errorf("--quiet なのに出力がある: %q", quiet.String())
 	}
 }
 

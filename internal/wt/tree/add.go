@@ -40,7 +40,6 @@ type AddOptions struct {
 	BranchType  string // --type for --branch mode (default "feature")
 	IssueURL    string // --issue <github-url>
 	PositionDir string // worktree dir name override (positional after --branch)
-	Positional  []string
 }
 
 // AddResult is returned to the CLI for printing CD: and BRANCH: instructions.
@@ -176,17 +175,6 @@ func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 		return addByBranch(out, opts)
 	}
 
-	// ── 残りは positional 引数モード（<repo> <issue> [<desc>]） ──
-	if len(opts.Positional) >= 1 && opts.Repo == "" {
-		opts.Repo = opts.Positional[0]
-	}
-	if len(opts.Positional) >= 2 {
-		opts.Issue = opts.Positional[1]
-	}
-	if len(opts.Positional) >= 3 {
-		opts.Description = opts.Positional[2]
-	}
-
 	repos := availableRepos()
 	if len(repos) == 0 {
 		return nil, errors.New("コンテナ構成のリポジトリが見つかりません (wt repo init で作成してください)")
@@ -297,9 +285,6 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 		return nil, errors.New("--branch には --repo <repo> が必要です")
 	}
 	dir := opts.PositionDir
-	if len(opts.Positional) >= 1 {
-		dir = opts.Positional[0]
-	}
 	if dir == "" {
 		dir = opts.Repo + "--" + strings.ReplaceAll(opts.Branch, "/", "-")
 	}
