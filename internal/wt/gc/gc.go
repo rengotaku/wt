@@ -445,8 +445,9 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 	}
 
 	rmOpts := tree.RmOptions{
-		KeepBranch: opts.KeepBranch,
-		Force:      opts.Force,
+		KeepBranch:   opts.KeepBranch,
+		Force:        opts.Force,
+		StrictBranch: true,
 	}
 	for i := range cands {
 		c := &cands[i]
@@ -455,11 +456,13 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 			results = append(results, c.resultWith(ResultFailed, "ブランチ不明"))
 			continue
 		}
-		iterOpts := rmOpts
-		iterOpts.Branch = c.branch
-		iterOpts.Repo = c.entry.Repo
-		if err := tree.Rm(out, iterOpts); err != nil {
-			_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
+		// Delete the scanned path, not whatever the names resolve to now:
+		// a same-named repo in the other workspace may come first.
+		if err := tree.RemoveAt(out, rmOpts, c.entry.Repo, c.entry.Container, c.entry.WtName); err != nil {
+			var kept *tree.BranchKeptError
+			if !errors.As(err, &kept) {
+				_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
+			}
 			results = append(results, c.resultWith(ResultFailed, err.Error()))
 			continue
 		}

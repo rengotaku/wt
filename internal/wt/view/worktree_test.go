@@ -47,3 +47,28 @@ func TestLoadWorktree_ServicesWithoutPorts(t *testing.T) {
 		t.Errorf("api: %+v", s)
 	}
 }
+
+// A broken dev config is reported, not read as "no services".
+func TestLoadWorktree_ConfigError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	container := filepath.Join(home, "Workspace", "app")
+	path := filepath.Join(container, "app--x")
+	if err := os.MkdirAll(filepath.Join(path, ".wt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, ".wt", "dev.toml"), []byte("[[service]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "app--x", &core.Entry{Branch: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	rep := &status.Report{Worktrees: []status.Worktree{{Repo: "app", Worktree: "app--x", Path: path}}}
+	d, err := LoadWorktree(ref.Ref{Repo: "app", Worktree: "app--x", Container: container, Path: path}, rep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.ConfigError == "" {
+		t.Error("broken .wt/dev.toml must set ConfigError")
+	}
+}

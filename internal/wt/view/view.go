@@ -145,6 +145,9 @@ type WorktreeDetail struct {
 	Issue    string          `json:"issue"`
 	Created  string          `json:"created"`
 	Services []ServiceDetail `json:"services"`
+	// ConfigError is why the dev service config could not be read ("" when
+	// it could). Services then lack the configured ones and domain.
+	ConfigError string `json:"config_error"`
 }
 
 // LoadWorktree finds r in the collected report and adds the entry metadata
@@ -166,7 +169,10 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 	}
 	e := entries[r.Worktree]
 	d := WorktreeDetail{Worktree: *w, Issue: e.Issue, Created: e.Created, Services: []ServiceDetail{}}
-	cfg, _, _ := devserver.EffectiveConfig(r.Path)
+	cfg, _, cfgErr := devserver.EffectiveConfig(r.Path)
+	if cfgErr != nil {
+		d.ConfigError = cfgErr.Error()
+	}
 	// Names recorded when the services were started win over the current
 	// config: the config may have been reordered since. #189
 	recorded := map[int]string{}

@@ -235,7 +235,13 @@ func worktreeShowCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return writeWorktreeShow(cmd.OutOrStdout(), o, &d)
+		if err := writeWorktreeShow(cmd.OutOrStdout(), o, &d); err != nil {
+			return err
+		}
+		if d.ConfigError != "" {
+			return clierr.Preconditionf("dev サービスの設定を読めません: %s", d.ConfigError)
+		}
+		return nil
 	}
 	return c
 }
@@ -244,7 +250,7 @@ func writeWorktreeShow(w io.Writer, o *out.Opts, d *view.WorktreeDetail) error {
 	kv := [][2]string{
 		{"repo", d.Repo}, {"worktree", d.Worktree.Worktree}, {"branch", d.Branch}, {"path", d.Path},
 		{"state", d.State}, {"ports", d.Ports}, {"autostart", out.OnOff(d.AutoStart)}, {"url", d.URL},
-		{"issue", d.Issue}, {"created", d.Created},
+		{"issue", d.Issue}, {"created", d.Created}, {"config_error", d.ConfigError},
 	}
 	switch {
 	case o.JSON:
