@@ -91,13 +91,20 @@ wt policy path          # 絶対パス（未設定なら exit 1）
 - AutoStart の worktree を起動時に `serve`（`wt tree autostart` で設定）
 - idle / port / health の各 reaper（`[idle_reaper]` `[port_reaper]` `[health_reaper]`）
 
-設定はすべて `~/.config/wt/settings.toml` です。Web UI と HTTP API は廃止しました（#178）。
+設定はすべて `settings.toml` です。場所は `$WT_CONFIG_DIR/wt/settings.toml`、未指定ならユーザー設定ディレクトリ配下
+（macOS: `~/Library/Application Support/wt/settings.toml`、Linux: `~/.config/wt/settings.toml`）。
+LAN に公開しないなら `[proxy]` に `bind = "127.0.0.1"` を書きます（既定は `0.0.0.0`）。
+
+同時に動かせる `wt daemon` は 1 つだけです（2 つ目は lock でエラー終了）。Web UI と HTTP API は廃止しました（#178）。
+
+旧 `wt web` を常駐させていた環境は、LaunchAgent / systemd unit の起動引数を `wt daemon` に替えて再読み込みします
+（`-p` / `--port` は無くなりました）。旧プロセスが残っていると proxy のポートが空かず、`wt daemon` はエラー終了します。
 
 ## アイドル停止 (idle reaper)
 
 `wt daemon` は、AutoStart で自動 serve された dev サービスが一定時間アイドル状態（ブラウザ等から dev ポートへの通信がない状態）になった場合、自動で `down` しメモリを解放します。
 
-- 既定の挙動は `enabled=true`、TTL は 30分、監視間隔は 2分です（`~/.config/wt/settings.toml` の `[idle_reaper]` セクションで設定可能）。
+- 既定の挙動は `enabled=true`、TTL は 30分、監視間隔は 2分です（`settings.toml` の `[idle_reaper]` セクションで設定可能）。
 - **手動で serve した worktree は対象外**です（AutoStart の worktree のみが自動 down します）。
 - **注意**: vite の HMR websocket のようにブラウザタブが開きっぱなしでコネクションが維持されている場合や、兄弟サービス間での通信（ポート間の ESTABLISHED 接続）がある場合は「活動中」と見なされ、停止しません。
 

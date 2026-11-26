@@ -23,8 +23,9 @@ description: 認証の無い HTTP API が外部サイトから呼べたため We
 
 - `wt web`・`internal/handler`・`internal/static`・`frontend/`・`internal/buildinfo`・`internal/wt/procstats` を削除する
 - 常駐処理は新コマンド `wt daemon` に移す。中身は旧 `cmd/web.go` から HTTP サーバーを抜いたもの（内蔵 proxy・`ServeAutoStart`・3 種類の reaper）。SIGINT / SIGTERM で終了する
+- `wt daemon` は lock ファイル（ユーザーキャッシュディレクトリの `wt/daemon.lock`）で 1 プロセスに限る。旧 `wt web` は API ポートの bind 失敗で 2 つ目が終了していたが、HTTP を持たない daemon にはその歯止めが無いため。proxy の bind に失敗したら daemon はエラー終了し、サービスマネージャーの再起動に任せる
 - Web UI でしか操作できなかったもののうち、AutoStart の切替だけ `wt tree autostart <repo> <worktree> on|off` として CLI に移す
-- それ以外（pin・repo の非表示・settings の編集・ログ閲覧・メモリ表示・マージ済み PR 表示・worktree 単位の dev 設定上書き）は CLI に移さない。settings は `settings.toml` を、ログは `~/.cache/wt/run/<key>/<svc>.log` を直接読む。`settings.toml` の `[process_stats]` は読み捨てる（未知キーとして無視される）
+- それ以外（pin・repo の非表示・settings の編集・ログ閲覧・メモリ表示・マージ済み PR 表示・worktree 単位の dev 設定上書き）は CLI に移さない。settings は `settings.toml` を、ログはユーザーキャッシュディレクトリの `wt/run/<key>/<svc>.log` を直接読む。`settings.toml` の `[process_stats]` は読み捨てる（未知キーとして無視される）
 - `.worktrees.json` の `pinned` / `_config.hidden` / worktree の `dev_services` は、既存ファイルを書き換えずに読み書きできるよう構造体に残す
 
 ## 捨てた案

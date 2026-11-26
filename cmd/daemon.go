@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,7 +29,9 @@ const daemonLong = `常駐して次を行う（HTTP API は持たない）。
   - AutoStart の worktree を起動時に serve する（wt tree autostart で設定）
   - idle / port / health の各 reaper。settings.toml [idle_reaper] [port_reaper] [health_reaper]
 
-LaunchAgent などから起動する。SIGINT / SIGTERM で終了する。`
+LaunchAgent などから起動する。SIGINT / SIGTERM で終了する。
+同時に動かせるのは 1 プロセスだけ（ユーザーキャッシュディレクトリの wt/daemon.lock で排他）。
+proxy が有効で待ち受けに失敗した場合はエラーで終了する（サービスマネージャーの再起動に任せる）。`
 
 func registerDaemonCmd(parent *cobra.Command) {
 	var (
@@ -41,8 +45,16 @@ func registerDaemonCmd(parent *cobra.Command) {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s := settings.Load()
 			if cmd.Flags().Changed("proxy-port") {
+				if proxyPort < 1 || proxyPort > 65535 {
+					return fmt.Errorf("--proxy-port は 1-65535 の範囲で指定してください: %d", proxyPort)
+				}
 				s.Proxy.Port = proxyPort
 			}
+			lock, err := acquireDaemonLock(daemonLockPath())
+			if err != nil {
+				return err
+			}
+			defer func() { _ = lock.Close() }()
 			if noProxy {
 				s.Proxy.Enabled = false
 			}
@@ -61,13 +73,13 @@ func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings) error {
 	if s.Proxy.Enabled {
 		srv, err := startProxy(s.Proxy)
 		if err != nil {
-			// The rest of the daemon is still useful without the proxy.
-			slog.Warn("built-in proxy failed to start", "port", s.Proxy.Port, "err", err)
-			_, _ = fmt.Fprintf(out, "warning: 内蔵 proxy の起動に失敗しました（port=%d）: %v\n", s.Proxy.Port, err)
-		} else {
-			defer func() { _ = srv.Close() }()
-			_, _ = fmt.Fprintf(out, "wt proxy listening on http://%s (suffix %s)\n", srv.Addr, proxy.DomainSuffix)
+			// Exit instead of running without the proxy: the service manager
+			// restarts us, so a transient conflict (e.g. the previous process
+			// still holding the port) recovers on its own.
+			return fmt.Errorf("内蔵 proxy の起動に失敗しました（port=%d。止めるなら --no-proxy か settings.toml [proxy].enabled=false）: %w", s.Proxy.Port, err)
 		}
+		defer func() { _ = srv.Close() }()
+		_, _ = fmt.Fprintf(out, "wt proxy listening on http://%s (suffix %s)\n", srv.Addr, proxy.DomainSuffix)
 	}
 
 	go func() {
@@ -98,6 +110,37 @@ func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings) error {
 
 	<-ctx.Done()
 	return nil
+}
+
+// daemonLockPath is the lock file shared by every wt daemon of this user.
+func daemonLockPath() string {
+	base, err := os.UserCacheDir()
+	if err != nil || base == "" {
+		base = filepath.Join(os.Getenv("HOME"), ".cache")
+	}
+	return filepath.Join(base, "wt", "daemon.lock")
+}
+
+// acquireDaemonLock takes an exclusive, non-blocking flock on path. Two daemons
+// would both serve the same AutoStart worktrees and overwrite each other's
+// running.json, so a second one must refuse to start. The lock is released
+// when the returned file is closed or the process exits.
+func acquireDaemonLock(path string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, fmt.Errorf("wt daemon は既に起動しています（lock: %s）", path)
+		}
+		return nil, fmt.Errorf("lock を取得できません（%s）: %w", path, err)
+	}
+	return f, nil
 }
 
 // startProxy binds the proxy synchronously so a bind failure is reported, then

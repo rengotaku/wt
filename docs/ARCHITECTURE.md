@@ -24,7 +24,7 @@ wt (cobra CLI)
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
 | `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
-| `internal/wt/settings/` | `~/.config/wt/settings.toml` の読み書き |
+| `internal/wt/settings/` | `settings.toml`（`$WT_CONFIG_DIR/wt/`、未指定ならユーザー設定ディレクトリの `wt/`。macOS は `~/Library/Application Support/wt/`）の読み書き |
 
 ### 状態ファイル
 
@@ -34,9 +34,10 @@ wt (cobra CLI)
 | `<base>/<repo>/.worktrees.json::_config.hidden` / `pinned` | 廃止した Web UI の表示用フラグ。読み書きの互換のため構造体に残しているだけで、参照する処理は無い |
 | `<base>/<repo>/.worktrees.json::_config.branch_pattern（core.EntryConfig.BranchPattern）` | `wt tree add` が作るブランチ名を制約する正規表現。既定 `".*"`（全許可）。完全一致で照合する（`core.ValidateBranchName`） |
 | `<base>/<repo>/.worktrees.json::_config.ai_policy（core.EntryConfig.AIPolicy）` | リポジトリの AI 作業方針ファイル（コンテナ相対、既定は `.wt/ai-policy.md`）。`wt policy` が解決する。リポジトリには置かない |
-| `~/.config/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
-| `~/.cache/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
-| `~/.cache/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
+| `<設定ディレクトリ>/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
+| `<キャッシュディレクトリ>/wt/daemon.lock` | `wt daemon` の二重起動を防ぐ flock |
+| `<キャッシュディレクトリ>/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
+| `<キャッシュディレクトリ>/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
 ## AI 作業方針（`wt policy`）
 
