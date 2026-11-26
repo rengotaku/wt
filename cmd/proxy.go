@@ -42,5 +42,5 @@ func registerProxyCmd(parent *cobra.Command) {
 		},
 	}
 	c.Flags().IntVarP(&port, "port", "p", 8088, "リッスンポート")
-	parent.AddCommand(c)
+	parent.AddCommand(deprecate(c, "wt daemon run --proxy-only"))
 }

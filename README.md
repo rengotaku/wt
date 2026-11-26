@@ -14,6 +14,22 @@ wt worktree show [<repo>/<wt>]      1 worktree の詳細（省略時は今いる
 wt daemon status                    wt daemon が動いているか・PID・proxy の待ち受け先
 ```
 
+変える系:
+
+```
+wt worktree add <repo> --issue <URL> | --branch <B>   worktree を作る
+wt worktree rm <repo>/<wt> [--dry-run] [--yes]        worktree を消す
+wt worktree gc --done | --older-than 30d [--yes]      条件に合う worktree をまとめて消す
+wt worktree set <repo>/<wt> autostart=on|off          worktree 単位の設定
+wt worktree update [<repo>/<wt>]                      ブランチの最新を取り込む
+wt service up [<repo>/<wt>] / down [...]              dev サービスの起動・停止
+wt service logs [<repo>/<wt>] [<service>] [-n 100]    dev サービスのログ
+wt daemon run [--proxy-only]                          常駐（--proxy-only で proxy だけ）
+```
+
+変える系は進捗を stderr に、結果のリソースを `worktree show` と同じ形で stdout に出します。消す系は端末なら確認を出し、`--yes` で省きます。端末でなく `--yes` も無いと終了コード 4 で止まります。
+旧コマンド（`tree add` / `rm` / `gc` / `ls` / `autostart`、`serve`、`down`、`proxy`、引数なしの `daemon`）は今も動き、使うと stderr に新しい名前を出します。
+
 出力は既定がタブ区切り（1 行 1 件、空は `-`）、`--json` で JSON、`--rich` で人向けの表です。
 終了コード: 0 成功 / 1 予期しないエラー / 2 使い方の誤り / 3 対象が無い / 4 前提を満たさない / 5 外部コマンドの失敗。
 `--json` のとき、エラーは `{"error":{"code":"not_found","message":"..."}}` の形で stderr に出ます。

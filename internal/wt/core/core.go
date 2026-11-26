@@ -307,14 +307,15 @@ type gitError struct {
 func (e *gitError) Error() string { return e.stderr }
 func (e *gitError) Unwrap() error { return e.cause }
 
-// GitRun runs git -C <dir> <args...> forwarding stdout/stderr to the terminal.
+// GitRun runs git -C <dir> <args...> forwarding git's output to stderr (it is
+// progress, not data: commands keep stdout for their own result).
 // Stderr is also captured so that on failure the returned error contains the
 // git diagnostic text rather than just "exit status N".
 func GitRun(dir string, args ...string) error {
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.Command("git", full...)
 	var stderrBuf bytes.Buffer
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(stderrBuf.String()); msg != "" {

@@ -106,9 +106,10 @@ func repoShowCmd() *cobra.Command {
 func registerWorktreeCmd(parent *cobra.Command) {
 	c := &cobra.Command{
 		Use:   "worktree",
-		Short: "worktree を見る（ls / show）",
+		Short: "worktree の一覧・詳細・作成・削除・設定",
 	}
-	c.AddCommand(worktreeLsCmd(), worktreeShowCmd())
+	c.AddCommand(worktreeLsCmd(), worktreeShowCmd(), worktreeAddCmd(), worktreeRmCmd(),
+		worktreeGcCmd(), worktreeSetCmd(), worktreeUpdateCmd())
 	parent.AddCommand(c)
 }
 
