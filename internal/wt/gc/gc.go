@@ -23,7 +23,6 @@ import (
 type Options struct {
 	// --- filter ---
 	Done      bool   // --done: PR merged/closed または issue closed の worktree を対象
-	Merged    bool   // --merged: --done の alias（後方互換）
 	OlderThan string // --older-than: 最終コミットが N(d|h) 以上前
 	// --- retention ---
 	KeepBranch bool // --keep-branch: ブランチを残す
@@ -38,11 +37,11 @@ type Options struct {
 	Confirm func() error
 }
 
-// closedFilter reports whether the --done family (--done / --merged alias) is on.
-func (o Options) closedFilter() bool { return o.Done || o.Merged }
+// closedFilter reports whether --done is on.
+func (o Options) closedFilter() bool { return o.Done }
 
 // branchCleanup reports whether worktree-less branches are GC targets:
-// only with --done/--merged, and never with --keep-branch.
+// only with --done, and never with --keep-branch.
 func (o Options) branchCleanup() bool { return o.closedFilter() && !o.KeepBranch }
 
 var issueNumRe = regexp.MustCompile(`issue[-_]?(\d+)`)
@@ -137,13 +136,13 @@ func keepReason(c changes, u unpushed, landed bool) string {
 
 var olderThanRegex = regexp.MustCompile(`^(\d+)([dh])$`)
 
-// ErrNoFilter is returned by Run when no filter (--done/--merged or
+// ErrNoFilter is returned by Run when no filter (--done or
 // --older-than) is given. Exported as a sentinel (not just an error string)
 // so callers — notably the HTTP handler — can classify it as a client error
 // (400) via errors.Is, rather than letting it fall through to a generic
 // server error (500).
 var ErrNoFilter = errors.New(
-	"フィルタ条件（--done/--merged または --older-than）を1つ以上指定してください。" +
+	"フィルタ条件（--done または --older-than）を1つ以上指定してください。" +
 		"未指定のまま実行すると main/master 以外の全 worktree が対象になります",
 )
 
@@ -231,7 +230,7 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 		return nil, err
 	}
 
-	// フィルタ（--done/--merged または --older-than）が1つも指定されていない
+	// フィルタ（--done または --older-than）が1つも指定されていない
 	// 場合、後段のループはどちらの絞り込みも素通りし main/master 以外の全
 	// worktree が対象になってしまう（fail-open）。fail-safe に倒し、明示的に
 	// フィルタを要求する。
@@ -250,11 +249,6 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 	var repos []repoRef
 	if opts.branchCleanup() {
 		repos = d.repos()
-	}
-
-	// --merged は --done の後方互換 alias。使ったら通知する。
-	if opts.Merged && !opts.Done {
-		_, _ = fmt.Fprintln(out, "ℹ️  --merged は --done の alias です（PR merged/closed または issue closed を対象）")
 	}
 
 	var cands, skips []cand

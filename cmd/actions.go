@@ -92,7 +92,6 @@ func worktreeAddCmd() *cobra.Command {
 			return clierr.Usagef("--issue と --branch のどちらか 1 つを指定してください")
 		}
 		opts.Repo = args[0]
-		opts.Yes = true
 		res, err := tree.Add(strings.NewReader(""), stderr, &opts)
 		if err != nil {
 			return err

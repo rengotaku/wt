@@ -157,13 +157,13 @@ func TestAddByBranch_NoSymlink(t *testing.T) {
 	}
 }
 
-// TestAddByBranch_EmptyCandidatesWithLegacyFlag verifies the backward-compatible
-// --symlink flag stays harmless when nothing is registered.
-func TestAddByBranch_EmptyCandidatesWithLegacyFlag(t *testing.T) {
+// TestAddByBranch_EmptyCandidates verifies that, with nothing registered,
+// nothing is linked and the hint to register a candidate is printed.
+func TestAddByBranch_EmptyCandidates(t *testing.T) {
 	containerDir, _ := setupWtContainer(t)
 
 	var buf bytes.Buffer
-	if _, err := addByBranch(&buf, &AddOptions{Repo: "testrepo", Branch: "feat/empty", Symlink: true}); err != nil {
+	if _, err := addByBranch(&buf, &AddOptions{Repo: "testrepo", Branch: "feat/empty"}); err != nil {
 		t.Fatalf("addByBranch: %v\n%s", err, buf.String())
 	}
 

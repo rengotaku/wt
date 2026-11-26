@@ -35,11 +35,7 @@ type AddOptions struct {
 	Repo        string
 	Issue       string
 	Description string
-	// Symlink is accepted for backward compatibility only. Symlinking is on by
-	// default now, so the flag changes nothing; use NoSymlink to turn it off.
-	Symlink     bool
 	NoSymlink   bool   // --no-symlink: do not link _config.symlink_candidates
-	Yes         bool   // accepted for backward compatibility; behavior is non-interactive regardless
 	Branch      string // --branch <name>
 	BranchType  string // --type for --branch mode (default "feature")
 	IssueURL    string // --issue <github-url>

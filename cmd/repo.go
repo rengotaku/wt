@@ -130,9 +130,6 @@ func repoRmCmd() *cobra.Command {
 	}
 	c.Flags().BoolVarP(&yes, "yes", "y", false, "確認を省く")
 	c.Flags().BoolVar(&dryRun, "dry-run", false, "消さずに対象を表示する")
-	// --force was the old way to say "really delete"; keep it working.
-	c.Flags().BoolVarP(&yes, "force", "f", false, "--yes と同じ（旧名）")
-	_ = c.Flags().MarkHidden("force")
 	o := out.AddFlags(c)
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := o.Validate(); err != nil {

@@ -122,7 +122,6 @@ func TestOptionsBranchCleanup(t *testing.T) {
 		want bool
 	}{
 		{"--done", Options{Done: true}, true},
-		{"--merged alias", Options{Merged: true}, true},
 		{"--done --keep-branch", Options{Done: true, KeepBranch: true}, false},
 		{"--older-than only", Options{OlderThan: "30d"}, false},
 		{"--done --older-than", Options{Done: true, OlderThan: "30d"}, true},
