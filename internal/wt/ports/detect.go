@@ -1,6 +1,8 @@
 package ports
 
 import (
+	"errors"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -37,7 +39,7 @@ func listeners(start, end int) map[int]Listener {
 	if out, err := exec.Command("ss", "-tlnpH").Output(); err == nil {
 		return parseSS(string(out), start, end)
 	}
-	if out, err := exec.Command("lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn").Output(); err == nil {
+	if out, err := exec.Command(lsofPath(), "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn").Output(); err == nil {
 		return parseLsof(string(out), start, end)
 	}
 	return map[int]Listener{}
@@ -119,16 +121,36 @@ func portFromLocalAddr(addr string) (int, bool) {
 // endpoint of an ESTABLISHED TCP socket. It uses `ss` (Linux) and falls back to
 // `lsof -Fn` (macOS has no ss; without the fallback every port looked idle and
 // the idle reaper stopped in-use AutoStart worktrees, #185). If neither works
-// the result is an empty map (degrade, nil err).
+// it returns an error: "could not look" must not be read as "no connections",
+// because the idle reaper stops services on that answer.
 func Established(start, end int) (map[int]bool, error) {
 	if out, err := exec.Command("ss", "-tnH", "state", "established").Output(); err == nil {
 		return parseEstablished(string(out), start, end), nil
 	}
-	if out, err := exec.Command("lsof", "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-Fn").Output(); err == nil {
-		return parseLsofEstablished(string(out), start, end), nil
+	out, err := exec.Command(lsofPath(), "-nP", "-iTCP", "-sTCP:ESTABLISHED", "-Fn").Output()
+	if err != nil {
+		// lsof exits 1 when nothing matches; that is a real "no connections".
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(exitErr.Stderr) == 0 {
+			return map[int]bool{}, nil
+		}
+		return nil, fmt.Errorf("接続一覧を取得できません（ss も lsof も失敗）: %w", err)
 	}
-	return map[int]bool{}, nil
+	return parseLsofEstablished(string(out), start, end), nil
 }
+
+// lsofPath finds lsof even when PATH lacks /usr/sbin (e.g. a minimal
+// service-manager environment on macOS).
+func lsofPath() string {
+	if p, err := exec.LookPath("lsof"); err == nil {
+		return p
+	}
+	return lsofFallback
+}
+
+// lsofFallback is where macOS ships lsof. A var so tests can point it at a
+// missing file.
+var lsofFallback = "/usr/sbin/lsof"
 
 // parseLsofEstablished parses `lsof -Fn` output, whose "n" lines look like
 // "127.0.0.1:9000->127.0.0.1:54321", returning ports in [start, end] that

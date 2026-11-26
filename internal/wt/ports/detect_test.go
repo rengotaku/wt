@@ -3,6 +3,7 @@ package ports
 import (
 	"net"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -149,5 +150,18 @@ func TestEstablished_RealConnection(t *testing.T) {
 	}
 	if !got[port] {
 		t.Errorf("port %d has an open connection but was not reported as established", port)
+	}
+}
+
+// When neither ss nor lsof can run, Established must report an error rather
+// than "no connections": the idle reaper stops services on "no connections".
+func TestEstablished_ErrorWhenNoTool(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	orig := lsofFallback
+	lsofFallback = filepath.Join(t.TempDir(), "no-lsof")
+	defer func() { lsofFallback = orig }()
+
+	if got, err := Established(9000, 9004); err == nil {
+		t.Fatalf("got %v, nil; want an error", got)
 	}
 }
