@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -45,16 +44,14 @@ func ResolveMain(container string) (path, name string) {
 	return "", ""
 }
 
-// repoNameRe is the shape of a container name: a single path element that
-// cannot be "." / ".." and cannot contain a separator.
-var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.\-]*$`)
-
 // ValidateRepoName rejects names that would resolve outside a workspace dir
 // when joined to it (e.g. "..", ".", "a/b"). FindContainer's callers include
 // `wt repo rm`, which removes the resolved directory recursively.
 func ValidateRepoName(repo string) error {
-	if !repoNameRe.MatchString(repo) {
-		return fmt.Errorf("リポジトリ名が不正です（英数字・_・.・- のみ、先頭は英数字か _）: %q", repo)
+	// Only reject what breaks the path boundary, so existing containers with
+	// names like ".github" or non-ASCII names keep working.
+	if repo == "" || repo == "." || repo == ".." || strings.ContainsAny(repo, "/\\\x00") {
+		return fmt.Errorf("リポジトリ名が不正です（空・.・..・/・\\ は使えない）: %q", repo)
 	}
 	return nil
 }

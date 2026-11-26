@@ -7,12 +7,12 @@ import (
 )
 
 func TestValidateRepoName(t *testing.T) {
-	for _, ok := range []string{"wt", "dotfiles-ubuntu", "a.b", "_x", "repo_1"} {
+	for _, ok := range []string{"wt", "dotfiles-ubuntu", "a.b", "_x", "repo_1", ".github", "日本語", "with space", "-flag"} {
 		if err := ValidateRepoName(ok); err != nil {
 			t.Errorf("%q: want ok, got %v", ok, err)
 		}
 	}
-	for _, bad := range []string{"", ".", "..", "../x", "a/b", "/abs", ".hidden", "-flag", `a\b`} {
+	for _, bad := range []string{"", ".", "..", "../x", "a/b", "/abs", `a\b`, "a\x00b"} {
 		if err := ValidateRepoName(bad); err == nil {
 			t.Errorf("%q: want error", bad)
 		}
