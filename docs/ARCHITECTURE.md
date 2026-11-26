@@ -12,6 +12,7 @@ wt (cobra CLI)
 ├── dev / serve / ports          dev サービス定義・起動・ポート管理
 ├── policy                       リポジトリごとの AI 作業方針の解決
 ├── proxy                        ドメインルーティング (:8088、`wt daemon` に内蔵。単独起動も可)
+├── repo ls / show、worktree ls / show、daemon status   見る系（名詞 → 動詞の新しい構成。#188）
 ├── status                       状態の一覧（既定は AI 向けのタブ区切り、--json、--rich で人向け）
 └── daemon                       常駐: 内蔵 proxy + AutoStart 自動 serve + idle / port / health reaper
 ```
@@ -26,6 +27,10 @@ wt (cobra CLI)
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（Linux は `ss`、無ければ `lsof`。macOS は `lsof`）・doctor |
 | `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
+| `internal/cli/out/` | 見る系の出力の共通部品（既定のタブ区切り・`--json`・`--rich`） |
+| `internal/cli/clierr/` | エラーの種類と終了コード（0 成功 / 1 予期しない / 2 使い方 / 3 対象が無い / 4 前提を満たさない / 5 外部コマンド）。`main.go` が出力と終了コードを決める |
+| `internal/wt/ref/` | `<repo>/<worktree>` の解決。省略時は今いる worktree |
+| `internal/wt/view/` | 見る系（`repo ls` / `show`、`worktree ls` / `show`）が出す中身の組み立て |
 | `internal/wt/status/` | `wt status` の集計（`Collect` / `Build`）と出力（`WriteTSV` / `WriteJSON` / `WriteRich`） |
 | `internal/wt/daemon/` | `wt daemon` の二重起動防止の lock（PID を書く）と、動いているかの確認（`Probe`） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
@@ -109,6 +114,9 @@ PR が merged で、HEAD がその PR の head と一致する（または祖先
 | devserver Down/Serve 呼び出しの監査ログ（trigger 種別） | `internal/wt/autostart/reaper.go` / `internal/wt/autostart/autostart.go` / `internal/wt/autostart/health_reaper.go` / `cmd/serve.go`（`slog.Info("devserver action", ...)`） |
 | worktree の AutoStart フラグ（起動時自動 serve）| `.worktrees.json::auto_start` + `internal/wt/tree/autostart.go` + `cmd/tree.go::treeAutoStartCmd` |
 | 常駐時に起動する処理 | `cmd/daemon.go::runDaemon` |
+| 見る系の出力形式（全コマンド共通） | `internal/cli/out/` |
+| 終了コード・エラーの形 | `internal/cli/clierr/` |
+| 見る系のコマンド定義 | `cmd/views.go` |
 | `wt status` の列・状態の判定 | `internal/wt/status/status.go`（`stateOf`）。既定出力の列順は `TSVHeader` で、スクリプトが依存してよい |
 
 ## 検証ゲート

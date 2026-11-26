@@ -19,6 +19,7 @@ func registerRepoCmd(parent *cobra.Command) {
 	repoCmd.AddCommand(repoAddCmd())
 	repoCmd.AddCommand(repoRmCmd())
 	repoCmd.AddCommand(repoLsCmd())
+	repoCmd.AddCommand(repoShowCmd())
 	repoCmd.AddCommand(repoInitCmd())
 
 	parent.AddCommand(repoCmd)
@@ -83,16 +84,6 @@ func repoRmCmd() *cobra.Command {
 	}
 	c.Flags().BoolVarP(&force, "force", "f", false, "実行する（指定しない場合は削除予定の表示のみ）")
 	return c
-}
-
-func repoLsCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ls",
-		Short: "登録リポジトリ一覧",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return repo.Ls(cmd.OutOrStdout())
-		},
-	}
 }
 
 func repoInitCmd() *cobra.Command {

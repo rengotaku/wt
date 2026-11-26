@@ -4,10 +4,25 @@
 
 ## 主要コマンド
 
+コマンド構成を「名詞 → 動詞」に移行中です（#188）。見る系は次のコマンドを使います。
+
+```
+wt repo ls                          リポジトリごとに 1 行の要約（worktree 数・状態ごとの件数・AutoStart 数）
+wt repo show <repo>                 1 リポジトリの設定
+wt worktree ls [<repo>] [--all]     worktree の一覧（省略時は今いるリポジトリ）
+wt worktree show [<repo>/<wt>]      1 worktree の詳細（省略時は今いる worktree）
+wt daemon status                    wt daemon が動いているか・PID・proxy の待ち受け先
+```
+
+出力は既定がタブ区切り（1 行 1 件、空は `-`）、`--json` で JSON、`--rich` で人向けの表です。
+終了コード: 0 成功 / 1 予期しないエラー / 2 使い方の誤り / 3 対象が無い / 4 前提を満たさない / 5 外部コマンドの失敗。
+`--json` のとき、エラーは `{"error":{"code":"not_found","message":"..."}}` の形で stderr に出ます。
+
+以下は移行前からのコマンドです。
+
 ```
 wt repo add <url>           リモートリポジトリを clone してコンテナ化
 wt repo init <src-dir>      既存 git リポをコンテナ形式に scaffold
-wt repo ls                  登録リポジトリ一覧
 wt repo sync                全リポの main/master を pull --ff-only
 wt repo rm <repo> --force   リポジトリ全体を削除
 

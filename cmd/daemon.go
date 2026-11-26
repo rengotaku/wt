@@ -64,6 +64,7 @@ func registerDaemonCmd(parent *cobra.Command) {
 	}
 	c.Flags().IntVar(&proxyPort, "proxy-port", settings.DefaultProxyPort, "内蔵 proxy のリッスンポート（settings.toml [proxy].port を上書き）")
 	c.Flags().BoolVar(&noProxy, "no-proxy", false, "内蔵 proxy を起動しない（settings.toml [proxy].enabled を上書き）")
+	c.AddCommand(daemonStatusCmd())
 	parent.AddCommand(c)
 }
 

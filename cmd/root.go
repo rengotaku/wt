@@ -24,6 +24,10 @@ var rootCmd = &cobra.Command{
 	Use:   "wt",
 	Short: "worktree 管理コマンド",
 	Long:  "worktree とリポジトリを横断管理する CLI ツール。",
+	// Errors are printed by main via clierr (one line, or JSON with --json)
+	// with a per-kind exit code; cobra must not print them too.
+	SilenceErrors: true,
+	SilenceUsage:  true,
 	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 		c, err := config.Load(cmd.Context())
 		if err != nil {
@@ -58,6 +62,7 @@ func init() {
 	registerSymlinkCmd(rootCmd)
 	registerDaemonCmd(rootCmd)
 	registerStatusCmd(rootCmd)
+	registerWorktreeCmd(rootCmd)
 	registerPortsCmd(rootCmd)
 	registerServeCmd(rootCmd)
 	registerProxyCmd(rootCmd)
