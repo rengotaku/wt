@@ -21,18 +21,19 @@ type InitOptions struct {
 }
 
 // Init scans Src for git repos and scaffolds each into the wt container layout.
+// It returns the containers it created, also when a later repo fails.
 // Non-interactive — all decisions are driven by InitOptions.
-func Init(out io.Writer, opts InitOptions) error {
+func Init(out io.Writer, opts InitOptions) ([]string, error) {
 	if _, err := exec.LookPath("git"); err != nil {
-		return errors.New("git が必要です")
+		return nil, errors.New("git が必要です")
 	}
 	if opts.Src == "" {
-		return errors.New("Usage: wt repo init <src-dir> [target-dir] [--force]") //nolint:staticcheck // user-facing usage string
+		return nil, errors.New("Usage: wt repo init <src-dir> [target-dir] [--force]") //nolint:staticcheck // user-facing usage string
 	}
 
 	src := strings.TrimRight(expandHome(opts.Src), "/")
 	if fi, err := os.Stat(src); err != nil || !fi.IsDir() {
-		return fmt.Errorf("ディレクトリが存在しません: %s", src)
+		return nil, fmt.Errorf("ディレクトリが存在しません: %s", src)
 	}
 
 	target := opts.Target
@@ -41,7 +42,7 @@ func Init(out io.Writer, opts InitOptions) error {
 	}
 	target = strings.TrimRight(expandHome(target), "/")
 	if err := os.MkdirAll(target, 0o755); err != nil {
-		return err
+		return nil, err
 	}
 
 	_, _ = fmt.Fprintln(out, "wt repo init - 既存 git リポを wt コンテナ形式に scaffold します")
@@ -61,14 +62,14 @@ func Init(out io.Writer, opts InitOptions) error {
 			continue
 		}
 		if alreadyContainerized(repoPath) {
-			return fmt.Errorf("wt コンテナが既に存在します: %s", repoPath)
+			return nil, fmt.Errorf("wt コンテナが既に存在します: %s", repoPath)
 		}
 		found = append(found, repoPath)
 	}
 
 	if len(found) == 0 {
 		_, _ = fmt.Fprintf(out, "ℹ️  git 管理下のリポはありません: %s\n", src)
-		return nil
+		return nil, nil
 	}
 
 	_, _ = fmt.Fprintf(out, "対象 (%d 件):\n", len(found))
@@ -89,28 +90,31 @@ func Init(out io.Writer, opts InitOptions) error {
 			_, _ = fmt.Fprintln(out, "")
 			_, _ = fmt.Fprintln(out, "⚠️  上記プロセスが mv 後の旧パスを掴んだままだと、空ディレクトリやキャッシュを再生成します")
 			_, _ = fmt.Fprintln(out, "  → 続行前に dev server (vite/webpack/next 等) と LSP (tsserver/gopls 等) を停止し、--force で再実行してください")
-			return errors.New("aborted: open processes detected")
+			return nil, errors.New("aborted: open processes detected")
 		}
 	} else {
 		_, _ = fmt.Fprintln(out, "⚠️  lsof が見つからないため開いているプロセスのチェックをスキップします")
 	}
 
 	var firstErr error
+	var made []string
 	for _, p := range found {
 		if err := scaffoldRepo(out, p, target); err != nil {
 			_, _ = fmt.Fprintf(out, "❌ %s: %v\n", p, err)
 			if firstErr == nil {
 				firstErr = err
 			}
+			continue
 		}
+		made = append(made, filepath.Join(target, filepath.Base(p)))
 	}
 	if firstErr != nil {
-		return firstErr
+		return made, firstErr
 	}
 
 	_, _ = fmt.Fprintln(out, "")
 	_, _ = fmt.Fprintln(out, "✅ 完了")
-	return nil
+	return made, nil
 }
 
 // alreadyContainerized matches the bash heuristic: container has main/master

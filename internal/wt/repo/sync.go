@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -17,13 +19,21 @@ type syncEntry struct {
 	Branch string `json:"branch"`
 }
 
-type syncResult struct {
-	name   string
-	branch string
-	ok     bool
-	warn   bool
-	skip   bool
-	msg    string
+// Sync results. Fixed words so callers can match on them.
+const (
+	SyncUpdated     = "updated"
+	SyncUpToDate    = "up_to_date"
+	SyncSkipped     = "skipped"
+	SyncWrongBranch = "wrong_branch"
+	SyncFailed      = "failed"
+)
+
+// SyncResult is the outcome for one repository.
+type SyncResult struct {
+	Repo   string `json:"repo"`
+	Branch string `json:"branch"`
+	Result string `json:"result"`
+	Detail string `json:"detail"`
 }
 
 // hasUncommitted は git status --porcelain の出力に、pull を止めるべき
@@ -68,27 +78,13 @@ func resolveMain(container string) (path, name string) {
 	return "", ""
 }
 
-// indentRest indents every line after the first so that multi-line git errors
-// stay visually attached to the "❌ <repo>" line they belong to.
-func indentRest(msg string) string {
-	lines := strings.Split(msg, "\n")
-	for i := 1; i < len(lines); i++ {
-		lines[i] = "   " + lines[i]
-	}
-	return strings.Join(lines, "\n")
-}
-
-// Sync runs git pull --ff-only on every main/master worktree in parallel.
-// 同期に失敗したリポが 1 件でもあれば非 0 で終わるよう error を返す。呼び出し側
-// （myroutine の Worktree 同期ステップ等）は終了コードで成否を判定しており、
-// 画面に "❌ N 失敗" と出しただけでは失敗が握りつぶされるため。
-func Sync() error {
+// Sync runs git pull --ff-only on the main/master worktree of every container
+// in parallel, or only on the container at path only when it is not empty. A
+// container named explicitly is synced even when it is in the sync-skip list. Progress goes to progress; the
+// per-repo outcome is returned sorted by repo name. Failures are reported in
+// the results, not as an error: the caller decides the exit code.
+func Sync(progress io.Writer, only string) ([]SyncResult, error) {
 	home := os.Getenv("HOME")
-	dirs := []string{
-		filepath.Join(home, "Workspace"),
-		filepath.Join(home, "MyWorkspace"),
-	}
-
 	skipSet := loadSyncSkipList(home)
 
 	type target struct {
@@ -97,153 +93,102 @@ func Sync() error {
 		path   string
 	}
 	var targets []target
-	var skipped []string
+	var results []SyncResult
 
-	for _, base := range dirs {
+	for _, base := range []string{filepath.Join(home, "Workspace"), filepath.Join(home, "MyWorkspace")} {
 		containers, _ := filepath.Glob(filepath.Join(base, "*"))
 		for _, container := range containers {
 			info, err := os.Stat(container)
 			if err != nil || !info.IsDir() {
 				continue
 			}
+			name := filepath.Base(container)
+			if only != "" && filepath.Clean(container) != filepath.Clean(only) {
+				continue
+			}
 			mainPath, mainName := resolveMain(container)
 			if mainPath == "" {
 				continue
 			}
-
-			repo := filepath.Base(container)
-			if _, ok := skipSet[repo]; ok {
-				skipped = append(skipped, repo)
+			if _, ok := skipSet[name]; ok && only == "" {
+				results = append(results, SyncResult{Repo: name, Branch: mainName, Result: SyncSkipped, Detail: "sync-skip に載っている"})
 				continue
 			}
-
-			metaFile := filepath.Join(container, ".worktrees.json")
-			branchLabel := mainName
-			if data, err := os.ReadFile(metaFile); err == nil {
-				var entries map[string]json.RawMessage
-				if json.Unmarshal(data, &entries) == nil {
-					if raw, ok := entries[mainName]; ok {
-						var e syncEntry
-						if json.Unmarshal(raw, &e) == nil && e.Branch != "" {
-							branchLabel = e.Branch
-						}
-					}
-				}
-			}
-
-			targets = append(targets, target{name: repo, branch: branchLabel, path: mainPath})
+			targets = append(targets, target{name: name, branch: mainBranchLabel(container, mainName), path: mainPath})
 		}
 	}
-
-	if len(targets) == 0 {
-		if len(skipped) > 0 {
-			fmt.Printf("対象リポなし（⏭ %d 件スキップ: %s）\n", len(skipped), strings.Join(skipped, ", "))
-		} else {
-			fmt.Println("対象リポなし")
-		}
-		return nil
+	if only != "" && len(targets) == 0 {
+		return nil, fmt.Errorf("main / master が見つかりません: %s", only)
 	}
 
-	if len(skipped) > 0 {
-		fmt.Printf("⏭ %d 件スキップ: %s\n", len(skipped), strings.Join(skipped, ", "))
-	}
-	fmt.Printf("⏳ %d リポを同期中...\n", len(targets))
-
-	ch := make(chan syncResult, len(targets))
-
+	_, _ = fmt.Fprintf(progress, "⏳ %d リポを同期中...\n", len(targets))
+	ch := make(chan SyncResult, len(targets))
 	for _, t := range targets {
-		go func(t target) {
-			// フォルダ名（main/master）と実際に checkout されているブランチを照合する。
-			// worktree-first 運用を破って main フォルダで feat ブランチに切り替えていると、
-			// --ff-only pull が意図しないブランチを進めてしまうため、pull せず警告する。
-			folderName := filepath.Base(t.path)
-			curBranchOut, _ := exec.Command("git", "-C", t.path, "rev-parse", "--abbrev-ref", "HEAD").Output()
-			curBranch := strings.TrimSpace(string(curBranchOut))
-			if curBranch != "" && curBranch != folderName {
-				ch <- syncResult{
-					name:   t.name,
-					branch: curBranch,
-					warn:   true,
-					msg:    fmt.Sprintf("フォルダ %q に別ブランチ %q が checkout されています → pull skip", folderName, curBranch),
-				}
-				return
-			}
-
-			// 未コミットの変更があると pull は必ず失敗する。並行して作業中のリポジトリは
-			// 普通にあるので、失敗ではなくスキップ（⏭）として扱い、夜間の同期を止めない。
-			statusOut, _ := exec.Command("git", "-C", t.path, "status", "--porcelain", "--untracked-files=no").Output()
-			if hasUncommitted(string(statusOut)) {
-				ch <- syncResult{
-					name:   t.name,
-					branch: t.branch,
-					skip:   true,
-					msg:    "未コミットの変更があるため pull skip",
-				}
-				return
-			}
-
-			oldHead, _ := exec.Command("git", "-C", t.path, "rev-parse", "HEAD").Output()
-
-			cmd := exec.Command("git", "-C", t.path, "pull", "--ff-only")
-			out, err := cmd.CombinedOutput()
-			output := strings.TrimSpace(string(out))
-
-			switch {
-			case err != nil:
-				// 1 行目だけに切り詰めると、fetch 出力がある場合に
-				// "From github.com:..." しか残らず原因が読めない。全文を渡す。
-				if output == "" {
-					output = err.Error()
-				}
-				ch <- syncResult{name: t.name, branch: t.branch, ok: false, msg: output}
-			case strings.Contains(output, "Already up to date"):
-				ch <- syncResult{name: t.name, branch: t.branch, ok: true, msg: "Already up to date"}
-			default:
-				old := strings.TrimSpace(string(oldHead))
-				countOut, _ := exec.Command("git", "-C", t.path, "rev-list", "--count", old+"..HEAD").Output()
-				count := strings.TrimSpace(string(countOut))
-				ch <- syncResult{name: t.name, branch: t.branch, ok: true, msg: count + " commits pulled"}
-			}
-		}(t)
+		go func(t target) { ch <- syncOne(t.name, t.branch, t.path) }(t)
 	}
-
-	success, fail, warn, skip := 0, 0, 0, 0
 	for range targets {
-		r := <-ch
-		switch {
-		case r.skip:
-			fmt.Printf("⏭  %s (%s) %s\n", r.name, r.branch, r.msg)
-			skip++
-		case r.warn:
-			fmt.Printf("⚠️  %s (%s) %s\n", r.name, r.branch, r.msg)
-			warn++
-		case r.ok:
-			fmt.Printf("✅ %s (%s) %s\n", r.name, r.branch, r.msg)
-			success++
-		default:
-			fmt.Printf("❌ %s (%s) %s\n", r.name, r.branch, indentRest(r.msg))
-			fail++
+		results = append(results, <-ch)
+	}
+	sort.Slice(results, func(i, j int) bool { return results[i].Repo < results[j].Repo })
+	return results, nil
+}
+
+// mainBranchLabel reads the main entry's branch from .worktrees.json, falling
+// back to the folder name.
+func mainBranchLabel(container, mainName string) string {
+	data, err := os.ReadFile(filepath.Join(container, ".worktrees.json"))
+	if err != nil {
+		return mainName
+	}
+	var entries map[string]json.RawMessage
+	if json.Unmarshal(data, &entries) != nil {
+		return mainName
+	}
+	var e syncEntry
+	if raw, ok := entries[mainName]; ok && json.Unmarshal(raw, &e) == nil && e.Branch != "" {
+		return e.Branch
+	}
+	return mainName
+}
+
+func syncOne(name, branch, path string) SyncResult {
+	r := SyncResult{Repo: name, Branch: branch}
+	folderName := filepath.Base(path)
+	curOut, err := exec.Command("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD").Output()
+	if err != nil {
+		r.Result, r.Detail = SyncFailed, "現在のブランチを取得できない: "+err.Error()
+		return r
+	}
+	if cur := strings.TrimSpace(string(curOut)); cur != folderName {
+		r.Branch = cur
+		r.Result = SyncWrongBranch
+		r.Detail = fmt.Sprintf("フォルダ %q に別のブランチ %q が checkout されている（wt doctor --fix で直せる）", folderName, cur)
+		return r
+	}
+	statusOut, err := exec.Command("git", "-C", path, "status", "--porcelain", "--untracked-files=no").Output()
+	if err != nil {
+		r.Result, r.Detail = SyncFailed, "git status に失敗: "+err.Error()
+		return r
+	}
+	if hasUncommitted(string(statusOut)) {
+		r.Result, r.Detail = SyncSkipped, "未コミットの変更がある"
+		return r
+	}
+	oldHead, _ := exec.Command("git", "-C", path, "rev-parse", "HEAD").Output()
+	out, err := exec.Command("git", "-C", path, "pull", "--ff-only").CombinedOutput()
+	output := strings.Join(strings.Fields(string(out)), " ")
+	switch {
+	case err != nil:
+		if output == "" {
+			output = err.Error()
 		}
+		r.Result, r.Detail = SyncFailed, output
+	case strings.Contains(output, "Already up to date"):
+		r.Result = SyncUpToDate
+	default:
+		old := strings.TrimSpace(string(oldHead))
+		countOut, _ := exec.Command("git", "-C", path, "rev-list", "--count", old+"..HEAD").Output()
+		r.Result, r.Detail = SyncUpdated, strings.TrimSpace(string(countOut))+" commits"
 	}
-
-	fmt.Println()
-	summary := fmt.Sprintf("✅ %d/%d 完了", success, len(targets))
-	if skip > 0 {
-		summary += fmt.Sprintf(", ⏭ %d スキップ", skip)
-	}
-	if warn > 0 {
-		summary += fmt.Sprintf(", ⚠️ %d 警告", warn)
-	}
-	if fail > 0 {
-		summary += fmt.Sprintf(", ❌ %d 失敗", fail)
-	}
-	fmt.Println(summary)
-
-	// warn（別ブランチ checkout で pull skip）も「同期されていない」状態であり、
-	// 呼び出し側から見れば失敗と区別する理由がない。まとめて非 0 にする。
-	if fail > 0 || warn > 0 {
-		return fmt.Errorf("%d/%d リポが同期されていません（失敗 %d / 警告 %d）",
-			fail+warn, len(targets), fail, warn)
-	}
-	return nil
+	return r
 }

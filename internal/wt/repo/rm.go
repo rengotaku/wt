@@ -1,7 +1,6 @@
 package repo
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,7 +23,14 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 		_, _ = fmt.Fprintln(out, "ℹ️  確認: wt repo ls")
 		return err
 	}
+	return RmAt(out, container, opts)
+}
 
+// RmAt is Rm for an already resolved container. Callers that preview and then
+// delete pass the same path to both calls, so the confirmed container is the
+// one deleted even if name resolution would now pick another.
+func RmAt(out io.Writer, container string, opts RmOptions) error {
+	repoName := filepath.Base(container)
 	mainDir, _ := core.ResolveMain(container)
 
 	_, _ = fmt.Fprintln(out, "削除対象:")
@@ -47,19 +53,17 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 		_, _ = fmt.Fprintf(out, "  symlink: %s → %s\n", masterLink, dst)
 	}
 
-	if !opts.Force {
-		_, _ = fmt.Fprintln(out, "")
-		_, _ = fmt.Fprintln(out, "実行するには --force を指定してください")
-		return nil
-	}
-
-	// Every check runs before the first destructive step. #180
+	// Every check runs before the first destructive step (#180), and before
+	// the preview returns so a dry run already reports a refusal.
 	linked, err := checkRemovable(container, mainDir)
 	if err != nil {
 		return err
 	}
+	if !opts.Force {
+		return nil
+	}
 	for _, wt := range linked {
-		_ = core.GitRun(mainDir, "worktree", "remove", wt, "--force")
+		_ = core.GitRunTo(out, mainDir, "worktree", "remove", wt, "--force")
 	}
 
 	if err := os.RemoveAll(container); err != nil {
@@ -67,7 +71,7 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 	}
 	_, _ = fmt.Fprintf(out, "✅ コンテナ削除: %s\n", container)
 
-	if fi, err := os.Lstat(masterLink); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+	if fi, err := os.Lstat(masterLink); err == nil && fi.Mode()&os.ModeSymlink != 0 && linksInto(masterLink, container) {
 		if err := os.Remove(masterLink); err != nil {
 			return err
 		}
@@ -77,9 +81,6 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 	_, _ = fmt.Fprintf(out, "✅ 完了: %s\n", repoName)
 	return nil
 }
-
-// ErrUsage indicates incorrect arguments to repo rm.
-var ErrUsage = errors.New("Usage: wt repo rm <repo-name> [--force]") //nolint:staticcheck // user-facing usage string
 
 // checkRemovable verifies container is a wt-managed container that is a real
 // directory directly under a workspace dir, and that every linked worktree
@@ -139,4 +140,19 @@ func checkRemovable(container, mainDir string) ([]string, error) {
 		return nil, fmt.Errorf("コンテナの外に worktree があるため削除しません（先に git worktree remove で外す）: %s", strings.Join(outside, ", "))
 	}
 	return linked, nil
+}
+
+// linksInto reports whether the symlink link points inside container. A link
+// of the same name may belong to a same-named container in another workspace.
+func linksInto(link, container string) bool {
+	dst, err := os.Readlink(link)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(dst) {
+		dst = filepath.Join(filepath.Dir(link), dst)
+	}
+	dst = filepath.Clean(dst)
+	c := filepath.Clean(container)
+	return dst == c || strings.HasPrefix(dst, c+string(filepath.Separator))
 }

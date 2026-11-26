@@ -60,7 +60,7 @@ func RescueMain(out io.Writer, repoName string) error {
 	_, _ = fmt.Fprintf(out, "🔧 %s: フォルダ %q のブランチ %q を別 worktree へ退避します...\n", repoName, mainName, cur)
 
 	// 1) main フォルダを main/master に戻す。feat ブランチの ref は残るのでコミットは保全される。
-	if err := core.GitRun(mainDir, "checkout", mainName); err != nil {
+	if err := core.GitRunTo(out, mainDir, "checkout", mainName); err != nil {
 		return fmt.Errorf("%s: %q への切替に失敗: %w", repoName, mainName, err)
 	}
 
@@ -72,7 +72,7 @@ func RescueMain(out io.Writer, repoName string) error {
 	}
 
 	// 3) main/master を最新へ。失敗しても切替・退避は完了しているので警告のみ。
-	if err := core.GitRun(mainDir, "pull", "--ff-only"); err != nil {
+	if err := core.GitRunTo(out, mainDir, "pull", "--ff-only"); err != nil {
 		_, _ = fmt.Fprintf(out, "⚠️  %s: %q への切替は完了しましたが pull に失敗しました: %v\n", repoName, mainName, err)
 		return nil
 	}

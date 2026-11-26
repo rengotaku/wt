@@ -36,7 +36,13 @@ wt daemon の AutoStart で使われる（メタデータ管理なのでリポ�
   wt dev show
   wt dev validate`,
 	}
-	devCmd.AddCommand(devAddCmd(), devRmCmd(), devShowCmd(), devValidateCmd(), devClearCmd())
+	devCmd.AddCommand(
+		deprecate(devAddCmd(), "wt repo config add <repo> service <name> --cmd <cmd>"),
+		deprecate(devRmCmd(), "wt repo config rm <repo> service <name>"),
+		deprecate(devShowCmd(), "wt repo show <repo>"),
+		deprecate(devValidateCmd(), "wt doctor"),
+		deprecate(devClearCmd(), "wt repo config rm <repo> service --all"),
+	)
 	parent.AddCommand(devCmd)
 }
 

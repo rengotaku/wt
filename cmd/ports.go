@@ -42,7 +42,7 @@ func registerPortsCmd(parent *cobra.Command) {
 			return nil
 		},
 	}
-	c.AddCommand(allocCmd)
+	c.AddCommand(deprecate(allocCmd, "wt doctor --fix"))
 
 	var pruneYes bool
 	pruneCmd := &cobra.Command{
@@ -73,7 +73,7 @@ func registerPortsCmd(parent *cobra.Command) {
 		},
 	}
 	pruneCmd.Flags().BoolVarP(&pruneYes, "yes", "y", false, "候補表示ではなく実際に削除する")
-	c.AddCommand(pruneCmd)
+	c.AddCommand(deprecate(pruneCmd, "wt doctor --fix"))
 
 	parent.AddCommand(c)
 }

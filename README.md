@@ -25,10 +25,23 @@ wt worktree update [<repo>/<wt>]                      ブランチの最新を�
 wt service up [<repo>/<wt>] / down [...]              dev サービスの起動・停止
 wt service logs [<repo>/<wt>] [<service>] [-n 100]    dev サービスのログ
 wt daemon run [--proxy-only]                          常駐（--proxy-only で proxy だけ）
+
+wt repo add <url> [<container_base>]                   clone してコンテナにする
+wt repo init <src-dir> [<target-dir>]                  既存の git リポジトリをコンテナの形に移す
+wt repo rm <repo> [--dry-run] [--yes]                  リポジトリのコンテナを丸ごと消す
+wt repo sync [<repo>]                                  main / master を pull --ff-only（表で結果を出す）
+wt repo config set <repo> branch_pattern <正規表現>     ブランチ名の制約
+wt repo config add|rm <repo> symlink <パス>            worktree 作成時の symlink 候補
+wt repo config add <repo> service <名前> --cmd <cmd> [--domain] [--headless]
+wt repo config rm <repo> symlink|service <値> | --all  dev サービス・symlink 候補を消す
+
+wt doctor [<repo>] [--fix]                             不整合を見つける（--fix で直す）
 ```
 
-変える系は進捗を stderr に、結果のリソースを `worktree show` と同じ形で stdout に出します。消す系は端末なら確認を出し、`--yes` で省きます。端末でなく `--yes` も無いと終了コード 4 で止まります。
-旧コマンド（`tree add` / `rm` / `gc` / `ls` / `autostart`、`serve`、`down`、`proxy`、引数なしの `daemon`）は今も動き、使うと stderr に新しい名前を出します。
+変える系は進捗を stderr に、結果のリソースを `worktree show`（リポジトリなら `repo show`）と同じ形で stdout に出します。消す系は端末なら確認を出し、`--yes` で省きます。端末でなく `--yes` も無いと終了コード 4 で止まります。
+旧コマンド（`tree add` / `rm` / `gc` / `ls` / `autostart` / `fix`、`serve`、`down`、`proxy`、引数なしの `daemon`、`symlink`、`dev`、`ports alloc` / `prune`、`repo rescue-main`）は今も動き、使うと stderr に新しい名前を出します。
+
+`wt doctor` が見るのは、main / master のフォルダに別のブランチが checkout されている（`main_branch`）、ディレクトリが無いのにポートを持つ登録（`stale_port`）、main 以外でポートが無い worktree（`unallocated_port`）、dev サービスの設定の誤り（`service_config`）、読めない `.worktrees.json`（`metadata`）です。直せないものが残ると終了コード 4 です。
 
 出力は既定がタブ区切り（1 行 1 件、空は `-`）、`--json` で JSON、`--rich` で人向けの表です。
 終了コード: 0 成功 / 1 予期しないエラー / 2 使い方の誤り / 3 対象が無い / 4 前提を満たさない / 5 外部コマンドの失敗。
@@ -37,11 +50,6 @@ wt daemon run [--proxy-only]                          常駐（--proxy-only で 
 以下は移行前からのコマンドです。
 
 ```
-wt repo add <url>           リモートリポジトリを clone してコンテナ化
-wt repo init <src-dir>      既存 git リポをコンテナ形式に scaffold
-wt repo sync                全リポの main/master を pull --ff-only
-wt repo rm <repo> --force   リポジトリ全体を削除
-
 wt tree add <repo> <issue>  worktree を作成
 wt tree ls                  worktree 一覧
 wt status [--json|--rich]   worktree の稼働・ポート・AutoStart・proxy URL と wt daemon の状態（既定は AI 向けのタブ区切り）
@@ -54,31 +62,25 @@ wt down                     wt serve で起動したサーバーを停止
 wt daemon                   内蔵 proxy・AutoStart・各 reaper を常駐実行（HTTP API は持たない）
 wt proxy                    リバースプロキシだけを単独で起動
 
-wt dev add <name> --cmd <cmd> [--domain]  dev サービスを追加/更新（repo 既定）
-wt dev rm <name>            dev サービスを削除
-wt dev show [--json]        実効 dev 設定とソース・警告を表示
-wt dev validate             repo 既定 dev 設定を検証
-wt dev clear                repo 既定 dev サービスを全削除
-
 wt policy show              リポジトリの方針を表示（未設定なら無出力）
 wt policy path              方針ファイルの絶対パス
 wt policy init              方針ファイルのテンプレートを作成
 ```
 
-## dev サービス設定（`wt dev`）
+## dev サービス設定（`wt repo config`）
 
-worktree の dev サーバ（`wt serve` / `wt daemon` の AutoStart で使う）を CLI から設定できます。
-`wt serve` と同じく **cwd ベース**で、現在の worktree が属するリポジトリの
+worktree の dev サーバ（`wt service up` / `wt daemon` の AutoStart で使う）を CLI から設定できます。
+`wt repo config add|rm <repo> service ...` は、リポジトリの
 **repo 既定 dev サービス**（`<container>/.worktrees.json` の `_config.dev_services`）を編集します。
 ここで定義したサービスは、専用の上書きを持たない全 worktree に継承されます
 （メタデータ管理のためリポジトリにはコミットされません）。
 
 ```bash
 # 例: API と Vite フロントを定義
-wt dev add api --cmd 'go run . web -p ${port}'
-wt dev add web --cmd 'npm run dev -- --port ${port} --strictPort' --domain
-wt dev show          # 実効設定・ソース・警告（AI は --json で機械可読出力）
-wt dev validate
+wt repo config add myrepo service api --cmd 'go run . web -p ${port}'
+wt repo config add myrepo service web --cmd 'npm run dev -- --port ${port} --strictPort' --domain
+wt repo show myrepo    # service.<名前>.cmd / domain / headless の行で確かめる
+wt doctor myrepo       # 設定の誤りは service_config として出る
 ```
 
 ### スキーマ
@@ -89,13 +91,13 @@ wt dev validate
 
 ### 設定レイヤと優先順位
 
-dev 設定は次の優先順で実効化されます（`wt dev show` が実効ソースと警告を表示）:
+dev 設定は次の優先順で実効化されます（旧 `wt dev show` が実効ソースと警告を表示）:
 
 1. **worktree 上書き**（その worktree 専用。`.worktrees.json` の `dev_services`。CLI からは編集しない）
-2. **repo 既定**（`_config.dev_services` ＝ `wt dev` が編集する層）
+2. **repo 既定**（`_config.dev_services` ＝ `wt repo config` が編集する層）
 3. **コミット済み `.wt/dev.toml`**（リポジトリにコミットされたファイル）
 
-上位レイヤがあると下位は使われません（例: worktree 上書きがあると `wt dev` の repo 既定は
+上位レイヤがあると下位は使われません（例: worktree 上書きがあると repo 既定は
 その worktree には反映されません）。`wt dev show` はこの状況を警告します。
 
 ## リポジトリごとの AI 作業方針（`wt policy`）

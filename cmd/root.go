@@ -69,6 +69,7 @@ func init() {
 	registerProxyCmd(rootCmd)
 	registerDevCmd(rootCmd)
 	registerPolicyCmd(rootCmd)
+	registerDoctorCmd(rootCmd)
 }
 
 // Execute runs the root command with a background context.
