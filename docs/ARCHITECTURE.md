@@ -18,7 +18,7 @@ wt (cobra CLI)
 | パス | 役割 |
 |---|---|
 | `cmd/` | cobra コマンド定義（`daemon.go` が内蔵 proxy + AutoStart 自動 serve + 各 reaper の配線） |
-| `internal/wt/core/` | コンテナ（`<base>/<repo>/`）と `.worktrees.json` の読み書き |
+| `internal/wt/core/` | コンテナ（`<base>/<repo>/`）と `.worktrees.json` の読み書き。リポジトリ名は `ValidateRepoName` で 1 階層の名前に限る（#180） |
 | `internal/wt/tree/` | worktree の add / rm / update / list / AutoStart 切替（`SetAutoStart`） |
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
@@ -59,6 +59,8 @@ wt (cobra CLI)
 `wt daemon` は built-in reverse proxy を **既定で同時起動**する（`cmd/daemon.go::startProxy`）。`<label>.<repo>.wt.localhost:<port>` 形式で各 worktree の domain-exposed dev サービスに名前でアクセスできる。
 
 - 設定は `settings.toml` の `[proxy]`（`enabled`, `port`, `bind`）と、CLI フラグ（`--proxy-port` / `--no-proxy`）。CLI フラグが settings を上書きする
+- `bind` の既定は `127.0.0.1`（#180）。`0.0.0.0` にすると LAN から一覧と dev サーバーに届く
+- Host が `<label>.<repo>.wt.localhost` でない要求には、Host が IP アドレスか `localhost` のときだけ起動中の worktree 一覧を返し、それ以外は 404（DNS rebinding で一覧を読ませない。#180）
 - 起動失敗（ポート衝突等）は warn を出し、daemon の他の処理（AutoStart・reaper）は続行する
 - `wt proxy` は proxy だけを別プロセスで動かす単独コマンド
 

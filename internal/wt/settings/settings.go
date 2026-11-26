@@ -61,10 +61,10 @@ type HealthReaper struct {
 // the listen port for `<label>.<repo>.wt.localhost`; Enabled toggles starting
 // it with `wt daemon`; Bind is the listen address.
 //
-// Bind defaults to 0.0.0.0 so that a phone or another PC on the same LAN can
-// reach a worktree's dev server by name. Set it to 127.0.0.1 to go back to
-// loopback-only. Note this exposes every running dev server to the LAN, so it
-// is only appropriate on a network you trust.
+// Bind defaults to 127.0.0.1. Set it to 0.0.0.0 to let a phone or another PC
+// on the same LAN reach worktree dev servers through the proxy. That exposes
+// every running dev server (even ones listening on loopback only) and the
+// worktree list to the LAN, so only do it on a network you trust. #180
 type Proxy struct {
 	Enabled bool   `toml:"enabled"`
 	Port    int    `toml:"port"`
@@ -87,7 +87,7 @@ const defaultPortReaperIntervalMinutes = 24 * 60
 const DefaultProxyPort = 8088
 
 // DefaultProxyBind is the built-in proxy's default listen address.
-const DefaultProxyBind = "0.0.0.0"
+const DefaultProxyBind = "127.0.0.1"
 
 // Default returns the built-in settings.
 func Default() Settings {

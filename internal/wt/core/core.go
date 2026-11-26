@@ -44,8 +44,35 @@ func ResolveMain(container string) (path, name string) {
 	return "", ""
 }
 
+// ValidateRepoName rejects names that would resolve outside a workspace dir
+// when joined to it (e.g. "..", ".", "a/b"). FindContainer's callers include
+// `wt repo rm`, which removes the resolved directory recursively.
+func ValidateRepoName(repo string) error {
+	// Only reject what breaks the path boundary, so existing containers with
+	// names like ".github" or non-ASCII names keep working.
+	if repo == "" || repo == "." || repo == ".." || strings.ContainsAny(repo, "/\\\x00") {
+		return fmt.Errorf("リポジトリ名が不正です（空・.・..・/・\\ は使えない）: %q", repo)
+	}
+	return nil
+}
+
+// IsWorkspaceChild reports whether dir is a direct child of one of
+// WorkspaceDirs.
+func IsWorkspaceChild(dir string) bool {
+	parent := filepath.Clean(filepath.Dir(filepath.Clean(dir)))
+	for _, base := range WorkspaceDirs() {
+		if parent == filepath.Clean(base) {
+			return true
+		}
+	}
+	return false
+}
+
 // FindContainer locates a container directory for the given repo name.
 func FindContainer(repo string) (string, error) {
+	if err := ValidateRepoName(repo); err != nil {
+		return "", err
+	}
 	for _, base := range WorkspaceDirs() {
 		p := filepath.Join(base, repo)
 		if fi, err := os.Stat(p); err == nil && fi.IsDir() {

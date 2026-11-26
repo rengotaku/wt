@@ -307,6 +307,10 @@ func addByBranch(out io.Writer, opts *AddOptions) (*AddResult, error) {
 	if dir == "" {
 		dir = opts.Repo + "--" + strings.ReplaceAll(opts.Branch, "/", "-")
 	}
+	// The worktree must stay inside the container. #180
+	if dir == "." || dir == ".." || strings.ContainsAny(dir, `/\`) {
+		return nil, fmt.Errorf("worktree のディレクトリ名に / や . / .. は使えません: %q", dir)
+	}
 
 	containerDir, mainDir, err := locateContainer(opts.Repo)
 	if err != nil {
@@ -405,6 +409,9 @@ func availableRepos() []string {
 
 // locateContainer locates the container path and main worktree dir for a repo.
 func locateContainer(repo string) (containerDir, mainDir string, err error) {
+	if err := core.ValidateRepoName(repo); err != nil {
+		return "", "", err
+	}
 	for _, base := range core.WorkspaceDirs() {
 		c := filepath.Join(base, repo)
 		if mainDir, _ := core.ResolveMain(c); mainDir != "" {

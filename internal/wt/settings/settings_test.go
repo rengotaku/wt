@@ -266,8 +266,8 @@ func TestLoad_ProxyBind(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("WT_CONFIG_DIR", dir)
 
-	// 1. bind 未記載 -> default (0.0.0.0)。この field を持たない古い
-	//    settings.toml がそのまま残っていても LAN 公開の既定が効く。
+	// 1. bind 未記載 -> default (127.0.0.1)。この field を持たない古い
+	//    settings.toml がそのまま残っていても loopback の既定が効く。
 	content := `
 [proxy]
 enabled = true
@@ -309,7 +309,7 @@ bind = "   "
 		t.Errorf("bind 空白: got %q, want %q", got.Proxy.Bind, DefaultProxyBind)
 	}
 
-	// 4. Default() 自体が 0.0.0.0 を返す
+	// 4. Default() 自体が 127.0.0.1 を返す（#180）
 	if Default().Proxy.Bind != DefaultProxyBind {
 		t.Errorf("Default(): got %q, want %q", Default().Proxy.Bind, DefaultProxyBind)
 	}

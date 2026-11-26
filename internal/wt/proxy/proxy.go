@@ -111,11 +111,32 @@ func hostParts(host string) (label, repo string, ok bool) {
 	return label, repo, true
 }
 
+// isDirectHost reports whether host (optionally with port) is an IP literal or
+// "localhost" — i.e. someone typed this machine's address, not a DNS name.
+func isDirectHost(host string) bool {
+	h := host
+	if hh, _, err := net.SplitHostPort(host); err == nil {
+		h = hh
+	}
+	h = strings.Trim(h, "[]")
+	if strings.EqualFold(h, "localhost") {
+		return true
+	}
+	return net.ParseIP(h) != nil
+}
+
 // Handler reverse-proxies by Host. routesFn supplies the current routing table
 // (re-evaluated per request so newly started worktrees are picked up live).
 func Handler(routesFn func() ([]Route, error)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		label, repo, ok := hostParts(r.Host)
+		if !ok && !isDirectHost(r.Host) {
+			// A browser that DNS-rebinds an attacker's domain to this host
+			// sends that domain as Host. Only IP / localhost access gets the
+			// worktree list, so a web page cannot read repo names. #180
+			http.NotFound(w, r)
+			return
+		}
 		if !ok {
 			// `.wt.localhost` は RFC 6761 によりどの端末でもその端末自身の
 			// loopback へ解決されるため、LAN の別端末からは名前で到達できない。

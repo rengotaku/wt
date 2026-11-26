@@ -93,7 +93,7 @@ wt policy path          # 絶対パス（未設定なら exit 1）
 
 設定はすべて `settings.toml` です。場所は `$WT_CONFIG_DIR/wt/settings.toml`、未指定ならユーザー設定ディレクトリ配下
 （macOS: `~/Library/Application Support/wt/settings.toml`、Linux: `~/.config/wt/settings.toml`）。
-LAN に公開しないなら `[proxy]` に `bind = "127.0.0.1"` を書きます（既定は `0.0.0.0`）。
+proxy の既定 bind は `127.0.0.1` です。LAN の別端末から開くときだけ `[proxy]` に `bind = "0.0.0.0"` を書きます（起動中の worktree 一覧と、loopback だけで待ち受ける dev サーバーまで LAN に出ます。信頼できるネットワークでだけ使ってください）。
 
 同時に動かせる `wt daemon` は 1 つだけです（2 つ目は lock でエラー終了）。Web UI と HTTP API は廃止しました（#178）。
 
