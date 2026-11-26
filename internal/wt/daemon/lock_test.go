@@ -12,8 +12,8 @@ import (
 func TestAcquire_ExclusiveAndProbe(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "wt", "daemon.lock")
 
-	if running, _, err := Probe(path); err != nil || running {
-		t.Fatalf("before: running=%v err=%v, want false/nil", running, err)
+	if info, err := Probe(path); err != nil || info.Running {
+		t.Fatalf("before: %+v err=%v, want not running", info, err)
 	}
 
 	first, err := Acquire(path)
@@ -23,16 +23,22 @@ func TestAcquire_ExclusiveAndProbe(t *testing.T) {
 	if _, err := Acquire(path); err == nil || !strings.Contains(err.Error(), "既に起動") {
 		t.Fatalf("second while held: got %v, want 既に起動 error", err)
 	}
-	running, pid, err := Probe(path)
-	if err != nil || !running || pid != os.Getpid() {
-		t.Fatalf("while held: running=%v pid=%d err=%v, want true/%d/nil", running, pid, err, os.Getpid())
+	info, err := Probe(path)
+	if err != nil || !info.Running || info.PID != os.Getpid() || info.Proxy != "" {
+		t.Fatalf("while held: %+v err=%v, want running pid=%d proxy=\"\"", info, err, os.Getpid())
+	}
+	if err := SetProxy(first, "127.0.0.1:18088"); err != nil {
+		t.Fatal(err)
+	}
+	if info, _ := Probe(path); info.Proxy != "127.0.0.1:18088" || info.PID != os.Getpid() {
+		t.Fatalf("after SetProxy: %+v", info)
 	}
 
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if running, _, err := Probe(path); err != nil || running {
-		t.Fatalf("after release: running=%v err=%v, want false/nil", running, err)
+	if info, err := Probe(path); err != nil || info.Running {
+		t.Fatalf("after release: %+v err=%v, want not running", info, err)
 	}
 	again, err := Acquire(path)
 	if err != nil {
@@ -82,5 +88,11 @@ func TestAcquire_RefusesSymlink(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(target); string(b) != "keep" {
 		t.Errorf("symlink target was modified: %q", b)
+	}
+}
+
+func TestParseInfo_OldPlainPID(t *testing.T) {
+	if info := parseInfo([]byte("4242\n")); !info.Running || info.PID != 4242 || info.Proxy != "" {
+		t.Errorf("got %+v", info)
 	}
 }

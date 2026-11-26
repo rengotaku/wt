@@ -59,16 +59,17 @@ func registerDaemonCmd(parent *cobra.Command) {
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return runDaemon(ctx, cmd.OutOrStdout(), &s)
+			return runDaemon(ctx, cmd.OutOrStdout(), &s, lock)
 		},
 	}
 	c.Flags().IntVar(&proxyPort, "proxy-port", settings.DefaultProxyPort, "内蔵 proxy のリッスンポート（settings.toml [proxy].port を上書き）")
 	c.Flags().BoolVar(&noProxy, "no-proxy", false, "内蔵 proxy を起動しない（settings.toml [proxy].enabled を上書き）")
+	c.AddCommand(daemonStatusCmd())
 	parent.AddCommand(c)
 }
 
 // runDaemon starts every background job and blocks until ctx is cancelled.
-func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings) error {
+func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings, lock *os.File) error {
 	if s.Proxy.Enabled {
 		srv, err := startProxy(s.Proxy)
 		if err != nil {
@@ -79,6 +80,9 @@ func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings) error {
 		}
 		defer func() { _ = srv.Close() }()
 		_, _ = fmt.Fprintf(out, "wt proxy listening on http://%s (suffix %s)\n", srv.Addr, proxy.DomainSuffix)
+		if lock != nil {
+			_ = daemon.SetProxy(lock, srv.Addr)
+		}
 	}
 
 	go func() {

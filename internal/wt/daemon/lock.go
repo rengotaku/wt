@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -43,12 +44,43 @@ func Acquire(path string) (*os.File, error) {
 		}
 		return nil, fmt.Errorf("lock を取得できません（%s）: %w", path, err)
 	}
-	// The PID is informational (for `wt status`); failing to record it must
-	// not stop the daemon.
-	if err := f.Truncate(0); err == nil {
-		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
-	}
+	// The PID is informational (for `wt daemon status`); failing to record it
+	// must not stop the daemon.
+	_ = writeInfo(f, lockInfo{PID: os.Getpid()})
 	return f, nil
+}
+
+// lockInfo is what the lock file holds while a daemon runs.
+type lockInfo struct {
+	PID   int    `json:"pid"`
+	Proxy string `json:"proxy"` // actual proxy listen address, "" when not running
+}
+
+func writeInfo(f *os.File, info lockInfo) error {
+	data, err := json.Marshal(info)
+	if err != nil {
+		return err
+	}
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	_, err = f.WriteAt(append(data, '\n'), 0)
+	return err
+}
+
+// SetProxy records the proxy address the daemon actually listens on ("" when
+// the proxy is off), so `wt daemon status` reports it instead of settings.
+func SetProxy(f *os.File, addr string) error {
+	return writeInfo(f, lockInfo{PID: os.Getpid(), Proxy: addr})
+}
+
+// Info is what Probe reports.
+type Info struct {
+	Running bool
+	PID     int    // 0 if unknown
+	Proxy   string // actual proxy address, "" when off
+	// ProxyKnown is false for a daemon that predates recording the proxy.
+	ProxyKnown bool
 }
 
 // lockExclusive takes the lock without blocking on a running daemon, but
@@ -66,15 +98,15 @@ func lockExclusive(f *os.File) error {
 	return err
 }
 
-// Probe reports whether a daemon currently holds the lock at path, and its
-// PID when recorded (0 if unknown). A missing lock file means not running.
-func Probe(path string) (running bool, pid int, err error) {
+// Probe reports whether a daemon currently holds the lock at path, with the
+// PID and proxy address it recorded. A missing lock file means not running.
+func Probe(path string) (Info, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return false, 0, nil
+			return Info{}, nil
 		}
-		return false, 0, err
+		return Info{}, err
 	}
 	defer func() { _ = f.Close() }()
 
@@ -82,12 +114,23 @@ func Probe(path string) (running bool, pid int, err error) {
 	switch {
 	case lockErr == nil:
 		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		return false, 0, nil
+		return Info{}, nil
 	case errors.Is(lockErr, syscall.EWOULDBLOCK):
 		data, _ := os.ReadFile(path)
-		pid, _ = strconv.Atoi(strings.TrimSpace(string(data)))
-		return true, pid, nil
+		return parseInfo(data), nil
 	default:
-		return false, 0, lockErr
+		return Info{}, lockErr
 	}
+}
+
+// parseInfo reads the JSON lock contents, or the older plain-PID form.
+func parseInfo(data []byte) Info {
+	info := Info{Running: true}
+	var li lockInfo
+	if json.Unmarshal(data, &li) == nil {
+		info.PID, info.Proxy, info.ProxyKnown = li.PID, li.Proxy, true
+		return info
+	}
+	info.PID, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+	return info
 }

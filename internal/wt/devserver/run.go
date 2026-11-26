@@ -41,6 +41,9 @@ func logPath(worktree, svc string) string {
 	return filepath.Join(runDir(worktree), svc+".log")
 }
 
+// LogPath is where service svc of worktree writes its stdout+stderr.
+func LogPath(worktree, svc string) string { return logPath(worktree, svc) }
+
 func loadRunning(worktree string) (running, error) {
 	var r running
 	data, err := os.ReadFile(statePath(worktree))
