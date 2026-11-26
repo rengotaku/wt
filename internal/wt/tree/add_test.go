@@ -168,7 +168,7 @@ func TestAddByBranch_EmptyCandidatesWithLegacyFlag(t *testing.T) {
 	}
 
 	assertAbsent(t, filepath.Join(containerDir, "testrepo--feat-empty", ".venv"))
-	if !strings.Contains(buf.String(), "候補なし（wt symlink add testrepo <path> で追加）") {
+	if !strings.Contains(buf.String(), "候補なし（wt repo config add testrepo symlink <path> で追加）") {
 		t.Errorf("候補なしの案内が出ていない:\n%s", buf.String())
 	}
 }
@@ -201,7 +201,7 @@ func TestSymlinkPlanLine(t *testing.T) {
 		{"on", symlinkPlan{Targets: []string{".venv"}}, ".venv"},
 		{"partial", symlinkPlan{Targets: []string{".venv"}, Missing: []string{".env"}}, ".venv（main に無い候補: .env）"},
 		{"missing only", symlinkPlan{Missing: []string{".venv"}}, "なし（候補 .venv が main に無い）"},
-		{"empty", symlinkPlan{}, "候補なし（wt symlink add myrepo <path> で追加）"},
+		{"empty", symlinkPlan{}, "候補なし（wt repo config add myrepo symlink <path> で追加）"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

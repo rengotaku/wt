@@ -30,7 +30,7 @@ func allocatePortBase(out io.Writer) int {
 	return base
 }
 
-// AddOptions holds CLI inputs for `wt tree add`.
+// AddOptions holds CLI inputs for `wt worktree add`.
 type AddOptions struct {
 	Repo        string
 	Issue       string
@@ -54,7 +54,7 @@ type AddResult struct {
 }
 
 // symlinkPlan is the resolved view of _config.symlink_candidates for one
-// `wt tree add` run. The plan block and the actual creation both read this
+// `wt worktree add` run. The plan block and the actual creation both read this
 // struct, so the printed plan cannot drift from what gets created.
 type symlinkPlan struct {
 	Disabled bool     // --no-symlink
@@ -64,7 +64,7 @@ type symlinkPlan struct {
 
 // resolveSymlinkPlan reads _config.symlink_candidates and splits it into paths
 // that exist as directories in main and paths that do not. A config read error
-// yields an empty plan: `wt tree add` must not fail here, and the plan line then
+// yields an empty plan: `wt worktree add` must not fail here, and the plan line then
 // reports 候補なし.
 func resolveSymlinkPlan(containerDir, mainDir string, noSymlink bool) symlinkPlan {
 	if noSymlink {
@@ -100,7 +100,7 @@ func (p symlinkPlan) line(repo string) string {
 	case len(p.Missing) > 0:
 		return fmt.Sprintf("なし（候補 %s が main に無い）", strings.Join(p.Missing, " "))
 	default:
-		return fmt.Sprintf("候補なし（wt symlink add %s <path> で追加）", repo)
+		return fmt.Sprintf("候補なし（wt repo config add %s symlink <path> で追加）", repo)
 	}
 }
 
@@ -146,7 +146,7 @@ func createCandidateSymlinks(out io.Writer, worktreePath, mainName string, targe
 // issueURLRegex matches https://github.com/<owner>/<repo>/issues/<num>.
 var issueURLRegex = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+)/issues/(\d+)$`)
 
-// Add runs the `wt tree add` workflow (non-interactive — all inputs come from
+// Add runs the `wt worktree add` workflow (non-interactive — all inputs come from
 // flags or positional arguments).
 func Add(_ io.Reader, out io.Writer, opts *AddOptions) (*AddResult, error) {
 	// ── --issue モード ──

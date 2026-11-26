@@ -1,6 +1,6 @@
 // Package status builds the one-screen view of every worktree's state that
-// `wt status` prints: dev service state, ports, AutoStart, proxy URL, and
-// whether `wt daemon` is running.
+// `wt worktree ls` and `wt daemon status` print: dev service state, ports,
+// AutoStart, proxy URL, and whether `wt daemon` is running.
 package status
 
 import (
@@ -196,3 +196,6 @@ func stateOf(r *ports.Row) string {
 		return StateIdle
 	}
 }
+
+// TSVHeader is the column order of `wt worktree ls`. Scripts may rely on it.
+var TSVHeader = []string{"REPO", "WORKTREE", "BRANCH", "STATE", "PORTS", "AUTOSTART", "URL"}

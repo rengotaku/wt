@@ -10,7 +10,7 @@ import (
 )
 
 // PortReaper periodically prunes "ghost" port allocations: registry entries
-// whose worktree directory has been removed outside `wt tree rm` (a manual
+// whose worktree directory has been removed outside `wt worktree rm` (a manual
 // `git worktree remove`, a deleted directory, an interrupted create) but whose
 // port_base still lingers, permanently withholding a block from the dev band.
 //

@@ -72,7 +72,7 @@ func Status() ([]Row, error) {
 		// Caveat: this reads the *current* config, not the one in effect when the
 		// services were last started. Editing .wt/dev.toml (reordering/toggling
 		// headless) while old processes are still running can momentarily mislabel
-		// a service's Headless/health until the next `wt serve`; restart to resync.
+		// a service's Headless/health until the next `wt service up`; restart to resync.
 		cfg, _, _ := devserver.EffectiveConfig(a.Path)
 		for i, p := range PortsForBase(a.PortBase) {
 			st := PortState{Port: p}

@@ -46,20 +46,6 @@ func setupRmContainer(t *testing.T) (container, mainDir string) {
 	return container, mainDir
 }
 
-func TestResolveByBranch_ExactMatch(t *testing.T) {
-	container, _ := setupRmContainer(t)
-	got, err := resolveByBranch("repo", "feat/x")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := filepath.Join(container, "repo--x"); got.WtPath != want {
-		resolved, _ := filepath.EvalSymlinks(want)
-		if got.WtPath != resolved {
-			t.Errorf("feat/x resolved to %s, want %s (must not prefix-match feat/x-2)", got.WtPath, want)
-		}
-	}
-}
-
 func TestRemoveAt_UntrackedNeedsForce(t *testing.T) {
 	container, _ := setupRmContainer(t)
 	wt := filepath.Join(container, "repo--x")

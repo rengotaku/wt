@@ -15,17 +15,6 @@ type RmOptions struct {
 	Force bool
 }
 
-// Rm deletes the entire container directory plus the ~/code/<repo> symlink.
-// Without --force, prints the deletion plan and exits without acting.
-func Rm(out io.Writer, repoName string, opts RmOptions) error {
-	container, err := core.FindContainer(repoName)
-	if err != nil {
-		_, _ = fmt.Fprintln(out, "ℹ️  確認: wt repo ls")
-		return err
-	}
-	return RmAt(out, container, opts)
-}
-
 // RmAt is Rm for an already resolved container. Callers that preview and then
 // delete pass the same path to both calls, so the confirmed container is the
 // one deleted even if name resolution would now pick another.

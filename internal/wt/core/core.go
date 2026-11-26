@@ -167,7 +167,7 @@ type EntryConfig struct {
 	// Hidden marks the repository as hidden in the former Web UI. Kept so
 	// existing .worktrees.json files round-trip unchanged.
 	Hidden bool `json:"hidden,omitempty"`
-	// BranchPattern constrains branch names created by `wt tree add` for this
+	// BranchPattern constrains branch names created by `wt worktree add` for this
 	// repository. Empty or ".*" allows anything; see branchpattern.go.
 	BranchPattern string `json:"branch_pattern,omitempty"`
 	// AIPolicy is the repository's AI work policy file, relative to the
@@ -306,12 +306,6 @@ type gitError struct {
 
 func (e *gitError) Error() string { return e.stderr }
 func (e *gitError) Unwrap() error { return e.cause }
-
-// GitRun runs git -C <dir> <args...> forwarding git's stdout to the
-// terminal's stdout (the old commands' behavior; see GitRunTo).
-// Stderr is also captured so that on failure the returned error contains the
-// git diagnostic text rather than just "exit status N".
-func GitRun(dir string, args ...string) error { return GitRunTo(os.Stdout, dir, args...) }
 
 // GitRunTo is GitRun with git's stdout sent to w. The noun-verb commands pass
 // stderr so git's progress never mixes into their stdout result (#188).

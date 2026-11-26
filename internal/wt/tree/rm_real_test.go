@@ -116,7 +116,7 @@ func TestRenderScan_FormatsAndWarns(t *testing.T) {
 		"2.8GB",
 		"5.0MB",
 		"実体の合計: 2.8GB",
-		"wt symlink add myrepo .venv",
+		"wt repo config add myrepo symlink .venv",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q が出力に無い:\n%s", want, out)

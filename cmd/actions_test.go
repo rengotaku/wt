@@ -98,22 +98,6 @@ func TestWorktreeSet(t *testing.T) {
 	}
 }
 
-func TestDeprecate(t *testing.T) {
-	var errOut bytes.Buffer
-	orig := stderr
-	stderr = &errOut
-	defer func() { stderr = orig }()
-
-	ran := false
-	c := deprecate(&cobra.Command{Use: "old", RunE: func(*cobra.Command, []string) error { ran = true; return nil }}, "wt new")
-	if _, err := runCmd(c); err != nil || !ran {
-		t.Fatalf("old command must still run: ran=%v err=%v", ran, err)
-	}
-	if !strings.Contains(errOut.String(), "wt new に移行しました") {
-		t.Errorf("stderr: %q", errOut.String())
-	}
-}
-
 func TestWorktreeRm_EmptyTargetIsUsageError(t *testing.T) {
 	setupContainer(t)
 	if _, err := runCmd(worktreeRmCmd(), "", "--yes"); clierr.ExitCode(err) != 2 {

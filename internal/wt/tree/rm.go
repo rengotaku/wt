@@ -1,9 +1,6 @@
 package tree
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,7 +13,7 @@ import (
 	"wt/internal/wt/core"
 )
 
-// RmOptions captures CLI flags for `wt tree rm`.
+// RmOptions captures CLI flags for `wt worktree rm`.
 type RmOptions struct {
 	Branch     string // --branch
 	Repo       string // --repo
@@ -47,44 +44,6 @@ func (e *BranchKeptError) Error() string {
 
 func (e *BranchKeptError) Unwrap() error { return e.Err }
 
-// Rm runs the `wt tree rm` workflow (non-interactive).
-func Rm(out io.Writer, opts RmOptions) error {
-	if opts.Merged {
-		return rmMerged(out, opts)
-	}
-	if opts.Branch != "" {
-		if opts.Repo == "" {
-			return errors.New("--branch には --repo <repo> が必要です")
-		}
-		target, err := resolveByBranch(opts.Repo, opts.Branch)
-		if err != nil {
-			return err
-		}
-		return performDelete(out, opts, &target)
-	}
-
-	if len(opts.Positional) == 1 {
-		items, err := RmEntries()
-		if err != nil {
-			return err
-		}
-		// "[name - repo]" or "repo/name" parsing.
-		raw := opts.Positional[0]
-		repo, name, ok := parseRmListKey(raw)
-		if !ok {
-			return errors.New("引数形式が不正です（例: 'repo/name' または '--branch <branch> --repo <repo>'）")
-		}
-		for i := range items {
-			if items[i].Repo == repo && items[i].WtName == name {
-				return performDelete(out, opts, &items[i])
-			}
-		}
-		return fmt.Errorf("worktree が見つかりません: %s", raw)
-	}
-
-	return errors.New("Usage: wt tree rm --branch <branch> --repo <repo> | <repo>/<wt-name> | --merged [--yes]") //nolint:staticcheck // user-facing usage string
-}
-
 // RemoveAt deletes the worktree wtName of the given container — the exact
 // target the caller resolved, not a name looked up again across workspaces.
 func RemoveAt(out io.Writer, opts RmOptions, repo, container, wtName string) error {
@@ -96,57 +55,6 @@ func RemoveAt(out io.Writer, opts RmOptions, repo, container, wtName string) err
 		Repo: repo, WtName: wtName, WtPath: filepath.Join(container, wtName),
 		MainDir: mainDir, Container: container,
 	})
-}
-
-// resolveByBranch finds an RmEntry by repo+branch.
-func resolveByBranch(repo, branch string) (RmEntry, error) {
-	container, err := core.FindContainer(repo)
-	if err != nil {
-		return RmEntry{}, err
-	}
-	mainDir, _ := core.ResolveMain(container)
-	if mainDir == "" {
-		return RmEntry{}, fmt.Errorf("main/master worktree が見つかりません: %s", container)
-	}
-
-	out, err := core.GitOutput(mainDir, "worktree", "list", "--porcelain")
-	if err != nil {
-		return RmEntry{}, err
-	}
-	var lastWt string
-	for _, line := range strings.Split(out, "\n") {
-		switch {
-		case strings.HasPrefix(line, "worktree "):
-			lastWt = strings.TrimPrefix(line, "worktree ")
-		case line == "branch refs/heads/"+branch: // exact: "feat/x" must not match "feat/x-2"
-			return RmEntry{
-				Repo:      repo,
-				WtName:    filepath.Base(lastWt),
-				WtPath:    lastWt,
-				MainDir:   mainDir,
-				Container: container,
-			}, nil
-		}
-	}
-	return RmEntry{}, fmt.Errorf("ブランチ '%s' に対応する worktree が見つかりません", branch)
-}
-
-// parseRmListKey extracts repo + name from "[name - repo]" or "repo/name" forms.
-func parseRmListKey(s string) (repo, name string, ok bool) {
-	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "[") {
-		if end := strings.Index(s, "]"); end > 0 {
-			inner := s[1:end]
-			parts := strings.SplitN(inner, " - ", 2)
-			if len(parts) == 2 {
-				return parts[1], parts[0], true
-			}
-		}
-	}
-	if i := strings.IndexByte(s, '/'); i >= 0 {
-		return s[:i], s[i+1:], true
-	}
-	return "", "", false
 }
 
 // performDelete executes the actual deletion logic shared by all modes.
@@ -215,7 +123,7 @@ type symlinkEntry struct {
 	Target string
 }
 
-// rmScan is what `wt tree rm` reports before a worktree disappears.
+// rmScan is what `wt worktree rm` reports before a worktree disappears.
 type rmScan struct {
 	Symlinks []symlinkEntry
 	Dirs     []realDir
@@ -385,7 +293,7 @@ func renderScan(out io.Writer, repo string, s rmScan, quiet bool) {
 	}
 	for _, d := range sorted {
 		if s.Measured && d.Size >= largeRealDirSize {
-			_, _ = fmt.Fprintf(out, "⚠️ 実体の %s (%s) は削除されます。main と共有するなら wt symlink add %s %s で候補に登録してください\n",
+			_, _ = fmt.Fprintf(out, "⚠️ 実体の %s (%s) は削除されます。main と共有するなら wt repo config add %s symlink %s で候補に登録してください\n",
 				d.Path, humanSize(d.Size), repo, d.Path)
 		}
 	}
@@ -409,142 +317,4 @@ func branchOfWorktree(mainDir, wtPath string) string {
 		}
 	}
 	return ""
-}
-
-// eligibleForMerged returns the entries the --merged workflow should consider:
-// it skips main/master and, when repoFilter is non-empty, keeps only that repo.
-// RmEntries() enumerates every container, so without this filter `--repo <name>
-// --merged` would delete merged worktrees of *all* repos (issue #88).
-func eligibleForMerged(items []RmEntry, repoFilter string) []RmEntry {
-	out := make([]RmEntry, 0, len(items))
-	for i := range items {
-		it := items[i]
-		if it.WtName == "main" || it.WtName == "master" {
-			continue
-		}
-		if repoFilter != "" && it.Repo != repoFilter {
-			continue
-		}
-		out = append(out, it)
-	}
-	return out
-}
-
-// rmMerged drives the --merged workflow.
-// 候補をリスト表示し、--yes 指定時のみ全削除する。
-func rmMerged(out io.Writer, opts RmOptions) error {
-	items, err := RmEntries()
-	if err != nil {
-		return err
-	}
-
-	prCache := map[string][]mergedPR{}
-	type cand struct {
-		entry RmEntry
-		pr    mergedPR
-		brn   string
-	}
-	var cands []cand
-
-	_, _ = fmt.Fprintln(out, "🧹 マージ済み worktree を検出中...")
-
-	items = eligibleForMerged(items, opts.Repo)
-	for i := range items {
-		it := &items[i]
-		prs, ok := prCache[it.MainDir]
-		if !ok {
-			prs = fetchMergedPRs(it.MainDir)
-			prCache[it.MainDir] = prs
-		}
-		brn, _ := core.GitOutput(it.WtPath, "branch", "--show-current")
-		if brn == "" {
-			continue
-		}
-		var match *mergedPR
-		for j := range prs {
-			if prs[j].HeadRefName == brn {
-				match = &prs[j]
-				break
-			}
-		}
-		if match == nil {
-			continue
-		}
-		cands = append(cands, cand{entry: *it, pr: *match, brn: brn})
-	}
-
-	if len(cands) == 0 {
-		_, _ = fmt.Fprintln(out, "マージ済みの worktree はありません")
-		return nil
-	}
-
-	display := func(c cand) string {
-		date := c.pr.MergedAt
-		if len(date) > 10 {
-			date = date[:10]
-		}
-		return fmt.Sprintf("%s/%s   %s   PR #%d merged %s",
-			c.entry.Repo, c.entry.WtName, c.brn, c.pr.Number, date)
-	}
-
-	if opts.DryRun || !opts.Yes {
-		_, _ = fmt.Fprintf(out, "🔍 %d 件の候補:\n", len(cands))
-		for i := range cands {
-			_, _ = fmt.Fprintln(out, display(cands[i]))
-			if opts.DryRun {
-				renderScan(out, cands[i].entry.Repo, scanWorktree(cands[i].entry.WtPath, !opts.NoSize), opts.Quiet)
-			}
-		}
-		if !opts.Yes && !opts.DryRun {
-			_, _ = fmt.Fprintln(out, "実行するには --yes を指定してください")
-		}
-		return nil
-	}
-
-	for i := range cands {
-		_ = performDelete(out, opts, &cands[i].entry)
-	}
-	return nil
-}
-
-// mergedPR is the JSON shape returned by `gh pr list --json number,headRefName,mergedAt`.
-type mergedPR struct {
-	Number      int    `json:"number"`
-	HeadRefName string `json:"headRefName"`
-	MergedAt    string `json:"mergedAt"`
-}
-
-// fetchMergedPRs queries gh for merged PRs of the repo backing mainDir.
-func fetchMergedPRs(mainDir string) []mergedPR {
-	remote, err := core.GitOutput(mainDir, "remote", "get-url", "origin")
-	if err != nil {
-		return nil
-	}
-	slug := remote
-	if i := strings.Index(slug, "github.com"); i >= 0 {
-		slug = slug[i+len("github.com"):]
-		if slug != "" && (slug[0] == ':' || slug[0] == '/') {
-			slug = slug[1:]
-		}
-	}
-	slug = strings.TrimSuffix(slug, ".git")
-	if slug == "" {
-		return nil
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", "pr", "list",
-		"--state", "merged",
-		"--json", "number,headRefName,mergedAt",
-		"--limit", "200",
-		"--repo", slug)
-	out, err := cmd.Output()
-	if err != nil {
-		return nil
-	}
-	var prs []mergedPR
-	if err := json.Unmarshal(out, &prs); err != nil {
-		return nil
-	}
-	return prs
 }

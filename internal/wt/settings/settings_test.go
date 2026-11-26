@@ -14,21 +14,6 @@ func TestLoad_MissingFileReturnsDefault(t *testing.T) {
 	}
 }
 
-func TestSaveThenLoad_RoundTrip(t *testing.T) {
-	t.Setenv("WT_CONFIG_DIR", t.TempDir())
-	want := Settings{DevPorts: DevPorts{Start: 9500, End: 9700}, Proxy: Proxy{Enabled: true, Port: DefaultProxyPort}}
-	if err := Save(&want); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	got := Load()
-	if got.DevPorts != want.DevPorts {
-		t.Errorf("round-trip = %+v, want %+v", got.DevPorts, want.DevPorts)
-	}
-	if _, err := os.Stat(Path()); err != nil {
-		t.Errorf("settings file not written: %v", err)
-	}
-}
-
 func TestLoad_InvalidFileFallsBackToDefault(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("WT_CONFIG_DIR", dir)

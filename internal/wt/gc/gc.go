@@ -18,8 +18,8 @@ import (
 	"wt/internal/wt/tree"
 )
 
-// Options captures CLI flags for `wt tree gc`. The three groups (filter /
-// retention / safety) map onto the flag groups shown in `wt tree gc --help`.
+// Options captures CLI flags for `wt worktree gc`, grouped as filter /
+// retention / safety.
 type Options struct {
 	// --- filter ---
 	Done      bool   // --done: PR merged/closed または issue closed の worktree を対象
@@ -189,18 +189,10 @@ func realDeps(out io.Writer) deps {
 	}
 }
 
-// Run executes the cross-repo GC workflow.
-func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps(out)) }
-
 // RunResults is Run that also returns what happened to each worktree and
 // branch, for callers that print a result table.
 func RunResults(out io.Writer, opts Options) ([]Result, error) {
 	return runResults(out, opts, realDeps(out))
-}
-
-func run(out io.Writer, opts Options, d deps) error {
-	_, err := runResults(out, opts, d)
-	return err
 }
 
 // Results. Fixed words so callers can match on them.

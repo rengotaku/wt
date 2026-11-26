@@ -25,7 +25,7 @@ type retryState struct {
 }
 
 // HealthReaper periodically detects dev services that died without being
-// explicitly stopped (a crash, as opposed to a deliberate `wt dev down` /
+// explicitly stopped (a crash, as opposed to a deliberate `wt service down` /
 // idle-reaper stop) and re-serves them. It is intentionally a separate
 // component from Reaper (which only ever stops idle worktrees): the two have
 // opposite trigger conditions and mixing them would make Reaper's idle logic

@@ -25,7 +25,7 @@ func TestPortReaper_Tick_PrunesGhostsOnly(t *testing.T) {
 	}
 
 	// "ghost" worktree: registered with a port_base, but its directory was
-	// removed outside `wt tree rm` (manual rm, interrupted create, etc.).
+	// removed outside `wt worktree rm` (manual rm, interrupted create, etc.).
 	if err := core.PutEntry(container, "ghost", &core.Entry{Type: "feature", PortBase: 9005}); err != nil {
 		t.Fatal(err)
 	}

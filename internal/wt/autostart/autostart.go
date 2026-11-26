@@ -1,6 +1,6 @@
 // Package autostart serves worktrees that are marked AutoStart in
 // .worktrees.json when `wt daemon` starts, so their dev environments
-// come up without a manual `wt serve`.
+// come up without a manual `wt service up`.
 package autostart
 
 import (
