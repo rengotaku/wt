@@ -130,6 +130,15 @@ func TestServiceLogs_OnlyKnownServices(t *testing.T) {
 	}
 }
 
+// `repo rm --force` was the old name of --yes; it must not delete anything.
+func TestRepoRmForceRejected(t *testing.T) {
+	for _, flag := range []string{"--force", "-f"} {
+		if _, err := runCmd(repoRmCmd(), "nope", flag); clierr.ExitCode(err) != 2 {
+			t.Errorf("repo rm %s: got %v, want exit 2", flag, err)
+		}
+	}
+}
+
 // Bare `wt daemon` used to run the daemon; an old service definition must fail.
 func TestDaemonBareFails(t *testing.T) {
 	root := &cobra.Command{Use: "wt", SilenceErrors: true, SilenceUsage: true}

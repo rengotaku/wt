@@ -18,10 +18,8 @@ type RmOptions struct {
 	Branch     string // --branch
 	Repo       string // --repo
 	KeepBranch bool   // --keep-branch
-	Merged     bool   // --merged
 	Force      bool   // --force
 	DryRun     bool   // --dry-run
-	Yes        bool   // --yes (--merged 時に必須)
 	Quiet      bool   // --quiet: 削除前の一覧を出さない
 	NoSize     bool   // --no-size: サイズ計算（du）をスキップする
 	Positional []string
