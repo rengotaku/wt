@@ -2,6 +2,8 @@
 
 git worktree 管理 CLI。単一 Go バイナリで動く。Web UI と HTTP API は持たない（#178、ADR 0004）。
 
+出力の方針: 操作するのは主に AI なので、既定の出力は機械が読みやすい形（色・罫線なし、列固定）にし、人向けの見た目は `--rich` などのオプションで出す。
+
 ## 全体構成
 
 ```
@@ -10,6 +12,7 @@ wt (cobra CLI)
 ├── dev / serve / ports          dev サービス定義・起動・ポート管理
 ├── policy                       リポジトリごとの AI 作業方針の解決
 ├── proxy                        ドメインルーティング (:8088、`wt daemon` に内蔵。単独起動も可)
+├── status                       状態の一覧（既定は AI 向けのタブ区切り、--json、--rich で人向け）
 └── daemon                       常駐: 内蔵 proxy + AutoStart 自動 serve + idle / port / health reaper
 ```
 
@@ -23,6 +26,8 @@ wt (cobra CLI)
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
 | `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（ss）・doctor |
 | `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
+| `internal/wt/status/` | `wt status` の集計（`Collect` / `Build`）と出力（`WriteTSV` / `WriteJSON` / `WriteRich`） |
+| `internal/wt/daemon/` | `wt daemon` の二重起動防止の lock（PID を書く）と、動いているかの確認（`Probe`） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
 | `internal/wt/settings/` | `settings.toml`（`$WT_CONFIG_DIR/wt/`、未指定ならユーザー設定ディレクトリの `wt/`。macOS は `~/Library/Application Support/wt/`）の読み書き |
 
@@ -35,7 +40,7 @@ wt (cobra CLI)
 | `<base>/<repo>/.worktrees.json::_config.branch_pattern（core.EntryConfig.BranchPattern）` | `wt tree add` が作るブランチ名を制約する正規表現。既定 `".*"`（全許可）。完全一致で照合する（`core.ValidateBranchName`） |
 | `<base>/<repo>/.worktrees.json::_config.ai_policy（core.EntryConfig.AIPolicy）` | リポジトリの AI 作業方針ファイル（コンテナ相対、既定は `.wt/ai-policy.md`）。`wt policy` が解決する。リポジトリには置かない |
 | `<設定ディレクトリ>/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
-| `<キャッシュディレクトリ>/wt/daemon.lock` | `wt daemon` の二重起動を防ぐ flock |
+| `<キャッシュディレクトリ>/wt/daemon.lock` | `wt daemon` の二重起動を防ぐ flock。中身は daemon の PID（`wt status` が読む） |
 | `<キャッシュディレクトリ>/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `<キャッシュディレクトリ>/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
@@ -104,6 +109,7 @@ PR が merged で、HEAD がその PR の head と一致する（または祖先
 | devserver Down/Serve 呼び出しの監査ログ（trigger 種別） | `internal/wt/autostart/reaper.go` / `internal/wt/autostart/autostart.go` / `internal/wt/autostart/health_reaper.go` / `cmd/serve.go`（`slog.Info("devserver action", ...)`） |
 | worktree の AutoStart フラグ（起動時自動 serve）| `.worktrees.json::auto_start` + `internal/wt/tree/autostart.go` + `cmd/tree.go::treeAutoStartCmd` |
 | 常駐時に起動する処理 | `cmd/daemon.go::runDaemon` |
+| `wt status` の列・状態の判定 | `internal/wt/status/status.go`（`stateOf`）。既定出力の列順は `TSVHeader` で、スクリプトが依存してよい |
 
 ## 検証ゲート
 

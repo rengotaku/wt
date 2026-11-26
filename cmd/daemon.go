@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -19,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"wt/internal/wt/autostart"
+	"wt/internal/wt/daemon"
 	"wt/internal/wt/proxy"
 	"wt/internal/wt/settings"
 )
@@ -50,7 +49,7 @@ func registerDaemonCmd(parent *cobra.Command) {
 				}
 				s.Proxy.Port = proxyPort
 			}
-			lock, err := acquireDaemonLock(daemonLockPath())
+			lock, err := daemon.Acquire(daemon.LockPath())
 			if err != nil {
 				return err
 			}
@@ -110,37 +109,6 @@ func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings) error {
 
 	<-ctx.Done()
 	return nil
-}
-
-// daemonLockPath is the lock file shared by every wt daemon of this user.
-func daemonLockPath() string {
-	base, err := os.UserCacheDir()
-	if err != nil || base == "" {
-		base = filepath.Join(os.Getenv("HOME"), ".cache")
-	}
-	return filepath.Join(base, "wt", "daemon.lock")
-}
-
-// acquireDaemonLock takes an exclusive, non-blocking flock on path. Two daemons
-// would both serve the same AutoStart worktrees and overwrite each other's
-// running.json, so a second one must refuse to start. The lock is released
-// when the returned file is closed or the process exits.
-func acquireDaemonLock(path string) (*os.File, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		return nil, err
-	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			return nil, fmt.Errorf("wt daemon は既に起動しています（lock: %s）", path)
-		}
-		return nil, fmt.Errorf("lock を取得できません（%s）: %w", path, err)
-	}
-	return f, nil
 }
 
 // startProxy binds the proxy synchronously so a bind failure is reported, then

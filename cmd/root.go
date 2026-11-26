@@ -57,6 +57,7 @@ func init() {
 	registerRepoCmd(rootCmd)
 	registerSymlinkCmd(rootCmd)
 	registerDaemonCmd(rootCmd)
+	registerStatusCmd(rootCmd)
 	registerPortsCmd(rootCmd)
 	registerServeCmd(rootCmd)
 	registerProxyCmd(rootCmd)

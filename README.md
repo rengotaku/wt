@@ -13,6 +13,7 @@ wt repo rm <repo> --force   リポジトリ全体を削除
 
 wt tree add <repo> <issue>  worktree を作成
 wt tree ls                  worktree 一覧
+wt status [--json|--rich]   worktree の稼働・ポート・AutoStart・proxy URL と wt daemon の状態（既定は AI 向けのタブ区切り）
 wt tree rm                  worktree を削除
 wt tree gc                  マージ済み worktree を一括削除
 wt tree autostart <repo> <worktree> on|off  wt daemon 起動時に serve する対象を切り替え
