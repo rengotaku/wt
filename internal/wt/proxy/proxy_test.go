@@ -179,3 +179,29 @@ func TestHandler_LANIndex_NoRoutes(t *testing.T) {
 		t.Errorf("empty index should mention how to start a dev server, body=%q", rec.Body.String())
 	}
 }
+
+// A DNS-rebinding page sends its own domain as Host; it must not get the
+// worktree list. Direct IP / localhost access still does. #180
+func TestHandler_LANIndex_OnlyForDirectHost(t *testing.T) {
+	h := Handler(func() ([]Route, error) {
+		return []Route{{Repo: "myrepo", Label: "issue10", Port: 9100}}, nil
+	})
+	for _, host := range []string{"evil.example:8088", "evil.example", "issue10.wt.localhost"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/", http.NoBody)
+		req.Host = host
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "myrepo") {
+			t.Errorf("Host %q: got %d, body leaks repo=%v", host, rec.Code, strings.Contains(rec.Body.String(), "myrepo"))
+		}
+	}
+	for _, host := range []string{"127.0.0.1:8088", "192.168.10.50:8088", "[::1]:8088", "localhost:8088", "localhost"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "http://x/", http.NoBody)
+		req.Host = host
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "myrepo") {
+			t.Errorf("Host %q: got %d, want index", host, rec.Code)
+		}
+	}
+}

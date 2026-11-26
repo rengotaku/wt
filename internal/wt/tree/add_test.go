@@ -211,3 +211,17 @@ func TestSymlinkPlanLine(t *testing.T) {
 		})
 	}
 }
+
+// The worktree directory must stay inside the container. #180
+func TestAddByBranch_RejectsDirOutsideContainer(t *testing.T) {
+	containerDir, _ := setupWtContainer(t)
+	for _, dir := range []string{"../escape", "..", ".", "a/b"} {
+		var buf bytes.Buffer
+		if _, err := addByBranch(&buf, &AddOptions{Repo: "testrepo", Branch: "feat/x", PositionDir: dir}); err == nil {
+			t.Errorf("dir %q: want error", dir)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(containerDir), "escape")); err == nil {
+		t.Error("worktree was created outside the container")
+	}
+}

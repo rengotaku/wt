@@ -68,6 +68,11 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 		}
 	}
 
+	// Last guard before a recursive delete: never remove anything that is not
+	// a direct child of a workspace dir, whatever FindContainer returned.
+	if !core.IsWorkspaceChild(container) {
+		return fmt.Errorf("ワークスペース直下ではないため削除しません: %s", container)
+	}
 	if err := os.RemoveAll(container); err != nil {
 		return err
 	}
