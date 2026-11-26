@@ -350,6 +350,21 @@ func IsDirty(wtPath string) bool {
 	return false
 }
 
+// HasUntracked reports whether wtPath has untracked (not ignored) files.
+// It fails closed: if git cannot tell, it reports true so a delete stops.
+func HasUntracked(wtPath string) bool {
+	out, err := GitOutput(wtPath, "status", "--porcelain", "--untracked-files=normal")
+	if err != nil {
+		return true
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "??") {
+			return true
+		}
+	}
+	return false
+}
+
 // WorktreeChanges counts staged/unstaged entries and untracked entries of a
 // worktree. Unlike IsDirty, a failing `git status` is returned as an error so
 // that callers deleting worktrees can fall to the safe side.

@@ -113,3 +113,35 @@ func TestDeprecate(t *testing.T) {
 		t.Errorf("stderr: %q", errOut.String())
 	}
 }
+
+func TestWorktreeRm_EmptyTargetIsUsageError(t *testing.T) {
+	setupContainer(t)
+	if _, err := runCmd(worktreeRmCmd(), "", "--yes"); clierr.ExitCode(err) != 2 {
+		t.Errorf("empty target: got %v, want exit 2", err)
+	}
+}
+
+// A bad later pair must not leave an earlier pair applied.
+func TestWorktreeSet_NoPartialWrite(t *testing.T) {
+	container := setupContainer(t)
+	if _, err := runCmd(worktreeSetCmd(), "app/app--feat", "autostart=on", "color=blue"); clierr.ExitCode(err) != 2 {
+		t.Fatalf("got %v, want exit 2", err)
+	}
+	entries, _ := core.LoadEntries(container)
+	if entries["app--feat"].AutoStart {
+		t.Error("autostart was written although the command failed")
+	}
+}
+
+func TestServiceLogs_OnlyKnownServices(t *testing.T) {
+	container := setupContainer(t)
+	e := core.Entry{Branch: "feat", PortBase: 9000, DevServices: []core.DevService{{Name: "api", Cmd: "true"}}}
+	if err := core.PutEntry(container, "app--feat", &e); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"../../etc/passwd", "nope"} {
+		if _, err := runCmd(serviceLogsCmd(), "app/app--feat", name); clierr.ExitCode(err) != 3 {
+			t.Errorf("service %q: got %v, want exit 3", name, err)
+		}
+	}
+}

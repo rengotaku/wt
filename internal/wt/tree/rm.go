@@ -68,6 +68,19 @@ func Rm(out io.Writer, opts RmOptions) error {
 	return errors.New("Usage: wt tree rm --branch <branch> --repo <repo> | <repo>/<wt-name> | --merged [--yes]") //nolint:staticcheck // user-facing usage string
 }
 
+// RemoveAt deletes the worktree wtName of the given container — the exact
+// target the caller resolved, not a name looked up again across workspaces.
+func RemoveAt(out io.Writer, opts RmOptions, repo, container, wtName string) error {
+	mainDir, _ := core.ResolveMain(container)
+	if mainDir == "" {
+		return fmt.Errorf("main/master worktree が見つかりません: %s", container)
+	}
+	return performDelete(out, opts, &RmEntry{
+		Repo: repo, WtName: wtName, WtPath: filepath.Join(container, wtName),
+		MainDir: mainDir, Container: container,
+	})
+}
+
 // resolveByBranch finds an RmEntry by repo+branch.
 func resolveByBranch(repo, branch string) (RmEntry, error) {
 	container, err := core.FindContainer(repo)
@@ -88,7 +101,7 @@ func resolveByBranch(repo, branch string) (RmEntry, error) {
 		switch {
 		case strings.HasPrefix(line, "worktree "):
 			lastWt = strings.TrimPrefix(line, "worktree ")
-		case strings.HasPrefix(line, "branch refs/heads/"+branch):
+		case line == "branch refs/heads/"+branch: // exact: "feat/x" must not match "feat/x-2"
 			return RmEntry{
 				Repo:      repo,
 				WtName:    filepath.Base(lastWt),
@@ -128,6 +141,11 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 	if core.IsDirty(t.WtPath) && !opts.Force {
 		return fmt.Errorf("未コミット変更のためスキップ: %s（--force で強行）", t.WtPath)
 	}
+	// Untracked files are not restorable from git and disappear with the
+	// worktree, so they need --force too.
+	if core.HasUntracked(t.WtPath) && !opts.Force {
+		return fmt.Errorf("未追跡のファイルがあるためスキップ: %s（--force で強行）", t.WtPath)
+	}
 
 	if opts.DryRun {
 		_, _ = fmt.Fprintf(out, "🔍 [dry-run] 削除予定: %s\n", t.WtPath)
@@ -140,13 +158,21 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	branch := branchOfWorktree(t.MainDir, t.WtPath)
 
-	_ = core.GitRun(t.MainDir, "worktree", "remove", t.WtPath, "--force")
-
-	if !opts.KeepBranch && branch != "" && branch != "main" && branch != "master" {
-		_ = exec.Command("git", "-C", t.MainDir, "branch", "-D", branch).Run()
+	// Stop before touching the registry if git refuses (locked worktree etc.):
+	// otherwise the directory stays but wt forgets it.
+	if err := core.GitRun(t.MainDir, "worktree", "remove", t.WtPath, "--force"); err != nil {
+		return fmt.Errorf("worktree を削除できませんでした: %s: %w", t.WtPath, err)
 	}
 
-	_ = core.DeleteEntry(t.Container, t.WtName)
+	if !opts.KeepBranch && branch != "" && branch != "main" && branch != "master" {
+		if err := exec.Command("git", "-C", t.MainDir, "branch", "-D", branch).Run(); err != nil {
+			_, _ = fmt.Fprintf(out, "⚠️  ブランチを削除できませんでした: %s: %v\n", branch, err)
+		}
+	}
+
+	if err := core.DeleteEntry(t.Container, t.WtName); err != nil {
+		return fmt.Errorf("登録の削除に失敗しました: %s: %w", t.WtName, err)
+	}
 
 	_, _ = fmt.Fprintf(out, "✅ 削除: %s\n", t.WtPath)
 	return nil

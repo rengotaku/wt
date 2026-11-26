@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -124,25 +125,34 @@ func worktreeRmCmd() *cobra.Command {
 		if err := o.Validate(); err != nil {
 			return err
 		}
+		if args[0] == "" {
+			// An empty target would resolve to the current worktree; never
+			// let an unset variable in a script delete where it runs.
+			return clierr.Usagef("削除する worktree を <repo>/<worktree> で指定してください")
+		}
 		r, err := ref.Resolve(args[0])
 		if err != nil {
 			return err
 		}
 		key := r.Repo + "/" + r.Worktree
-		opts.Positional = []string{key}
 		opts.NoSize = true
 		if !opts.DryRun {
 			preview := opts
 			preview.DryRun = true
-			if err := tree.Rm(stderr, preview); err != nil {
-				return err
+			if err := tree.RemoveAt(stderr, preview, r.Repo, r.Container, r.Worktree); err != nil {
+				return clierr.Preconditionf("%v", err)
 			}
 			if err := confirm(yes, key+" を消しますか"); err != nil {
 				return err
 			}
 		}
-		if err := tree.Rm(stderr, opts); err != nil {
-			return err
+		if err := tree.RemoveAt(stderr, opts, r.Repo, r.Container, r.Worktree); err != nil {
+			return clierr.Preconditionf("%v", err)
+		}
+		if !opts.DryRun {
+			if _, err := os.Stat(r.Path); err == nil {
+				return clierr.External("削除後も worktree のディレクトリが残っています: "+r.Path, nil)
+			}
 		}
 		result := "removed"
 		if opts.DryRun {
@@ -177,15 +187,9 @@ func worktreeGcCmd() *cobra.Command {
 			return gc.Run(stderr, opts)
 		}
 		if !opts.Yes {
-			preview := opts
-			preview.DryRun = true
-			if err := gc.Run(stderr, preview); err != nil {
-				return err
-			}
-			if err := confirm(false, "上の候補を消しますか"); err != nil {
-				return err
-			}
-			opts.Yes = true
+			// Confirm inside the run so exactly the listed candidates are
+			// deleted (no second scan between the prompt and the delete).
+			opts.Confirm = func() error { return confirm(false, "上の候補を消しますか") }
 		}
 		return gc.Run(stderr, opts)
 	}
@@ -213,6 +217,9 @@ func worktreeSetCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		// Validate every pair before writing anything: a bad later pair must
+		// not leave an earlier one applied.
+		autostart := ""
 		for _, kv := range args[1:] {
 			k, v, ok := strings.Cut(kv, "=")
 			if !ok {
@@ -223,11 +230,14 @@ func worktreeSetCmd() *cobra.Command {
 				if v != "on" && v != "off" {
 					return clierr.Usagef("autostart は on か off: %q", v)
 				}
-				if err := tree.SetAutoStart(r.Repo, r.Worktree, v == "on"); err != nil {
-					return err
-				}
+				autostart = v
 			default:
 				return clierr.Usagef("知らないキーです: %q（使えるキー: autostart）", k)
+			}
+		}
+		if autostart != "" {
+			if err := tree.SetAutoStart(r.Repo, r.Worktree, autostart == "on"); err != nil {
+				return err
 			}
 		}
 		return printWorktree(cmd.OutOrStdout(), o, r)
@@ -376,6 +386,10 @@ func serviceLogsCmd() *cobra.Command {
 			}
 		}
 		if len(args) == 2 {
+			// Only a service of this worktree: the name becomes part of a path.
+			if !slices.Contains(names, args[1]) {
+				return clierr.NotFoundf("サービスがありません: %q（あるもの: %s）", args[1], strings.Join(names, ", "))
+			}
 			names = []string{args[1]}
 		}
 		if len(names) == 0 {
