@@ -20,24 +20,56 @@ var (
 )
 
 // Listeners returns LISTEN sockets whose local port falls inside [start, end],
-// keyed by port. It shells out to `ss -tlnpH`; if ss is unavailable the result
-// is an empty map (callers degrade to "all down" rather than failing).
+// keyed by port. It shells out to `ss -tlnpH` (Linux), falling back to
+// `lsof -nP -iTCP -sTCP:LISTEN -Fpcn` (macOS has no ss). If neither works the
+// result is an empty map (callers degrade to "all down" rather than failing).
 func Listeners(start, end int) (map[int]Listener, error) {
-	out, err := exec.Command("ss", "-tlnpH").Output()
-	if err != nil {
-		return map[int]Listener{}, nil //nolint:nilerr // ss missing → treat as no listeners
-	}
-	return parseSS(string(out), start, end), nil
+	return listeners(start, end), nil
 }
 
 // AllListeners returns every LISTEN socket on the machine (no band filter),
 // keyed by port. Used by the port doctor to surface foreign squatters.
 func AllListeners() (map[int]Listener, error) {
-	out, err := exec.Command("ss", "-tlnpH").Output()
-	if err != nil {
-		return map[int]Listener{}, nil //nolint:nilerr // ss missing → treat as no listeners
+	return listeners(1, 65535), nil
+}
+
+func listeners(start, end int) map[int]Listener {
+	if out, err := exec.Command("ss", "-tlnpH").Output(); err == nil {
+		return parseSS(string(out), start, end)
 	}
-	return parseSS(string(out), 1, 65535), nil
+	if out, err := exec.Command("lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn").Output(); err == nil {
+		return parseLsof(string(out), start, end)
+	}
+	return map[int]Listener{}
+}
+
+// parseLsof parses `lsof -Fpcn` field output: a "p<pid>" line starts a
+// process, "c<command>" names it, and each "n<addr>" is one socket such as
+// "*:9000", "127.0.0.1:9000" or "[::1]:9000". Keeps ports inside [start, end].
+func parseLsof(out string, start, end int) map[int]Listener {
+	res := map[int]Listener{}
+	pid, proc := 0, ""
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		switch line[0] {
+		case 'p':
+			pid, _ = strconv.Atoi(line[1:])
+			proc = ""
+		case 'c':
+			proc = line[1:]
+		case 'n':
+			port, ok := portFromLocalAddr(line[1:])
+			if !ok || port < start || port > end {
+				continue
+			}
+			if _, exists := res[port]; !exists {
+				res[port] = Listener{Port: port, PID: pid, Proc: proc}
+			}
+		}
+	}
+	return res
 }
 
 // parseSS parses `ss -tlnpH` output, keeping only ports inside [start, end].

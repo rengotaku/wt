@@ -75,3 +75,20 @@ just_one_column
 		t.Error("included 8000 (out of band)")
 	}
 }
+
+func TestParseLsof(t *testing.T) {
+	out := "p100\ncnode\nf20\nn*:9000\nf21\nn[::1]:9000\np200\ncair\nf3\nn127.0.0.1:9001\np300\ncother\nf4\nn*:8088\n"
+	got := parseLsof(out, 9000, 9004)
+	if len(got) != 2 {
+		t.Fatalf("got %d listeners, want 2: %+v", len(got), got)
+	}
+	if l := got[9000]; l.PID != 100 || l.Proc != "node" {
+		t.Errorf("9000: %+v, want pid 100 node (first socket wins)", l)
+	}
+	if l := got[9001]; l.PID != 200 || l.Proc != "air" {
+		t.Errorf("9001: %+v, want pid 200 air", l)
+	}
+	if _, ok := got[8088]; ok {
+		t.Error("8088 is outside the band")
+	}
+}
