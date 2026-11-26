@@ -38,7 +38,7 @@ wt repo config rm <repo> symlink|service <値> | --all  dev サービス・symli
 wt doctor [<repo>] [--fix]                             不整合を見つける（--fix で直す）
 ```
 
-変える系は進捗を stderr に、結果のリソースを `worktree show`（リポジトリなら `repo show`）と同じ形で stdout に出します。消す系は端末なら確認を出し、`--yes` で省きます。端末でなく `--yes` も無いと終了コード 4 で止まります。
+変える系は進捗を stderr に、結果のリソースを `worktree show`（リポジトリなら `repo show`）と同じ形で stdout に出します。`worktree gc` は消した・残した worktree とブランチを REPO / WORKTREE / BRANCH / RESULT / DETAIL の表で出します（RESULT は deleted / skipped / candidate / failed）。消す系は端末なら確認を出し、`--yes` で省きます。端末でなく `--yes` も無いと終了コード 4 で止まります。
 旧コマンド（`tree add` / `rm` / `gc` / `ls` / `autostart` / `fix`、`serve`、`down`、`proxy`、引数なしの `daemon`、`symlink`、`dev`、`ports alloc` / `prune`、`repo rescue-main`）は今も動き、使うと stderr に新しい名前を出します。
 
 `wt doctor` が見るのは、main / master のフォルダに別のブランチが checkout されている（`main_branch`）、ディレクトリが無いのにポートを持つ登録（`stale_port`）、main 以外でポートが無い worktree（`unallocated_port`）、dev サービスの設定の誤り（`service_config`）、読めない `.worktrees.json`（`metadata`）です。直せないものが残ると終了コード 4 です。

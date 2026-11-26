@@ -57,11 +57,14 @@ fixed 以外が 1 件でも残れば終了コード 4。直す途中の進捗と
 			findings = []doctor.Finding{}
 		}
 		t := &out.Table{Header: []string{"CHECK", "REPO", "WORKTREE", "STATUS", "DETAIL"}}
-		left := 0
+		left, fixable := 0, 0
 		for _, f := range findings {
 			t.Rows = append(t.Rows, []string{f.Check, f.Repo, f.Worktree, f.Status, f.Detail})
 			if f.Unresolved() {
 				left++
+			}
+			if f.Status == doctor.StatusFound {
+				fixable++
 			}
 		}
 		if err := out.Render(cmd.OutOrStdout(), o, t, findings, "doctor"); err != nil {
@@ -69,8 +72,8 @@ fixed 以外が 1 件でも残れば終了コード 4。直す途中の進捗と
 		}
 		if left > 0 {
 			hint := ""
-			if !fix {
-				hint = "（--fix で直せるものは直します）"
+			if fixable > 0 {
+				hint = fmt.Sprintf("（うち %d 件は --fix で直せます）", fixable)
 			}
 			return clierr.Preconditionf("%s", fmt.Sprintf("%d 件の不整合が残っています%s", left, hint))
 		}

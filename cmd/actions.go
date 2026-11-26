@@ -170,7 +170,10 @@ func worktreeGcCmd() *cobra.Command {
 		Use:   "gc",
 		Short: "条件に合う worktree をまとめて消す（--done / --older-than。確認あり）",
 		Long: "条件に合う worktree をまとめて消す。--done は PR merged / closed か issue closed、--older-than は最終コミットの古さ（30d, 24h）。\n" +
-			"候補は stderr に出す。端末なら確認を出し、--yes で省略する。端末でなく --yes も無ければ終了コード 4。",
+			"--done は worktree の無いマージ済みブランチも消す。端末なら確認を出し、--yes で省略する。端末でなく --yes も無ければ終了コード 4。\n" +
+			"進捗は stderr、結果は REPO / WORKTREE / BRANCH / RESULT / DETAIL の表で stdout に出す。WORKTREE が - の行は worktree の無いブランチ。\n" +
+			"RESULT は deleted / skipped（消さずに残した。理由は DETAIL）/ candidate（--dry-run の候補）/ failed。failed があれば終了コード 4。" +
+			formatHelp,
 		Args: noArgs,
 	}
 	c.Flags().BoolVar(&opts.Done, "done", false, "PR merged / closed か issue closed の worktree")
@@ -179,19 +182,41 @@ func worktreeGcCmd() *cobra.Command {
 	c.Flags().BoolVar(&opts.DryRun, "dry-run", false, "候補だけ出す")
 	c.Flags().BoolVarP(&opts.Yes, "yes", "y", false, "確認を省く")
 	c.Flags().BoolVar(&opts.Force, "force", false, "未コミット・未追跡のファイル・リモートに無いコミットがあっても消す")
-	c.RunE = func(_ *cobra.Command, _ []string) error {
+	o := out.AddFlags(c)
+	c.RunE = func(cmd *cobra.Command, _ []string) error {
+		if err := o.Validate(); err != nil {
+			return err
+		}
 		if !opts.Done && opts.OlderThan == "" {
 			return clierr.Usagef("--done か --older-than を指定してください")
 		}
-		if opts.DryRun {
-			return gc.Run(stderr, opts)
-		}
-		if !opts.Yes {
+		if !opts.DryRun && !opts.Yes {
 			// Confirm inside the run so exactly the listed candidates are
 			// deleted (no second scan between the prompt and the delete).
 			opts.Confirm = func() error { return confirm(false, "上の候補を消しますか") }
 		}
-		return gc.Run(stderr, opts)
+		results, err := gc.RunResults(stderr, opts)
+		if err != nil {
+			return err
+		}
+		if results == nil {
+			results = []gc.Result{}
+		}
+		t := &out.Table{Header: []string{"REPO", "WORKTREE", "BRANCH", "RESULT", "DETAIL"}}
+		failed := 0
+		for _, r := range results {
+			t.Rows = append(t.Rows, []string{r.Repo, r.Worktree, r.Branch, r.Result, r.Detail})
+			if r.Result == gc.ResultFailed {
+				failed++
+			}
+		}
+		if err := out.Render(cmd.OutOrStdout(), o, t, results, "worktree gc"); err != nil {
+			return err
+		}
+		if failed > 0 {
+			return clierr.Preconditionf("%d 件を消せませんでした", failed)
+		}
+		return nil
 	}
 	return c
 }

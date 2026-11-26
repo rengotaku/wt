@@ -192,10 +192,51 @@ func realDeps(out io.Writer) deps {
 // Run executes the cross-repo GC workflow.
 func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps(out)) }
 
+// RunResults is Run that also returns what happened to each worktree and
+// branch, for callers that print a result table.
+func RunResults(out io.Writer, opts Options) ([]Result, error) {
+	return runResults(out, opts, realDeps(out))
+}
+
 func run(out io.Writer, opts Options, d deps) error {
+	_, err := runResults(out, opts, d)
+	return err
+}
+
+// Results. Fixed words so callers can match on them.
+const (
+	ResultDeleted   = "deleted"
+	ResultSkipped   = "skipped"
+	ResultCandidate = "candidate" // listed, not deleted (--dry-run)
+	ResultFailed    = "failed"
+)
+
+// Result is the outcome for one worktree, or one branch without a worktree
+// (Worktree is empty).
+type Result struct {
+	Repo     string `json:"repo"`
+	Worktree string `json:"worktree"`
+	Branch   string `json:"branch"`
+	Result   string `json:"result"`
+	Detail   string `json:"detail"`
+}
+
+type cand struct {
+	entry  tree.RmEntry
+	branch string
+	info   string
+}
+
+func (c *cand) result(r string) Result { return c.resultWith(r, c.info) }
+
+func (c *cand) resultWith(r, detail string) Result {
+	return Result{Repo: c.entry.Repo, Worktree: c.entry.WtName, Branch: c.branch, Result: r, Detail: detail}
+}
+
+func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 	olderSecs, err := parseOlderThan(opts.OlderThan)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// フィルタ（--done/--merged または --older-than）が1つも指定されていない
@@ -203,14 +244,14 @@ func run(out io.Writer, opts Options, d deps) error {
 	// worktree が対象になってしまう（fail-open）。fail-safe に倒し、明示的に
 	// フィルタを要求する。
 	if !opts.closedFilter() && olderSecs <= 0 {
-		return ErrNoFilter
+		return nil, ErrNoFilter
 	}
 
 	items, err := d.rmEntries()
 	if err != nil {
 		// 削除可能な worktree が無くても、--done ならブランチ走査は続ける。
 		if !opts.branchCleanup() {
-			return err
+			return nil, err
 		}
 		items = nil
 	}
@@ -224,11 +265,6 @@ func run(out io.Writer, opts Options, d deps) error {
 		_, _ = fmt.Fprintln(out, "ℹ️  --merged は --done の alias です（PR merged/closed または issue closed を対象）")
 	}
 
-	type cand struct {
-		entry  tree.RmEntry
-		branch string
-		info   string
-	}
 	var cands, skips []cand
 
 	// --done: branch→PR state と issue state を repo 単位でキャッシュ。
@@ -362,9 +398,17 @@ func run(out io.Writer, opts Options, d deps) error {
 		}
 	}
 
+	var results []Result
+	for i := range skips {
+		results = append(results, skips[i].result(ResultSkipped))
+	}
+	for i := range bSkips {
+		results = append(results, bSkips[i].result(ResultSkipped))
+	}
+
 	if len(cands) == 0 && len(bCands) == 0 {
 		_, _ = fmt.Fprintln(out, "条件に合う worktree はありません")
-		return nil
+		return results, nil
 	}
 
 	listCands := func() {
@@ -384,42 +428,57 @@ func run(out io.Writer, opts Options, d deps) error {
 	if opts.Confirm != nil && !opts.DryRun {
 		listCands()
 		if err := opts.Confirm(); err != nil {
-			return err
+			return nil, err
 		}
 	} else if opts.DryRun || !opts.Yes {
 		listCands()
 		if !opts.Yes && !opts.DryRun {
 			_, _ = fmt.Fprintln(out, "実行するには --yes を指定してください")
 		}
-		return nil
+		for i := range cands {
+			results = append(results, cands[i].result(ResultCandidate))
+		}
+		for i := range bCands {
+			results = append(results, bCands[i].result(ResultCandidate))
+		}
+		return results, nil
 	}
 
 	rmOpts := tree.RmOptions{
-		KeepBranch: opts.KeepBranch,
-		Force:      opts.Force,
+		KeepBranch:   opts.KeepBranch,
+		Force:        opts.Force,
+		StrictBranch: true,
 	}
 	for i := range cands {
 		c := &cands[i]
 		if c.branch == "" {
 			_, _ = fmt.Fprintf(out, "⚠️  ブランチ不明のためスキップ: %s\n", c.entry.WtPath)
+			results = append(results, c.resultWith(ResultFailed, "ブランチ不明"))
 			continue
 		}
-		iterOpts := rmOpts
-		iterOpts.Branch = c.branch
-		iterOpts.Repo = c.entry.Repo
-		if err := tree.Rm(out, iterOpts); err != nil {
-			_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
+		// Delete the scanned path, not whatever the names resolve to now:
+		// a same-named repo in the other workspace may come first.
+		if err := tree.RemoveAt(out, rmOpts, c.entry.Repo, c.entry.Container, c.entry.WtName); err != nil {
+			var kept *tree.BranchKeptError
+			if !errors.As(err, &kept) {
+				_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
+			}
+			results = append(results, c.resultWith(ResultFailed, err.Error()))
+			continue
 		}
+		results = append(results, c.result(ResultDeleted))
 	}
 	for i := range bCands {
 		c := &bCands[i]
 		if err := d.deleteBranch(c.mainDir, c.branch); err != nil {
 			_, _ = fmt.Fprintf(out, "⚠️  ブランチ削除に失敗: %s/%s: %v\n", c.repo, c.branch, err)
+			results = append(results, c.resultWith(ResultFailed, err.Error()))
 			continue
 		}
 		_, _ = fmt.Fprintf(out, "✅ 削除: %s/%s (branch)\n", c.repo, c.branch)
+		results = append(results, c.result(ResultDeleted))
 	}
-	return nil
+	return results, nil
 }
 
 func parseOlderThan(s string) (int64, error) {

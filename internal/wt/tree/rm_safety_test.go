@@ -1,6 +1,7 @@
 package tree
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -86,5 +87,29 @@ func TestRemoveAt_UntrackedNeedsForce(t *testing.T) {
 	}
 	if _, ok := entries["repo--a"]; !ok {
 		t.Error("the other worktree's entry was removed")
+	}
+}
+
+// With StrictBranch a branch that cannot be deleted is reported after the
+// worktree and its entry are gone; without it, only a warning (old commands).
+func TestRemoveAt_StrictBranch(t *testing.T) {
+	for _, strict := range []bool{true, false} {
+		container, mainDir := setupRmContainer(t)
+		// A read-only ref directory makes `git branch -D feat/x` fail.
+		refDir := filepath.Join(mainDir, ".git", "refs", "heads", "feat")
+		if err := os.Chmod(refDir, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(refDir, 0o755) })
+		// git prints resolved paths (/private/var on macOS); match them.
+		container, _ = filepath.EvalSymlinks(container)
+		err := RemoveAt(io.Discard, RmOptions{StrictBranch: strict}, "repo", container, "repo--x")
+		var kept *BranchKeptError
+		if strict != errors.As(err, &kept) {
+			t.Errorf("strict=%v: got %v", strict, err)
+		}
+		if _, statErr := os.Stat(filepath.Join(container, "repo--x")); !os.IsNotExist(statErr) {
+			t.Errorf("strict=%v: worktree still exists", strict)
+		}
 	}
 }

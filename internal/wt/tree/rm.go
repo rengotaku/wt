@@ -28,7 +28,24 @@ type RmOptions struct {
 	Quiet      bool   // --quiet: 削除前の一覧を出さない
 	NoSize     bool   // --no-size: サイズ計算（du）をスキップする
 	Positional []string
+	// StrictBranch makes a failed branch deletion an error (*BranchKeptError)
+	// after the worktree and its entry are gone. Without it the failure is
+	// only a warning, as the old commands print it.
+	StrictBranch bool
 }
+
+// BranchKeptError reports that the worktree was removed but its branch was
+// not deleted.
+type BranchKeptError struct {
+	Branch string
+	Err    error
+}
+
+func (e *BranchKeptError) Error() string {
+	return "worktree は消したが、ブランチ " + e.Branch + " を削除できなかった: " + e.Err.Error()
+}
+
+func (e *BranchKeptError) Unwrap() error { return e.Err }
 
 // Rm runs the `wt tree rm` workflow (non-interactive).
 func Rm(out io.Writer, opts RmOptions) error {
@@ -164,9 +181,11 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 		return fmt.Errorf("worktree を削除できませんでした: %s: %w", t.WtPath, err)
 	}
 
+	var branchErr error
 	if !opts.KeepBranch && branch != "" && branch != "main" && branch != "master" {
 		if err := exec.Command("git", "-C", t.MainDir, "branch", "-D", branch).Run(); err != nil {
 			_, _ = fmt.Fprintf(out, "⚠️  ブランチを削除できませんでした: %s: %v\n", branch, err)
+			branchErr = &BranchKeptError{Branch: branch, Err: err}
 		}
 	}
 
@@ -175,6 +194,9 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 	}
 
 	_, _ = fmt.Fprintf(out, "✅ 削除: %s\n", t.WtPath)
+	if opts.StrictBranch {
+		return branchErr
+	}
 	return nil
 }
 

@@ -235,7 +235,13 @@ func worktreeShowCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		return writeWorktreeShow(cmd.OutOrStdout(), o, &d)
+		if err := writeWorktreeShow(cmd.OutOrStdout(), o, &d); err != nil {
+			return err
+		}
+		if d.ConfigError != "" {
+			return clierr.Preconditionf("dev サービスの設定を読めません: %s", d.ConfigError)
+		}
+		return nil
 	}
 	return c
 }
@@ -244,7 +250,7 @@ func writeWorktreeShow(w io.Writer, o *out.Opts, d *view.WorktreeDetail) error {
 	kv := [][2]string{
 		{"repo", d.Repo}, {"worktree", d.Worktree.Worktree}, {"branch", d.Branch}, {"path", d.Path},
 		{"state", d.State}, {"ports", d.Ports}, {"autostart", out.OnOff(d.AutoStart)}, {"url", d.URL},
-		{"issue", d.Issue}, {"created", d.Created},
+		{"issue", d.Issue}, {"created", d.Created}, {"config_error", d.ConfigError},
 	}
 	switch {
 	case o.JSON:
@@ -256,14 +262,15 @@ func writeWorktreeShow(w io.Writer, o *out.Opts, d *view.WorktreeDetail) error {
 		}
 		st := &out.Table{Header: serviceHeader}
 		for _, s := range d.Services {
-			st.Rows = append(st.Rows, []string{s.Name, fmt.Sprint(s.Port), s.State, out.Itoa(s.PID), s.Proc, s.Log})
+			st.Rows = append(st.Rows, []string{s.Name, out.Itoa(s.Port), s.State, out.Itoa(s.PID), s.Proc, s.Log})
 		}
 		return out.WriteRich(w, st, "\nservices", color)
 	default:
 		for _, s := range d.Services {
 			p := "service." + out.Cell(s.Name) + "."
-			kv = append(kv, [2]string{p + "port", fmt.Sprint(s.Port)}, [2]string{p + "state", s.State},
-				[2]string{p + "pid", out.Itoa(s.PID)}, [2]string{p + "proc", s.Proc}, [2]string{p + "log", s.Log})
+			kv = append(kv, [2]string{p + "port", out.Itoa(s.Port)}, [2]string{p + "state", s.State},
+				[2]string{p + "pid", out.Itoa(s.PID)}, [2]string{p + "proc", s.Proc}, [2]string{p + "log", s.Log},
+				[2]string{p + "domain", out.OnOff(s.Domain)})
 		}
 		return out.WriteTSV(w, kvTable(kv))
 	}

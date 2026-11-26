@@ -17,6 +17,12 @@ type branchCand struct {
 	info    string // 候補の理由、またはスキップ理由
 }
 
+func (c *branchCand) result(r string) Result { return c.resultWith(r, c.info) }
+
+func (c *branchCand) resultWith(r, detail string) Result {
+	return Result{Repo: c.repo, Branch: c.branch, Result: r, Detail: detail}
+}
+
 // branchProbe abstracts the git observations on one repo's local branches so
 // tests never spawn git.
 type branchProbe struct {
