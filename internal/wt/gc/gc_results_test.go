@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"wt/internal/wt/core"
 	"wt/internal/wt/tree"
 )
 
@@ -94,5 +95,38 @@ func TestRunResults_DeletesTheScannedPath(t *testing.T) {
 	}
 	if exists(old) {
 		t.Errorf("the old candidate in MyWorkspace still exists: %+v", got)
+	}
+}
+
+// A worktree registered outside the container with the same folder name as one
+// inside: only the scanned (old, outside) one goes, and the inside one keeps
+// its directory and registry entry.
+func TestRunResults_OutsideWorktreeSameName(t *testing.T) {
+	f := newGCFixture(t) // commits dated 2020
+	outside := filepath.Join(t.TempDir(), "x")
+	f.git(f.main, "worktree", "add", "-b", "old-x", outside)
+
+	t.Setenv("GIT_AUTHOR_DATE", "")
+	t.Setenv("GIT_COMMITTER_DATE", "")
+	inside := filepath.Join(f.base, "x")
+	f.git(f.main, "worktree", "add", "-b", "x", inside)
+	f.git(inside, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "--allow-empty", "-m", "today")
+	f.git(inside, "push", "-u", "origin", "x")
+	if err := core.PutEntry(f.base, "x", &core.Entry{Branch: "x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := RunResults(io.Discard, Options{OlderThan: "1d", Yes: true, Force: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists(inside) {
+		t.Fatalf("the inside worktree was deleted: %+v", got)
+	}
+	if exists(outside) {
+		t.Errorf("the scanned outside worktree still exists: %+v", got)
+	}
+	if entries, _ := core.LoadEntries(f.base); entries["x"].Branch != "x" {
+		t.Errorf("the inside worktree's entry was removed: %+v", entries)
 	}
 }

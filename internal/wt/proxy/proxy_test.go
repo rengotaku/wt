@@ -175,7 +175,7 @@ func TestHandler_LANIndex_NoRoutes(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("code=%d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "wt serve") {
+	if !strings.Contains(rec.Body.String(), "wt service up") {
 		t.Errorf("empty index should mention how to start a dev server, body=%q", rec.Body.String())
 	}
 }

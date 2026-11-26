@@ -21,7 +21,7 @@ func registerRepoCmd(parent *cobra.Command) {
 		Short: "リポジトリを見る・足す・消す・同期する・設定する",
 	}
 	repoCmd.AddCommand(repoLsCmd(), repoShowCmd(), repoAddCmd(), repoInitCmd(), repoRmCmd(), repoSyncCmd(),
-		repoConfigCmd(), deprecate(repoRescueMainCmd(), "wt doctor --fix"))
+		repoConfigCmd())
 	parent.AddCommand(repoCmd)
 }
 
@@ -216,17 +216,6 @@ func repoSyncCmd() *cobra.Command {
 		return nil
 	}
 	return c
-}
-
-func repoRescueMainCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "rescue-main <repo>",
-		Short: "main/master フォルダに別ブランチが checkout された状態を修復（別ブランチを worktree 化して main/master に戻す）",
-		Args:  exactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return repo.RescueMain(cmd.OutOrStdout(), args[0])
-		},
-	}
 }
 
 // rangeArgs accepts between minN and maxN positional arguments.

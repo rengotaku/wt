@@ -1,6 +1,7 @@
 package core_test
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,13 +40,13 @@ func setupGitRepo(t *testing.T) string {
 // TestGitRun_ErrorContainsStderr verifies that when a git command fails,
 // the returned error contains the git stderr text (e.g. "fatal: ..."),
 // not just the opaque "exit status N".
-func TestGitRun_ErrorContainsStderr(t *testing.T) {
+func TestGitRunTo_ErrorContainsStderr(t *testing.T) {
 	dir := setupGitRepo(t)
 
 	// "main" is already checked out — adding a worktree for it must fail
 	// with a "fatal: already checked out" message from git.
 	worktreePath := t.TempDir()
-	err := core.GitRun(dir, "worktree", "add", worktreePath, "main")
+	err := core.GitRunTo(io.Discard, dir, "worktree", "add", worktreePath, "main")
 	if err == nil {
 		t.Fatal("expected error when adding worktree for already-checked-out branch, got nil")
 	}

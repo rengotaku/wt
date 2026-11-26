@@ -5,7 +5,6 @@
 package devserver
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -58,38 +57,6 @@ func (c Config) Validate() error {
 		seen[name] = true
 	}
 	return nil
-}
-
-// Save validates cfg and atomically writes it as .wt/dev.toml in the worktree,
-// creating the .wt directory as needed.
-func Save(worktree string, cfg Config) error {
-	if err := cfg.Validate(); err != nil {
-		return err
-	}
-	dir := filepath.Join(worktree, ".wt")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
-		return err
-	}
-	dst := ConfigPath(worktree)
-	tmp, err := os.CreateTemp(dir, "dev-*.toml.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(buf.Bytes()); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return os.Rename(tmpPath, dst)
 }
 
 // ConfigPath returns the .wt/dev.toml path for a worktree.
@@ -186,13 +153,6 @@ func EffectiveConfig(worktree string) (cfg Config, source string, err error) {
 		return c, SourceFile, nil
 	}
 	return Config{}, SourceNone, nil
-}
-
-// HasEffectiveConfig reports whether a worktree resolves to any dev config
-// (override, repo default, or committed file).
-func HasEffectiveConfig(worktree string) bool {
-	_, source, err := EffectiveConfig(worktree)
-	return err == nil && source != SourceNone
 }
 
 // applyPort substitutes ${port} in a command string with the given port.

@@ -456,17 +456,3 @@ func writeTail(w io.Writer, path string, n int) error {
 	_, err = fmt.Fprintln(w, strings.Join(ls, "\n"))
 	return err
 }
-
-// deprecate marks an old command as an alias of its noun-verb replacement:
-// it keeps working and prints the new name to stderr. (#188)
-func deprecate(c *cobra.Command, newName string) *cobra.Command {
-	prev := c.PreRunE
-	c.PreRunE = func(cmd *cobra.Command, args []string) error {
-		_, _ = fmt.Fprintf(stderr, "wt: %s は %s に移行しました（旧名は移行が終わると消えます）\n", cmd.CommandPath(), newName)
-		if prev != nil {
-			return prev(cmd, args)
-		}
-		return nil
-	}
-	return c
-}

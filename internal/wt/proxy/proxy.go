@@ -158,7 +158,7 @@ func Handler(routesFn func() ([]Route, error)) http.Handler {
 				return
 			}
 		}
-		http.Error(w, fmt.Sprintf("'%s.%s' に対応する worktree がありません（wt serve で起動済みか確認してください）", label, repo), http.StatusBadGateway)
+		http.Error(w, fmt.Sprintf("'%s.%s' に対応する worktree がありません（wt service up で起動済みか確認してください）", label, repo), http.StatusBadGateway)
 	})
 }
 
@@ -194,7 +194,7 @@ func writeLANIndex(w http.ResponseWriter, r *http.Request, routesFn func() ([]Ro
 	b.WriteString(`<h1>起動中の worktree</h1>`)
 
 	if len(routes) == 0 {
-		b.WriteString(`<p>起動中の dev サーバがありません（<code>wt serve</code> で起動してください）。</p>`)
+		b.WriteString(`<p>起動中の dev サーバがありません（<code>wt service up</code> で起動してください）。</p>`)
 	} else {
 		b.WriteString(`<ul>`)
 		for _, rt := range routes {

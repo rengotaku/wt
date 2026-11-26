@@ -175,3 +175,24 @@ func TestStalePort_RecheckBeforeDelete(t *testing.T) {
 		t.Errorf("deleted %v although the directory exists again", f.deleted)
 	}
 }
+
+// The same repository name in both workspaces: the repair resolves by name and
+// would act on the other one, so it must not run and must not report fixed.
+func TestMainBranch_SameNameElsewhere(t *testing.T) {
+	first := setup(t) // <home>/Workspace/app, found first by name
+	second := filepath.Join(filepath.Dir(filepath.Dir(first)), "MyWorkspace", "app")
+	if err := os.MkdirAll(filepath.Join(second, "main", ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(second, "main", &core.Entry{Type: "main", Branch: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	f := &fake{branch: "feat/x"}
+	got, _ := run(f.deps(), io.Discard, []string{second}, true)
+	if c := checks(got)["main_branch/main"]; c.Status != StatusFixFailed {
+		t.Errorf("got %+v", c)
+	}
+	if len(f.rescued) != 0 {
+		t.Errorf("rescue ran on %v; it would have acted on the other container", f.rescued)
+	}
+}

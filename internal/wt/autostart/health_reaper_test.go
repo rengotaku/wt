@@ -210,7 +210,7 @@ func TestHealthReaper_Tick_CooldownStopsInfiniteRetry(t *testing.T) {
 // test for a codex review P1 finding on #137: devserver.Serve always calls
 // Down internally before (re)starting, so a Serve call that fails to start a
 // crashed worktree also leaves running.json empty — exactly the same
-// on-disk state as an explicit `wt dev down`. Before the fix, Tick treated
+// on-disk state as an explicit `wt service down`. Before the fix, Tick treated
 // "Recorded is empty" as an unconditional "never served / explicitly
 // stopped" signal and dropped the retry counter after a single failed
 // Serve, permanently abandoning crash-recovery well before MaxRetries.

@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
+
 	"github.com/spf13/cobra"
 
 	"wt/internal/wt/core"
@@ -95,4 +99,17 @@ func policyInitCmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&repo, "repo", "", "リポジトリ名（省略時はカレント worktree）")
 	return c
+}
+
+// currentWorktree resolves the worktree root and its container from the cwd.
+func currentWorktree() (worktree, container, name string, err error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", "", "", err
+	}
+	top, err := core.GitOutput(cwd, "rev-parse", "--show-toplevel")
+	if err != nil || top == "" {
+		return "", "", "", errors.New("git worktree 内で実行してください")
+	}
+	return top, filepath.Dir(top), filepath.Base(top), nil
 }

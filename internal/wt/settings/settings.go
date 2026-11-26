@@ -4,7 +4,6 @@
 package settings
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,7 +37,7 @@ type IdleReaper struct {
 
 // PortReaper configures the ghost-port reaper: it periodically prunes
 // registry entries whose worktree directory is gone but whose port_base
-// still lingers (see `wt ports prune`).
+// still lingers (see `wt doctor --fix`).
 type PortReaper struct {
 	Enabled         bool `toml:"enabled"`
 	IntervalMinutes int  `toml:"interval_minutes"`
@@ -162,36 +161,6 @@ func Load() Settings {
 		return def
 	}
 	return loaded
-}
-
-// Save validates and atomically writes settings to disk.
-func Save(s *Settings) error {
-	if err := s.Validate(); err != nil {
-		return err
-	}
-	p := Path()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return err
-	}
-	var buf bytes.Buffer
-	if err := toml.NewEncoder(&buf).Encode(s); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(p), "settings-*.toml.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(buf.Bytes()); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		return err
-	}
-	return os.Rename(tmpPath, p)
 }
 
 // Validate ensures the dev port band is sane and fits at least one block.

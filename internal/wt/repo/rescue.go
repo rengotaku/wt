@@ -67,7 +67,7 @@ func RescueMain(out io.Writer, repoName string) error {
 	// 2) 退避したブランチを専用 worktree として作成（.worktrees.json も登録される）。
 	if _, err := tree.Add(nil, out, &tree.AddOptions{Repo: repoName, Branch: cur}); err != nil {
 		_, _ = fmt.Fprintf(out, "⚠️  %s: フォルダを %q に戻しましたが worktree 作成に失敗しました。\n", repoName, mainName)
-		_, _ = fmt.Fprintf(out, "   ブランチ %q は ref として残っています。手動で: wt tree add --repo %s --branch %s\n", cur, repoName, cur)
+		_, _ = fmt.Fprintf(out, "   ブランチ %q は ref として残っています。手動で: wt worktree add %s --branch %s\n", cur, repoName, cur)
 		return err
 	}
 

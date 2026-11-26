@@ -18,8 +18,8 @@ import (
 	"wt/internal/wt/tree"
 )
 
-// Options captures CLI flags for `wt tree gc`. The three groups (filter /
-// retention / safety) map onto the flag groups shown in `wt tree gc --help`.
+// Options captures CLI flags for `wt worktree gc`, grouped as filter /
+// retention / safety.
 type Options struct {
 	// --- filter ---
 	Done      bool   // --done: PR merged/closed または issue closed の worktree を対象
@@ -189,18 +189,10 @@ func realDeps(out io.Writer) deps {
 	}
 }
 
-// Run executes the cross-repo GC workflow.
-func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps(out)) }
-
 // RunResults is Run that also returns what happened to each worktree and
 // branch, for callers that print a result table.
 func RunResults(out io.Writer, opts Options) ([]Result, error) {
 	return runResults(out, opts, realDeps(out))
-}
-
-func run(out io.Writer, opts Options, d deps) error {
-	_, err := runResults(out, opts, d)
-	return err
 }
 
 // Results. Fixed words so callers can match on them.
@@ -456,9 +448,12 @@ func runResults(out io.Writer, opts Options, d deps) ([]Result, error) {
 			results = append(results, c.resultWith(ResultFailed, "ブランチ不明"))
 			continue
 		}
-		// Delete the scanned path, not whatever the names resolve to now:
-		// a same-named repo in the other workspace may come first.
-		if err := tree.RemoveAt(out, rmOpts, c.entry.Repo, c.entry.Container, c.entry.WtName); err != nil {
+		// Delete the scanned worktree itself (its path, which may be outside
+		// the container), and only while it is still on the scanned branch:
+		// rebuilding the path from names can hit another worktree.
+		iterOpts := rmOpts
+		iterOpts.Branch = c.branch
+		if err := tree.RemoveEntry(out, iterOpts, &c.entry); err != nil {
 			var kept *tree.BranchKeptError
 			if !errors.As(err, &kept) {
 				_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)

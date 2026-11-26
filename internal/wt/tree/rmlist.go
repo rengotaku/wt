@@ -2,7 +2,6 @@ package tree
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,20 +18,6 @@ type RmEntry struct {
 	Container string
 	TypeStr   string
 	Desc      string
-}
-
-// Display returns the human-readable name shown in pickers.
-func (r *RmEntry) Display() string {
-	return r.Repo + "/" + r.WtName
-}
-
-// Info returns the right-hand label (type / description).
-func (r *RmEntry) Info() string {
-	out := "[" + r.TypeStr + "]"
-	if r.Desc != "" {
-		out += " " + r.Desc
-	}
-	return out
 }
 
 // RmEntries enumerates removable worktrees across containers (excluding main/master).
@@ -98,26 +83,4 @@ func RmEntries() ([]RmEntry, error) {
 		return nil, errors.New("削除可能なworktreeがありません")
 	}
 	return items, nil
-}
-
-// RmList prints removable worktrees in the legacy format used by wt-tree-rm.sh.
-// Each line: "%-*s <info>|<wtPath>|<mainDir>|<wtName>|<container>".
-func RmList() error {
-	items, err := RmEntries()
-	if err != nil {
-		return err
-	}
-
-	maxWidth := 0
-	for i := range items {
-		if n := len(items[i].Display()); n > maxWidth {
-			maxWidth = n
-		}
-	}
-	maxWidth += 2
-	for i := range items {
-		it := &items[i]
-		fmt.Printf("%-*s %s|%s|%s|%s|%s\n", maxWidth, it.Display(), it.Info(), it.WtPath, it.MainDir, it.WtName, it.Container)
-	}
-	return nil
 }

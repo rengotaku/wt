@@ -112,23 +112,6 @@ func IsRunning(worktree string) bool {
 	return false
 }
 
-// RunStatus returns how many recorded services are still alive and how many
-// were recorded in total. total==0 means nothing is recorded (never started or
-// fully stopped). A worktree is "degraded" when 0 < alive < total — at least one
-// service that was started has since died while another is still up.
-func RunStatus(worktree string) (alive, total int) {
-	r, err := loadRunning(worktree)
-	if err != nil {
-		return 0, 0
-	}
-	for _, s := range r.Services {
-		if serviceAlive(s.PID) {
-			alive++
-		}
-	}
-	return alive, len(r.Services)
-}
-
 // AliveByPort returns the recorded services whose process is still alive, keyed
 // by their allocated port. This lets the ports view mark a service "up" via its
 // live PID even when it binds no TCP port (e.g. a headless worker/scheduler that
@@ -171,7 +154,7 @@ func Serve(out io.Writer, worktree string, base int) error {
 		return errors.New("dev 設定がありません（リポジトリ既定または worktree 上書きを設定してください）")
 	}
 	if base == 0 {
-		return errors.New("この worktree にはポートが割り当てられていません（wt tree add で作成した worktree が必要）")
+		return errors.New("この worktree にはポートが割り当てられていません（wt worktree add で作成した worktree か、wt doctor --fix で割り当てる）")
 	}
 	// Surface which config layer is in effect. When a committed .wt/dev.toml is
 	// shadowed by a stored override/default, editing the file silently has no
@@ -282,52 +265,6 @@ func logTail(worktree, svc string) string {
 type ServiceLog struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
-}
-
-// Logs returns each started service's captured log, capped to the last maxBytes
-// per service. Services are ordered by the effective dev config; extra logs
-// follow in filename order. Logs persist after a service stops, so a crashed
-// serve can still be inspected.
-func Logs(worktree string, maxBytes int) []ServiceLog {
-	entries, err := os.ReadDir(runDir(worktree))
-	if err != nil {
-		return nil
-	}
-	content := map[string]string{}
-	var fileOrder []string
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".log")
-		data, err := os.ReadFile(filepath.Join(runDir(worktree), e.Name()))
-		if err != nil {
-			continue
-		}
-		if maxBytes > 0 && len(data) > maxBytes {
-			data = data[len(data)-maxBytes:]
-		}
-		content[name] = string(data)
-		fileOrder = append(fileOrder, name)
-	}
-	if len(content) == 0 {
-		return nil
-	}
-	var out []ServiceLog
-	seen := map[string]bool{}
-	cfg, _, _ := EffectiveConfig(worktree)
-	for _, s := range cfg.Services {
-		if c, ok := content[s.Name]; ok {
-			out = append(out, ServiceLog{Name: s.Name, Content: c})
-			seen[s.Name] = true
-		}
-	}
-	for _, name := range fileOrder {
-		if !seen[name] {
-			out = append(out, ServiceLog{Name: name, Content: content[name]})
-		}
-	}
-	return out
 }
 
 // Down stops all services recorded for the worktree (killing the process group)

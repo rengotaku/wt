@@ -132,7 +132,7 @@ func occupiedPorts(start, end int) (map[int]bool, error) {
 	for _, a := range allocs {
 		// Ghost entries (worktree directory deleted, but the registry row and its
 		// port_base linger) must not reserve a block — otherwise removed worktrees
-		// permanently exhaust the band. `wt ports prune` clears the stale rows.
+		// permanently exhaust the band. `wt doctor --fix` clears the stale rows.
 		if !a.Exists {
 			continue
 		}
@@ -166,49 +166,9 @@ type Assignment struct {
 	PortBase int
 }
 
-// EnsureAll allocates and persists a port base for every registered worktree
-// that currently has none (base 0), across all containers. Worktrees that
-// already own a base are left untouched. It returns the assignments it made.
-//
-// This is how existing worktrees — created before allocation existed, or before
-// they were ever served — get ports without having to `wt serve` each one.
-func EnsureAll() ([]Assignment, error) {
-	var made []Assignment
-	for _, container := range core.ListContainers() {
-		entries, err := core.LoadEntries(container)
-		if err != nil {
-			continue
-		}
-		// Deterministic order so repeated runs assign the same blocks.
-		names := make([]string, 0, len(entries))
-		for name := range entries {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			e := entries[name]
-			if e.PortBase != 0 {
-				continue
-			}
-			// Allocate re-scans the registry each call, so a base persisted in a
-			// previous iteration is already counted as occupied here.
-			base, err := Allocate()
-			if err != nil {
-				return made, err
-			}
-			e.PortBase = base
-			if err := core.PutEntry(container, name, &e); err != nil {
-				return made, err
-			}
-			made = append(made, Assignment{Repo: filepath.Base(container), WtName: name, PortBase: base})
-		}
-	}
-	return made, nil
-}
-
 // EnsureBase returns the worktree's allocated port base, allocating and
 // persisting one to .worktrees.json when it currently has none (base 0). This
-// lets `wt serve` work on worktrees created before allocation existed.
+// lets `wt service up` work on worktrees created before allocation existed.
 func EnsureBase(container, wtName string) (int, error) {
 	entries, err := core.LoadEntries(container)
 	if err != nil {
@@ -234,7 +194,7 @@ func EnsureBase(container, wtName string) (int, error) {
 
 // Stale returns allocations that still reserve a port block in the registry but
 // whose worktree directory no longer exists — orphans left behind when a
-// worktree is removed outside `wt tree rm` (a manual `git worktree remove`, a
+// worktree is removed outside `wt worktree rm` (a manual `git worktree remove`, a
 // deleted directory, an interrupted create). A port is only assigned after the
 // directory is created, so a directory-less entry that still owns a port_base is
 // unambiguously a post-deletion remnant.

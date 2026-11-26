@@ -4,7 +4,7 @@ import "wt/internal/wt/core"
 
 // repoconfig.go manages the repository-wide default dev config stored in the
 // container's .worktrees.json (_config.dev_services). This default applies to
-// every worktree that has no per-worktree override, and is what `wt dev` edits.
+// every worktree that has no per-worktree override, and is what `wt repo config ... service` edits.
 
 // toCore converts runtime services into stored-metadata services.
 func toCore(services []Service) []core.DevService {

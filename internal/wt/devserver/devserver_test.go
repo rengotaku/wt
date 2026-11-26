@@ -172,44 +172,6 @@ cmd = "exit 1"
 	_ = Down(&buf, wt)
 }
 
-func TestRunStatus(t *testing.T) {
-	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolate run state
-	wt := t.TempDir()
-
-	// 何も記録されていなければ total==0。
-	if alive, total := RunStatus(wt); alive != 0 || total != 0 {
-		t.Fatalf("empty: alive=%d total=%d, want 0/0", alive, total)
-	}
-
-	// 縮退: 生存しているプロセスグループ leader と確実に死んでいる PID を 1 つずつ記録する。
-	// 2147483646 は未使用の高 PID なので存在しない＝死んでいる扱いになる。
-	const deadPID = 2147483646
-	live1 := spawnGroupLeader(t)
-	degraded := running{Services: []RunningService{
-		{Name: "alive", PID: live1, Port: 9000, Cmd: "x"},
-		{Name: "dead", PID: deadPID, Port: 9001, Cmd: "y"},
-	}}
-	if err := saveRunning(wt, degraded); err != nil {
-		t.Fatalf("saveRunning: %v", err)
-	}
-	if alive, total := RunStatus(wt); alive != 1 || total != 2 {
-		t.Errorf("degraded: alive=%d total=%d, want 1/2", alive, total)
-	}
-
-	// 全サービス生存: alive==total。
-	live2 := spawnGroupLeader(t)
-	healthy := running{Services: []RunningService{
-		{Name: "a", PID: live1, Port: 9000, Cmd: "x"},
-		{Name: "b", PID: live2, Port: 9001, Cmd: "y"},
-	}}
-	if err := saveRunning(wt, healthy); err != nil {
-		t.Fatalf("saveRunning: %v", err)
-	}
-	if alive, total := RunStatus(wt); alive != total || total != 2 {
-		t.Errorf("healthy: alive=%d total=%d, want alive==total==2", alive, total)
-	}
-}
-
 func TestAliveByPort(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir()) // isolate run state
 	wt := t.TempDir()
@@ -266,36 +228,6 @@ func TestConfigValidate(t *testing.T) {
 	}
 }
 
-func TestSave_RoundTripAndRejectsInvalid(t *testing.T) {
-	wt := t.TempDir()
-	cfg := Config{Services: []Service{
-		{Name: "api", Cmd: "go run . -p ${port}"},
-		{Name: "web", Cmd: "npm run dev", Domain: true},
-	}}
-	if err := Save(wt, cfg); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	if !HasConfig(wt) {
-		t.Fatal("HasConfig should be true after Save")
-	}
-	got, err := Load(wt)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(got.Services) != 2 || got.Services[0].Name != "api" || !got.Services[1].Domain {
-		t.Errorf("round-trip mismatch: %+v", got.Services)
-	}
-
-	// Invalid config must not be written.
-	wt2 := t.TempDir()
-	if err := Save(wt2, Config{}); err == nil {
-		t.Error("Save should reject empty config")
-	}
-	if HasConfig(wt2) {
-		t.Error("invalid Save must not create a dev.toml")
-	}
-}
-
 func TestEffectiveConfig_Precedence(t *testing.T) {
 	container := t.TempDir()
 	wtName := "feat-x"
@@ -338,28 +270,6 @@ func cmdOf(c Config) string {
 		return ""
 	}
 	return c.Services[0].Cmd
-}
-
-func TestLogs_CapturesOutputAndPersists(t *testing.T) {
-	t.Setenv("WT_NO_SYSTEMD_RUN", "1")
-	wt := writeWorktree(t, "[[services]]\nname = \"noisy\"\ncmd = \"echo HELLO_LOG_LINE; sleep 30\"\n")
-	var buf bytes.Buffer
-	if err := Serve(&buf, wt, 9000); err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
-	// Output is flushed during the startup grace, so it's available immediately.
-	logs := Logs(wt, 0)
-	if len(logs) != 1 || logs[0].Name != "noisy" {
-		t.Fatalf("logs = %+v, want one 'noisy' entry", logs)
-	}
-	if !strings.Contains(logs[0].Content, "HELLO_LOG_LINE") {
-		t.Errorf("log content missing output: %q", logs[0].Content)
-	}
-	// Logs persist after stop so a crashed/stopped serve stays inspectable.
-	_ = Down(&buf, wt)
-	if logs := Logs(wt, 0); len(logs) != 1 {
-		t.Errorf("logs should persist after Down, got %+v", logs)
-	}
 }
 
 func TestServe_NoConfig(t *testing.T) {

@@ -12,7 +12,6 @@ import (
 
 	"wt/internal/config"
 	"wt/internal/logger"
-	"wt/internal/wt/tree"
 )
 
 // Version is set at build time.
@@ -39,11 +38,6 @@ var rootCmd = &cobra.Command{
 		}))
 		return nil
 	},
-	// 引数なしで `wt` だけ叩いた場合は wt tree ls 相当の一覧出力。
-	RunE: func(_ *cobra.Command, _ []string) error {
-		tree.List()
-		return nil
-	},
 }
 
 var versionCmd = &cobra.Command{
@@ -57,17 +51,10 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
-	registerTreeCmd(rootCmd)
 	registerRepoCmd(rootCmd)
-	registerSymlinkCmd(rootCmd)
 	registerDaemonCmd(rootCmd)
-	registerStatusCmd(rootCmd)
 	registerWorktreeCmd(rootCmd)
 	registerServiceCmd(rootCmd)
-	registerPortsCmd(rootCmd)
-	registerServeCmd(rootCmd)
-	registerProxyCmd(rootCmd)
-	registerDevCmd(rootCmd)
 	registerPolicyCmd(rootCmd)
 	registerDoctorCmd(rootCmd)
 }

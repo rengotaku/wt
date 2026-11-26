@@ -26,7 +26,7 @@ import (
 const daemonLong = `常駐して次を行う（HTTP API は持たない）。
 
   - 内蔵 proxy（*.wt.localhost → 各 worktree の dev サーバー）。settings.toml [proxy]
-  - AutoStart の worktree を起動時に serve する（wt tree autostart で設定）
+  - AutoStart の worktree を起動時に serve する（wt worktree set <repo>/<wt> autostart=on で設定）
   - idle / port / health の各 reaper。settings.toml [idle_reaper] [port_reaper] [health_reaper]
 
 LaunchAgent などから起動する。SIGINT / SIGTERM で終了する。
@@ -34,9 +34,15 @@ LaunchAgent などから起動する。SIGINT / SIGTERM で終了する。
 proxy が有効で待ち受けに失敗した場合はエラーで終了する（サービスマネージャーの再起動に任せる）。`
 
 func registerDaemonCmd(parent *cobra.Command) {
-	// Bare `wt daemon` keeps running the daemon so existing LaunchAgents /
-	// systemd units work; the noun-verb form is `wt daemon run`. (#188)
-	c := deprecate(newDaemonRunCmd("daemon", "内蔵 proxy・AutoStart・reaper を常駐実行する（wt daemon run の旧名）"), "wt daemon run")
+	c := &cobra.Command{
+		Use:   "daemon",
+		Short: "常駐（内蔵 proxy・AutoStart・reaper）を動かす・状態を見る",
+		// Bare `wt daemon` used to run the daemon. An old LaunchAgent /
+		// systemd unit must fail visibly instead of exiting 0 with help.
+		RunE: func(*cobra.Command, []string) error {
+			return clierr.Usagef("常駐を起動するのは wt daemon run です（引数なしの wt daemon は廃止しました）")
+		},
+	}
 	c.AddCommand(newDaemonRunCmd("run", "内蔵 proxy・AutoStart・reaper を常駐実行する（--proxy-only で proxy だけ）"))
 	c.AddCommand(daemonStatusCmd())
 	parent.AddCommand(c)

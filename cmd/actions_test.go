@@ -98,22 +98,6 @@ func TestWorktreeSet(t *testing.T) {
 	}
 }
 
-func TestDeprecate(t *testing.T) {
-	var errOut bytes.Buffer
-	orig := stderr
-	stderr = &errOut
-	defer func() { stderr = orig }()
-
-	ran := false
-	c := deprecate(&cobra.Command{Use: "old", RunE: func(*cobra.Command, []string) error { ran = true; return nil }}, "wt new")
-	if _, err := runCmd(c); err != nil || !ran {
-		t.Fatalf("old command must still run: ran=%v err=%v", ran, err)
-	}
-	if !strings.Contains(errOut.String(), "wt new に移行しました") {
-		t.Errorf("stderr: %q", errOut.String())
-	}
-}
-
 func TestWorktreeRm_EmptyTargetIsUsageError(t *testing.T) {
 	setupContainer(t)
 	if _, err := runCmd(worktreeRmCmd(), "", "--yes"); clierr.ExitCode(err) != 2 {
@@ -143,5 +127,14 @@ func TestServiceLogs_OnlyKnownServices(t *testing.T) {
 		if _, err := runCmd(serviceLogsCmd(), "app/app--feat", name); clierr.ExitCode(err) != 3 {
 			t.Errorf("service %q: got %v, want exit 3", name, err)
 		}
+	}
+}
+
+// Bare `wt daemon` used to run the daemon; an old service definition must fail.
+func TestDaemonBareFails(t *testing.T) {
+	root := &cobra.Command{Use: "wt", SilenceErrors: true, SilenceUsage: true}
+	registerDaemonCmd(root)
+	if _, err := runCmd(root, "daemon"); clierr.ExitCode(err) != 2 {
+		t.Errorf("bare daemon: got %v, want exit 2", err)
 	}
 }
