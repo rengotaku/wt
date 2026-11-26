@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"wt/internal/cli/clierr"
 	"wt/internal/wt/autostart"
 	"wt/internal/wt/daemon"
 	"wt/internal/wt/proxy"
@@ -33,39 +34,69 @@ LaunchAgent などから起動する。SIGINT / SIGTERM で終了する。
 proxy が有効で待ち受けに失敗した場合はエラーで終了する（サービスマネージャーの再起動に任せる）。`
 
 func registerDaemonCmd(parent *cobra.Command) {
+	// Bare `wt daemon` keeps running the daemon so existing LaunchAgents /
+	// systemd units work; the noun-verb form is `wt daemon run`. (#188)
+	c := deprecate(newDaemonRunCmd("daemon", "内蔵 proxy・AutoStart・reaper を常駐実行する（wt daemon run の旧名）"), "wt daemon run")
+	c.AddCommand(newDaemonRunCmd("run", "内蔵 proxy・AutoStart・reaper を常駐実行する（--proxy-only で proxy だけ）"))
+	c.AddCommand(daemonStatusCmd())
+	parent.AddCommand(c)
+}
+
+func newDaemonRunCmd(use, short string) *cobra.Command {
 	var (
 		proxyPort int
 		noProxy   bool
+		proxyOnly bool
 	)
 	c := &cobra.Command{
-		Use:   "daemon",
-		Short: "内蔵 proxy・AutoStart・reaper を常駐実行する",
+		Use:   use,
+		Short: short,
 		Long:  daemonLong,
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			s := settings.Load()
 			if cmd.Flags().Changed("proxy-port") {
 				if proxyPort < 1 || proxyPort > 65535 {
-					return fmt.Errorf("--proxy-port は 1-65535 の範囲で指定してください: %d", proxyPort)
+					return clierr.Usagef("--proxy-port は 1-65535 の範囲で指定してください: %d", proxyPort)
 				}
 				s.Proxy.Port = proxyPort
 			}
+			if noProxy && proxyOnly {
+				return clierr.Usagef("--no-proxy と --proxy-only は同時に指定できません")
+			}
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			if proxyOnly {
+				return runProxyOnly(ctx, cmd.OutOrStdout(), s.Proxy)
+			}
 			lock, err := daemon.Acquire(daemon.LockPath())
 			if err != nil {
-				return err
+				return clierr.Preconditionf("%v", err)
 			}
 			defer func() { _ = lock.Close() }()
 			if noProxy {
 				s.Proxy.Enabled = false
 			}
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
 			return runDaemon(ctx, cmd.OutOrStdout(), &s, lock)
 		},
 	}
 	c.Flags().IntVar(&proxyPort, "proxy-port", settings.DefaultProxyPort, "内蔵 proxy のリッスンポート（settings.toml [proxy].port を上書き）")
 	c.Flags().BoolVar(&noProxy, "no-proxy", false, "内蔵 proxy を起動しない（settings.toml [proxy].enabled を上書き）")
-	c.AddCommand(daemonStatusCmd())
-	parent.AddCommand(c)
+	c.Flags().BoolVar(&proxyOnly, "proxy-only", false, "proxy だけを動かす（AutoStart・reaper は動かさず、daemon の lock も取らない）")
+	return c
+}
+
+// runProxyOnly serves the reverse proxy until ctx is cancelled. It does not
+// take the daemon lock: it manages no worktrees, only forwards requests.
+func runProxyOnly(ctx context.Context, out io.Writer, p settings.Proxy) error {
+	srv, err := startProxy(p)
+	if err != nil {
+		return clierr.Preconditionf("proxy の起動に失敗しました（port=%d）: %v", p.Port, err)
+	}
+	defer func() { _ = srv.Close() }()
+	_, _ = fmt.Fprintf(out, "wt proxy listening on http://%s (suffix %s)\n", srv.Addr, proxy.DomainSuffix)
+	<-ctx.Done()
+	return nil
 }
 
 // runDaemon starts every background job and blocks until ctx is cancelled.

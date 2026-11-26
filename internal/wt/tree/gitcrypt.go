@@ -131,7 +131,7 @@ func recoverSmudge(out io.Writer, mainDir, worktreePath, branchName, startPoint,
 func addWorktreeNewBranch(out io.Writer, mainDir, worktreePath, branchName, startPoint, containerDir string) error {
 	var errBuf bytes.Buffer
 	cmd := exec.Command("git", "-C", mainDir, "worktree", "add", worktreePath, "-b", branchName, startPoint)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = out // git's progress is not data: follow the caller's writer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &errBuf)
 	if err := cmd.Run(); err == nil {
 		if isGitCryptRepo(mainDir) {
@@ -150,7 +150,7 @@ func addWorktreeNewBranch(out io.Writer, mainDir, worktreePath, branchName, star
 func addWorktreeExistingBranch(out io.Writer, mainDir, worktreePath, branchName, containerDir string) error {
 	var errBuf bytes.Buffer
 	cmd := exec.Command("git", "-C", mainDir, "worktree", "add", worktreePath, branchName)
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = out // git's progress is not data: follow the caller's writer
 	cmd.Stderr = io.MultiWriter(os.Stderr, &errBuf)
 	if err := cmd.Run(); err == nil {
 		if isGitCryptRepo(mainDir) {

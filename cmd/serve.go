@@ -55,5 +55,5 @@ func registerServeCmd(parent *cobra.Command) {
 			return devserver.Down(cmd.OutOrStdout(), wt)
 		},
 	}
-	parent.AddCommand(serveCmd, downCmd)
+	parent.AddCommand(deprecate(serveCmd, "wt service up"), deprecate(downCmd, "wt service down"))
 }

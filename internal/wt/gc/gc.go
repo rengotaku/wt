@@ -31,6 +31,11 @@ type Options struct {
 	DryRun bool // --dry-run: 候補列挙のみ
 	Yes    bool // --yes: 確認なしで削除
 	Force  bool // --force: dirty も対象に含める
+	// Confirm, when set, is called after the candidates are listed and before
+	// anything is deleted; an error aborts. The same candidates are deleted
+	// (no re-scan), so what was confirmed is exactly what goes. Yes is ignored
+	// when Confirm is set.
+	Confirm func() error
 }
 
 // closedFilter reports whether the --done family (--done / --merged alias) is on.
@@ -171,19 +176,21 @@ type deps struct {
 	deleteBranch func(mainDir, branch string) error
 }
 
-func realDeps() deps {
+// realDeps wires the real implementations. git's output goes to out, the
+// caller's writer (stdout for the old `tree gc`, stderr for `worktree gc`).
+func realDeps(out io.Writer) deps {
 	return deps{
 		rmEntries:    tree.RmEntries,
 		repos:        listRepos,
 		prStates:     fetchPRStates,
 		issueState:   fetchIssueState,
 		probe:        gitBranchProbe,
-		deleteBranch: func(mainDir, branch string) error { return core.GitRun(mainDir, "branch", "-D", branch) },
+		deleteBranch: func(mainDir, branch string) error { return core.GitRunTo(out, mainDir, "branch", "-D", branch) },
 	}
 }
 
 // Run executes the cross-repo GC workflow.
-func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps()) }
+func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps(out)) }
 
 func run(out io.Writer, opts Options, d deps) error {
 	olderSecs, err := parseOlderThan(opts.OlderThan)
@@ -360,7 +367,7 @@ func run(out io.Writer, opts Options, d deps) error {
 		return nil
 	}
 
-	if opts.DryRun || !opts.Yes {
+	listCands := func() {
 		if len(cands) > 0 {
 			_, _ = fmt.Fprintf(out, "🔍 %d 件の候補:\n", len(cands))
 			for i := range cands {
@@ -373,6 +380,14 @@ func run(out io.Writer, opts Options, d deps) error {
 				_, _ = fmt.Fprintln(out, bDisplay(bCands[i]))
 			}
 		}
+	}
+	if opts.Confirm != nil && !opts.DryRun {
+		listCands()
+		if err := opts.Confirm(); err != nil {
+			return err
+		}
+	} else if opts.DryRun || !opts.Yes {
+		listCands()
 		if !opts.Yes && !opts.DryRun {
 			_, _ = fmt.Fprintln(out, "実行するには --yes を指定してください")
 		}
@@ -392,7 +407,9 @@ func run(out io.Writer, opts Options, d deps) error {
 		iterOpts := rmOpts
 		iterOpts.Branch = c.branch
 		iterOpts.Repo = c.entry.Repo
-		_ = tree.Rm(out, iterOpts)
+		if err := tree.Rm(out, iterOpts); err != nil {
+			_, _ = fmt.Fprintf(out, "⚠️  削除できませんでした: %s: %v\n", c.entry.WtPath, err)
+		}
 	}
 	for i := range bCands {
 		c := &bCands[i]

@@ -63,6 +63,7 @@ func init() {
 	registerDaemonCmd(rootCmd)
 	registerStatusCmd(rootCmd)
 	registerWorktreeCmd(rootCmd)
+	registerServiceCmd(rootCmd)
 	registerPortsCmd(rootCmd)
 	registerServeCmd(rootCmd)
 	registerProxyCmd(rootCmd)

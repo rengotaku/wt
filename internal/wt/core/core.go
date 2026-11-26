@@ -307,14 +307,19 @@ type gitError struct {
 func (e *gitError) Error() string { return e.stderr }
 func (e *gitError) Unwrap() error { return e.cause }
 
-// GitRun runs git -C <dir> <args...> forwarding stdout/stderr to the terminal.
+// GitRun runs git -C <dir> <args...> forwarding git's stdout to the
+// terminal's stdout (the old commands' behavior; see GitRunTo).
 // Stderr is also captured so that on failure the returned error contains the
 // git diagnostic text rather than just "exit status N".
-func GitRun(dir string, args ...string) error {
+func GitRun(dir string, args ...string) error { return GitRunTo(os.Stdout, dir, args...) }
+
+// GitRunTo is GitRun with git's stdout sent to w. The noun-verb commands pass
+// stderr so git's progress never mixes into their stdout result (#188).
+func GitRunTo(w io.Writer, dir string, args ...string) error {
 	full := append([]string{"-C", dir}, args...)
 	cmd := exec.Command("git", full...)
 	var stderrBuf bytes.Buffer
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = w
 	cmd.Stderr = io.MultiWriter(os.Stderr, &stderrBuf)
 	if err := cmd.Run(); err != nil {
 		if msg := strings.TrimSpace(stderrBuf.String()); msg != "" {
@@ -343,6 +348,21 @@ func IsDirty(wtPath string) bool {
 			continue
 		}
 		if !strings.HasPrefix(line, "??") {
+			return true
+		}
+	}
+	return false
+}
+
+// HasUntracked reports whether wtPath has untracked (not ignored) files.
+// It fails closed: if git cannot tell, it reports true so a delete stops.
+func HasUntracked(wtPath string) bool {
+	out, err := GitOutput(wtPath, "status", "--porcelain", "--untracked-files=normal")
+	if err != nil {
+		return true
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "??") {
 			return true
 		}
 	}

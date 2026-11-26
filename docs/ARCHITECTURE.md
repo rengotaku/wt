@@ -13,6 +13,7 @@ wt (cobra CLI)
 ├── policy                       リポジトリごとの AI 作業方針の解決
 ├── proxy                        ドメインルーティング (:8088、`wt daemon` に内蔵。単独起動も可)
 ├── repo ls / show、worktree ls / show、daemon status   見る系（名詞 → 動詞の新しい構成。#188）
+├── worktree add / rm / gc / set / update、service up / down / logs、daemon run   変える系（#188。旧コマンドは別名）
 ├── status                       状態の一覧（既定は AI 向けのタブ区切り、--json、--rich で人向け）
 └── daemon                       常駐: 内蔵 proxy + AutoStart 自動 serve + idle / port / health reaper
 ```
@@ -117,6 +118,7 @@ PR が merged で、HEAD がその PR の head と一致する（または祖先
 | 見る系の出力形式（全コマンド共通） | `internal/cli/out/` |
 | 終了コード・エラーの形 | `internal/cli/clierr/` |
 | 見る系のコマンド定義 | `cmd/views.go` |
+| 変える系のコマンド定義・確認の出し方・旧コマンドの案内 | `cmd/actions.go`（`confirm` / `deprecate`） |
 | `wt status` の列・状態の判定 | `internal/wt/status/status.go`（`stateOf`）。既定出力の列順は `TSVHeader` で、スクリプトが依存してよい |
 
 ## 検証ゲート

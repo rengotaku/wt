@@ -18,13 +18,13 @@ func registerTreeCmd(parent *cobra.Command) {
 		Short: "worktree 操作",
 	}
 
-	treeCmd.AddCommand(treeLsCmd())
-	treeCmd.AddCommand(treeRmListCmd())
-	treeCmd.AddCommand(treeAddCmd())
-	treeCmd.AddCommand(treeRmCmd())
-	treeCmd.AddCommand(treeGcCmd())
+	treeCmd.AddCommand(deprecate(treeLsCmd(), "wt worktree ls"))
+	treeCmd.AddCommand(deprecate(treeRmListCmd(), "wt worktree ls"))
+	treeCmd.AddCommand(deprecate(treeAddCmd(), "wt worktree add"))
+	treeCmd.AddCommand(deprecate(treeRmCmd(), "wt worktree rm"))
+	treeCmd.AddCommand(deprecate(treeGcCmd(), "wt worktree gc"))
 	treeCmd.AddCommand(treeFixCmd())
-	treeCmd.AddCommand(treeAutoStartCmd())
+	treeCmd.AddCommand(deprecate(treeAutoStartCmd(), "wt worktree set <ref> autostart=on|off"))
 
 	parent.AddCommand(treeCmd)
 }
