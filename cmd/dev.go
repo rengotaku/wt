@@ -23,7 +23,7 @@ func registerDevCmd(parent *cobra.Command) {
 		Short: "dev サービス設定（repo 既定 _config.dev_services）を CLI から編集",
 		Long: `現在の worktree が属するリポジトリの「repo 既定 dev サービス」(_config.dev_services) を
 編集する。ここで定義したサービスは、専用の上書きを持たない全 worktree の wt serve /
-Web の「起動」で使われる（メタデータ管理なのでリポジトリにはコミットされない）。
+wt daemon の AutoStart で使われる（メタデータ管理なのでリポジトリにはコミットされない）。
 
 スキーマ:
   - 各 service は宣言順に割当ブロックの base+i ポートを受け取り、cmd 内の ${port} に置換される。

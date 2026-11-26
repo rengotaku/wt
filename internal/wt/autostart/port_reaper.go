@@ -52,7 +52,7 @@ func (r *PortReaper) Run(ctx context.Context, out io.Writer) {
 
 // Tick prunes every stale (ghost) port allocation once, reporting each removed
 // entry to out. Errors are reported and swallowed — a failed sweep must not
-// crash the wt web process, only be retried on the next tick.
+// crash the wt daemon process, only be retried on the next tick.
 func (r *PortReaper) Tick(out io.Writer) {
 	removed, err := r.Prune(false)
 	if err != nil {

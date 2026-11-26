@@ -12,13 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: frontend/.node-version
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -27,17 +20,6 @@ jobs:
 
       - name: Install Go dependencies
         run: go mod download
-
-      - name: Build frontend (for go:embed)
-        run: cd frontend && npm ci && npm run build
-
-      # vite build が追跡下の internal/static/dist/.gitkeep を消すと、wt のクローンで
-      # 次の git pull（rebase）が未コミット変更で失敗する。ビルド後に作業ツリーが
-      # 汚れないことを機械的に確かめる。See #163.
-      - name: Verify frontend build leaves the work tree clean
-        run: |
-          test -f internal/static/dist/.gitkeep
-          test -z "$(git status --porcelain internal/static/dist)"
 
       - name: Lint
         uses: golangci/golangci-lint-action@v7

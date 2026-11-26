@@ -45,7 +45,7 @@ func registerServeCmd(parent *cobra.Command) {
 	}
 	downCmd := &cobra.Command{
 		Use:   "down",
-		Short: "カレント worktree の dev サービスのみ停止（wt-web 本体・他 worktree には影響しない）",
+		Short: "カレント worktree の dev サービスのみ停止（wt daemon・他 worktree には影響しない）",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wt, _, _, err := currentWorktree()
 			if err != nil {

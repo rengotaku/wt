@@ -1,6 +1,6 @@
 // Package autostart serves worktrees that are marked AutoStart in
-// .worktrees.json when the wt web server starts, so their dev environments
-// come up without a manual "serve" click.
+// .worktrees.json when `wt daemon` starts, so their dev environments
+// come up without a manual `wt serve`.
 package autostart
 
 import (
@@ -21,7 +21,7 @@ import (
 // reported to out and skipped — one broken worktree must not block the rest
 // of the sweep.
 //
-// Worktrees that are already running are left untouched: when wt web is merely
+// Worktrees that are already running are left untouched: when wt daemon is merely
 // restarted, in-flight dev servers keep running rather than being bounced.
 func ServeAutoStart(out io.Writer) int {
 	served := 0

@@ -1,46 +1,18 @@
-.PHONY: install build build-frontend run run-server run-frontend lint diff-check \
-	test test-cov check ci install-bin clean help
+.PHONY: install build lint diff-check test test-cov check ci install-bin clean help
 
 .DEFAULT_GOAL := help
 
 BINARY_NAME := wt
 BIN_DIR := bin
 COVERAGE_FILE := coverage.out
-FRONTEND_DIR := frontend
 
-## install: Download Go dependencies and frontend npm packages
+## install: Download Go dependencies
 install:
 	go mod download
-	cd $(FRONTEND_DIR) && npm ci
 
-## build-frontend: Build React SPA into internal/static/dist
-# .gitkeep は vite のプラグイン（frontend/vite.config.ts）がビルド後に書き戻す
-build-frontend:
-	cd $(FRONTEND_DIR) && npm run build
-
-## build: Build the monolithic binary (frontend embed + Go)
-# ldflags inject buildinfo so wt web can show a "binary may be stale" badge
-# when the source repo has advanced past the running binary's start time.
-# See internal/handler/buildinfo.go.
-build: build-frontend
-	go build \
-		-ldflags "\
-			-X wt/internal/buildinfo.Commit=$$(git rev-parse HEAD 2>/dev/null) \
-			-X wt/internal/buildinfo.CommitTime=$$(git log -1 --format=%ct HEAD 2>/dev/null) \
-			-X wt/internal/buildinfo.SourceRepo=$$(pwd)" \
-		-o $(BIN_DIR)/$(BINARY_NAME) .
-
-## run: Run Go (-tags dev) + Vite in parallel for hot-reload development
-run:
-	$(MAKE) -j2 run-server run-frontend
-
-## run-server: Run Go server with air hot-reload (-tags dev, listens on :8091)
-run-server:
-	air
-
-## run-frontend: Run Vite dev server (proxies /api to the air backend on :8091)
-run-frontend:
-	cd $(FRONTEND_DIR) && npm run dev
+## build: Build the binary
+build:
+	go build -o $(BIN_DIR)/$(BINARY_NAME) .
 
 ## lint: Run golangci-lint
 lint:
@@ -74,10 +46,9 @@ install-bin: build
 	cp $(BIN_DIR)/$(BINARY_NAME) $(HOME)/.config/wt/$(BINARY_NAME).new
 	mv -f $(HOME)/.config/wt/$(BINARY_NAME).new $(HOME)/.config/wt/$(BINARY_NAME)
 
-## clean: Remove build artifacts (keeps frontend node_modules)
+## clean: Remove build artifacts
 clean:
 	rm -rf $(BIN_DIR)/ $(COVERAGE_FILE)
-	find internal/static/dist -mindepth 1 ! -name '.gitkeep' -delete 2>/dev/null || true
 
 ## help: Show this help
 help:

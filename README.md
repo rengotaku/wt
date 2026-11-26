@@ -15,9 +15,12 @@ wt tree add <repo> <issue>  worktree を作成
 wt tree ls                  worktree 一覧
 wt tree rm                  worktree を削除
 wt tree gc                  マージ済み worktree を一括削除
+wt tree autostart <repo> <worktree> on|off  wt daemon 起動時に serve する対象を切り替え
 
 wt serve                    .wt/dev.toml のサーバーを割当ポートで起動
 wt down                     wt serve で起動したサーバーを停止
+wt daemon                   内蔵 proxy・AutoStart・各 reaper を常駐実行（HTTP API は持たない）
+wt proxy                    リバースプロキシだけを単独で起動
 
 wt dev add <name> --cmd <cmd> [--domain]  dev サービスを追加/更新（repo 既定）
 wt dev rm <name>            dev サービスを削除
@@ -32,7 +35,7 @@ wt policy init              方針ファイルのテンプレートを作成
 
 ## dev サービス設定（`wt dev`）
 
-worktree の dev サーバ（`wt serve` / Web の「起動」で使う）を CLI から設定できます。
+worktree の dev サーバ（`wt serve` / `wt daemon` の AutoStart で使う）を CLI から設定できます。
 `wt serve` と同じく **cwd ベース**で、現在の worktree が属するリポジトリの
 **repo 既定 dev サービス**（`<container>/.worktrees.json` の `_config.dev_services`）を編集します。
 ここで定義したサービスは、専用の上書きを持たない全 worktree に継承されます
@@ -56,7 +59,7 @@ wt dev validate
 
 dev 設定は次の優先順で実効化されます（`wt dev show` が実効ソースと警告を表示）:
 
-1. **worktree 上書き**（その worktree 専用・Web UI で設定）
+1. **worktree 上書き**（その worktree 専用。`.worktrees.json` の `dev_services`。CLI からは編集しない）
 2. **repo 既定**（`_config.dev_services` ＝ `wt dev` が編集する層）
 3. **コミット済み `.wt/dev.toml`**（リポジトリにコミットされたファイル）
 
@@ -80,38 +83,22 @@ wt policy path          # 絶対パス（未設定なら exit 1）
 
 `_config.ai_policy` はコンテナからの相対パスです。`../` などコンテナの外を指す指定は拒否します。
 
-## プロセス・メモリ使用量の監視
+## 常駐（`wt daemon`）
 
-Web UI の worktree 一覧は、dev サービスとして起動したプロセス群の合計メモリ使用量（RSS）を
-「状態」列に表示します。dev サービスのメモリ肥大（例: air/node の長時間運用）に一覧上で気付き、
-すぐ停止できるようにするための機能です。
+`wt daemon` は次をまとめて常駐実行します。LaunchAgent などから起動する想定です。
 
-- **状態の可視化**: worktree 合計 RSS がしきい値を超えると、状態列が `warn`（アンバー）/
-  `danger`（赤・行背景も赤）で強調表示されます。
-- **詳細オーバーレイ**: 状態列のメモリ表示をクリックすると、サービスごとの PID・ポート・
-  稼働/停止・プロセス数・メモリ・稼働時間の一覧がオーバーレイで確認できます。
+- 内蔵 proxy（`<label>.<repo>.wt.localhost` → 各 worktree の dev サーバー。`[proxy]`）
+- AutoStart の worktree を起動時に `serve`（`wt tree autostart` で設定）
+- idle / port / health の各 reaper（`[idle_reaper]` `[port_reaper]` `[health_reaper]`）
 
-### 設定項目 (`settings.toml`)
-
-`~/.config/wt/settings.toml` の `[process_stats]` セクションでしきい値（MB 単位）を変更できます。
-
-```toml
-[process_stats]
-warn_mb = 2048    # warn（アンバー）になるしきい値。既定: 2048 (2GiB)
-danger_mb = 4096  # danger（赤）になるしきい値。既定: 4096 (4GiB)
-```
-
-### 注意点
-
-- **Linux 専用**: `/proc/<pid>/stat` を直接読み、サービスのプロセスグループ単位で集計します。
-- **RSS は共有ページを重複カウント**するため、実メモリ消費よりやや大きめに出ます（目安として使ってください）。
+設定はすべて `~/.config/wt/settings.toml` です。Web UI と HTTP API は廃止しました（#178）。
 
 ## アイドル停止 (idle reaper)
 
-`wt web` は、pin されて自動 serve された dev サービスが一定時間アイドル状態（ブラウザ等から dev ポートへの通信がない状態）になった場合、自動で `down` しメモリを解放します。
+`wt daemon` は、AutoStart で自動 serve された dev サービスが一定時間アイドル状態（ブラウザ等から dev ポートへの通信がない状態）になった場合、自動で `down` しメモリを解放します。
 
 - 既定の挙動は `enabled=true`、TTL は 30分、監視間隔は 2分です（`~/.config/wt/settings.toml` の `[idle_reaper]` セクションで設定可能）。
-- **手動で serve した worktree は対象外**です（pin された worktree のみが自動 down します）。
+- **手動で serve した worktree は対象外**です（AutoStart の worktree のみが自動 down します）。
 - **注意**: vite の HMR websocket のようにブラウザタブが開きっぱなしでコネクションが維持されている場合や、兄弟サービス間での通信（ポート間の ESTABLISHED 接続）がある場合は「活動中」と見なされ、停止しません。
 
 ## git-crypt 対応
