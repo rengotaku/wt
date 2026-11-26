@@ -124,7 +124,8 @@ type EntryConfig struct {
 	// worktree that has no per-worktree override. Stored here (outside the repo)
 	// so it is never committed.
 	DevServices []DevService `json:"dev_services,omitempty"`
-	// Hidden marks the repository as hidden in the UI.
+	// Hidden marks the repository as hidden in the former Web UI. Kept so
+	// existing .worktrees.json files round-trip unchanged.
 	Hidden bool `json:"hidden,omitempty"`
 	// BranchPattern constrains branch names created by `wt tree add` for this
 	// repository. Empty or ".*" allows anything; see branchpattern.go.
@@ -183,7 +184,7 @@ type Entry struct {
 	// Pinned floats the worktree to the top of the list. It does not affect
 	// auto-serve; see AutoStart. Stored in metadata (not committed).
 	Pinned bool `json:"pinned,omitempty"`
-	// AutoStart marks the worktree for auto-serve when `wt web` starts and as
+	// AutoStart marks the worktree for auto-serve when `wt daemon` starts and as
 	// a candidate for the idle reaper. Independent of Pinned. Stored in
 	// metadata (not committed).
 	AutoStart bool `json:"auto_start,omitempty"`

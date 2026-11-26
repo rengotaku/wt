@@ -57,21 +57,14 @@ type HealthReaper struct {
 	MaxRetries      int  `toml:"max_retries"`
 }
 
-// ProcessStats configures memory thresholds for the process-stats view.
-type ProcessStats struct {
-	WarnMB   int `toml:"warn_mb"`
-	DangerMB int `toml:"danger_mb"`
-}
-
-// Proxy configures the built-in reverse proxy that `wt web` starts alongside
-// the API. Port is the listen port for `<label>.<repo>.wt.localhost`; Enabled
-// toggles auto-start at `wt web` startup; Bind is the listen address.
+// Proxy configures the built-in reverse proxy that `wt daemon` starts. Port is
+// the listen port for `<label>.<repo>.wt.localhost`; Enabled toggles starting
+// it with `wt daemon`; Bind is the listen address.
 //
 // Bind defaults to 0.0.0.0 so that a phone or another PC on the same LAN can
 // reach a worktree's dev server by name. Set it to 127.0.0.1 to go back to
 // loopback-only. Note this exposes every running dev server to the LAN, so it
-// is only appropriate on a network you trust. `wt web` (the management UI,
-// which can create and delete worktrees) stays on 127.0.0.1 regardless.
+// is only appropriate on a network you trust.
 type Proxy struct {
 	Enabled bool   `toml:"enabled"`
 	Port    int    `toml:"port"`
@@ -84,7 +77,6 @@ type Settings struct {
 	IdleReaper   IdleReaper   `toml:"idle_reaper"`
 	PortReaper   PortReaper   `toml:"port_reaper"`
 	HealthReaper HealthReaper `toml:"health_reaper"`
-	ProcessStats ProcessStats `toml:"process_stats"`
 	Proxy        Proxy        `toml:"proxy"`
 }
 
@@ -104,7 +96,6 @@ func Default() Settings {
 		IdleReaper:   IdleReaper{Enabled: true, TTLMinutes: 30, IntervalMinutes: 2},
 		PortReaper:   PortReaper{Enabled: true, IntervalMinutes: defaultPortReaperIntervalMinutes},
 		HealthReaper: HealthReaper{Enabled: true, IntervalMinutes: 2, CooldownMinutes: 10, MaxRetries: 3},
-		ProcessStats: ProcessStats{WarnMB: 2048, DangerMB: 4096},
 		Proxy:        Proxy{Enabled: true, Port: DefaultProxyPort, Bind: DefaultProxyBind},
 	}
 }
@@ -157,16 +148,6 @@ func Load() Settings {
 	}
 	if loaded.HealthReaper.MaxRetries <= 0 {
 		loaded.HealthReaper.MaxRetries = def.HealthReaper.MaxRetries
-	}
-	if loaded.ProcessStats.WarnMB <= 0 {
-		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
-	}
-	if loaded.ProcessStats.DangerMB <= 0 {
-		loaded.ProcessStats.DangerMB = def.ProcessStats.DangerMB
-	}
-	if loaded.ProcessStats.WarnMB >= loaded.ProcessStats.DangerMB {
-		loaded.ProcessStats.WarnMB = def.ProcessStats.WarnMB
-		loaded.ProcessStats.DangerMB = def.ProcessStats.DangerMB
 	}
 	if loaded.Proxy.Port <= 0 || loaded.Proxy.Port > 65535 {
 		loaded.Proxy.Port = def.Proxy.Port

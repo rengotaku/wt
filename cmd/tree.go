@@ -24,8 +24,37 @@ func registerTreeCmd(parent *cobra.Command) {
 	treeCmd.AddCommand(treeRmCmd())
 	treeCmd.AddCommand(treeGcCmd())
 	treeCmd.AddCommand(treeFixCmd())
+	treeCmd.AddCommand(treeAutoStartCmd())
 
 	parent.AddCommand(treeCmd)
+}
+
+func treeAutoStartCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "autostart <repo> <worktree> on|off",
+		Short: "worktree の AutoStart を切り替える（wt daemon 起動時に serve・idle reaper の対象）",
+		Long: `.worktrees.json の auto_start を書き換える。
+
+<worktree> は .worktrees.json のキー（wt tree ls の [<worktree> - <repo>]）。
+on にした worktree は wt daemon の起動時に serve され、idle reaper の停止対象になる。`,
+		Args: cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var on bool
+			switch args[2] {
+			case "on":
+				on = true
+			case "off":
+				on = false
+			default:
+				return fmt.Errorf("3 つ目の引数は on か off: %q", args[2])
+			}
+			if err := tree.SetAutoStart(args[0], args[1], on); err != nil {
+				return err
+			}
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "auto_start=%s: %s/%s\n", args[2], args[0], args[1])
+			return nil
+		},
+	}
 }
 
 func treeLsCmd() *cobra.Command {

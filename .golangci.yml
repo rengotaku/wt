@@ -14,9 +14,6 @@ linters:
         - diagnostic
         - style
         - performance
-  exclusions:
-    paths:
-      - frontend/node_modules
 
 formatters:
   enable:
