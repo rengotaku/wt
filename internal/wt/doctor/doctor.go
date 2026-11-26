@@ -91,11 +91,12 @@ func checkContainer(d *deps, progress io.Writer, container string, stale []ports
 		return []Finding{{Check: CheckMetadata, Repo: name, Status: StatusManual,
 			Detail: core.MetaFile(container) + " を読めない: " + err.Error()}}
 	}
-	var fs []Finding
+	// Stale entries go first: moving a branch off main creates a worktree
+	// and an entry, possibly under the name of a stale one.
+	fs := checkStale(d, container, stale, fix)
 	if f, ok := checkMainBranch(d, progress, container, fix); ok {
 		fs = append(fs, f)
 	}
-	fs = append(fs, checkStale(d, container, stale, fix)...)
 	fs = append(fs, checkUnallocated(d, container, entries, fix)...)
 	if f, ok := checkServiceConfig(container); ok {
 		fs = append(fs, f)
@@ -134,8 +135,14 @@ func checkMainBranch(d *deps, progress io.Writer, container string, fix bool) (F
 
 func checkStale(d *deps, container string, stale []ports.Allocation, fix bool) []Finding {
 	var fs []Finding
-	for _, a := range stale {
+	for i := range stale {
+		a := &stale[i]
 		if filepath.Dir(a.Path) != container {
+			continue
+		}
+		// The list was taken before this run changed anything. An entry that
+		// is no longer stale is not an inconsistency any more; never delete it.
+		if fix && !stillStale(container, a) {
 			continue
 		}
 		f := Finding{Check: CheckStalePort, Repo: a.Repo, Worktree: a.WtName, Status: StatusFound,
@@ -150,6 +157,20 @@ func checkStale(d *deps, container string, stale []ports.Allocation, fix bool) [
 		fs = append(fs, f)
 	}
 	return fs
+}
+
+// stillStale reports whether a's entry is still registered with the same port
+// block and its directory is still missing.
+func stillStale(container string, a *ports.Allocation) bool {
+	if isDir(a.Path) {
+		return false
+	}
+	entries, err := core.LoadEntries(container)
+	if err != nil {
+		return false
+	}
+	e, ok := entries[a.WtName]
+	return ok && e.PortBase == a.PortBase
 }
 
 func checkUnallocated(d *deps, container string, entries map[string]core.Entry, fix bool) []Finding {

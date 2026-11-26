@@ -96,6 +96,9 @@ func TestMainBranch(t *testing.T) {
 func TestStalePort_OnlyThisContainer(t *testing.T) {
 	container := setup(t)
 	other := filepath.Join(filepath.Dir(container), "other")
+	if err := core.PutEntry(container, "app--gone", &core.Entry{Branch: "g", PortBase: 9100}); err != nil {
+		t.Fatal(err)
+	}
 	f := &fake{branch: "main", stale: []ports.Allocation{
 		{Repo: "app", WtName: "app--gone", Path: filepath.Join(container, "app--gone"), PortBase: 9100},
 		{Repo: "other", WtName: "other--gone", Path: filepath.Join(other, "other--gone"), PortBase: 9200},
@@ -151,5 +154,24 @@ func TestMetadataUnreadable(t *testing.T) {
 	got, _ := run(f.deps(), io.Discard, []string{container}, true)
 	if c := checks(got)["metadata/"]; c.Status != StatusManual {
 		t.Errorf("unreadable metadata: %+v", got)
+	}
+}
+
+// An entry that stopped being stale after the list was taken is left alone.
+func TestStalePort_RecheckBeforeDelete(t *testing.T) {
+	container := setup(t)
+	path := filepath.Join(container, "app--back")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := core.PutEntry(container, "app--back", &core.Entry{Branch: "b", PortBase: 9100}); err != nil {
+		t.Fatal(err)
+	}
+	f := &fake{branch: "main", stale: []ports.Allocation{{Repo: "app", WtName: "app--back", Path: path, PortBase: 9100}}}
+	if _, err := run(f.deps(), io.Discard, []string{container}, true); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deleted) != 0 {
+		t.Errorf("deleted %v although the directory exists again", f.deleted)
 	}
 }

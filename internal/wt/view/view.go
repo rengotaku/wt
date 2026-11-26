@@ -92,6 +92,12 @@ func LoadRepo(repo string) (RepoDetail, error) {
 	if err != nil {
 		return RepoDetail{}, clierr.NotFoundf("リポジトリが見つかりません: %s", repo)
 	}
+	return LoadRepoAt(container)
+}
+
+// LoadRepoAt is LoadRepo for a container path.
+func LoadRepoAt(container string) (RepoDetail, error) {
+	repo := filepath.Base(container)
 	cfg, err := core.LoadConfig(container)
 	if err != nil {
 		return RepoDetail{}, err

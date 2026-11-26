@@ -40,6 +40,11 @@ func TestRun_RealFix(t *testing.T) {
 	if err := core.PutEntry(container, "app--gone", &core.Entry{Branch: "gone", PortBase: 9900}); err != nil {
 		t.Fatal(err)
 	}
+	// A stale entry under the name the rescue will create: the rescued
+	// worktree's new entry must survive.
+	if err := core.PutEntry(container, "app--feat-x", &core.Entry{Branch: "feat/x", PortBase: 9950}); err != nil {
+		t.Fatal(err)
+	}
 
 	got, err := Run(io.Discard, []string{container}, true)
 	if err != nil {
@@ -59,6 +64,9 @@ func TestRun_RealFix(t *testing.T) {
 	entries, _ := core.LoadEntries(container)
 	if _, ok := entries["app--gone"]; ok {
 		t.Error("stale entry still registered")
+	}
+	if e, ok := entries["app--feat-x"]; !ok || e.PortBase == 9950 || !isDir(filepath.Join(container, "app--feat-x")) {
+		t.Errorf("rescued worktree must have a fresh entry and directory: %+v ok=%v", e, ok)
 	}
 	if entries["app--old"].PortBase == 0 {
 		t.Error("app--old still has no ports")

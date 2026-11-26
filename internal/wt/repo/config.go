@@ -41,10 +41,16 @@ func ValidateSymlinkPath(p string) error {
 	return nil
 }
 
-// AddSymlink adds a symlink candidate. Adding an existing one is a no-op.
+// AddSymlink adds a symlink candidate. Adding an existing one is a no-op. The
+// path is stored cleaned: link creation counts "/" in it to build the relative
+// target, so "./node_modules" or "vendor/" would point to the wrong place.
 func AddSymlink(container, p string) error {
 	if err := ValidateSymlinkPath(p); err != nil {
 		return err
+	}
+	p = filepath.Clean(p)
+	if p == "." {
+		return fmt.Errorf("symlink 候補に worktree 自体は指定できません")
 	}
 	cfg, err := core.LoadConfig(container)
 	if err != nil {
@@ -60,6 +66,9 @@ func AddSymlink(container, p string) error {
 
 // RmSymlink removes a symlink candidate and reports whether it existed.
 func RmSymlink(container, p string) (bool, error) {
+	if p != "" {
+		p = filepath.Clean(p)
+	}
 	cfg, err := core.LoadConfig(container)
 	if err != nil {
 		return false, err

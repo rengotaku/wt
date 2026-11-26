@@ -34,7 +34,8 @@ type AddOptions struct {
 	GitCryptKey string // path to git-crypt key; stored in container _config
 }
 
-// Add clones a remote repository into the wt container layout.
+// Add clones a remote repository into the wt container layout and returns the
+// container it created.
 func Add(out io.Writer, opts AddOptions) (string, error) {
 	if opts.URL == "" {
 		return "", errors.New("Usage: wt repo add <url> [container_base]") //nolint:staticcheck // user-facing usage string
@@ -106,7 +107,7 @@ func Add(out io.Writer, opts AddOptions) (string, error) {
 
 	_, _ = fmt.Fprintln(out, "")
 	_, _ = fmt.Fprintf(out, "✅ 完了: %s\n", cloneDir)
-	return repoName, nil
+	return container, nil
 }
 
 // lsRemoteDefault asks `git ls-remote --symref <url> HEAD` for the default branch.

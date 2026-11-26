@@ -23,7 +23,14 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 		_, _ = fmt.Fprintln(out, "ℹ️  確認: wt repo ls")
 		return err
 	}
+	return RmAt(out, container, opts)
+}
 
+// RmAt is Rm for an already resolved container. Callers that preview and then
+// delete pass the same path to both calls, so the confirmed container is the
+// one deleted even if name resolution would now pick another.
+func RmAt(out io.Writer, container string, opts RmOptions) error {
+	repoName := filepath.Base(container)
 	mainDir, _ := core.ResolveMain(container)
 
 	_, _ = fmt.Fprintln(out, "削除対象:")
@@ -64,7 +71,7 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 	}
 	_, _ = fmt.Fprintf(out, "✅ コンテナ削除: %s\n", container)
 
-	if fi, err := os.Lstat(masterLink); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+	if fi, err := os.Lstat(masterLink); err == nil && fi.Mode()&os.ModeSymlink != 0 && linksInto(masterLink, container) {
 		if err := os.Remove(masterLink); err != nil {
 			return err
 		}
@@ -133,4 +140,19 @@ func checkRemovable(container, mainDir string) ([]string, error) {
 		return nil, fmt.Errorf("コンテナの外に worktree があるため削除しません（先に git worktree remove で外す）: %s", strings.Join(outside, ", "))
 	}
 	return linked, nil
+}
+
+// linksInto reports whether the symlink link points inside container. A link
+// of the same name may belong to a same-named container in another workspace.
+func linksInto(link, container string) bool {
+	dst, err := os.Readlink(link)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(dst) {
+		dst = filepath.Join(filepath.Dir(link), dst)
+	}
+	dst = filepath.Clean(dst)
+	c := filepath.Clean(container)
+	return dst == c || strings.HasPrefix(dst, c+string(filepath.Separator))
 }

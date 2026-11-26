@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,5 +64,31 @@ func TestSyncOne(t *testing.T) {
 	}
 	if r := syncOne("app", "main", mainDir); r.Result != SyncFailed {
 		t.Errorf("remote gone: %+v", r)
+	}
+}
+
+// Naming one container must not sync a same-named one in the other workspace.
+func TestSync_OnlyTheGivenContainer(t *testing.T) {
+	_, mainA := setupClone(t)
+	_, mainB := setupClone(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	var containers []string
+	for i, m := range []string{mainA, mainB} {
+		c := filepath.Join(home, []string{"Workspace", "MyWorkspace"}[i], "app")
+		if err := os.MkdirAll(c, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(m, filepath.Join(c, "main")); err != nil {
+			t.Fatal(err)
+		}
+		containers = append(containers, c)
+	}
+	got, err := Sync(io.Discard, containers[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Errorf("synced %d repos, want 1: %+v", len(got), got)
 	}
 }

@@ -78,7 +78,7 @@ func TestRepoConfig_Service(t *testing.T) {
 
 func TestRepoConfig_Symlink(t *testing.T) {
 	container := setupContainer(t)
-	for _, p := range []string{"vendor", "node_modules", "vendor"} {
+	for _, p := range []string{"vendor", "./node_modules", "vendor/"} {
 		if _, err := runCmd(repoConfigAddCmd(), "app", "symlink", p); err != nil {
 			t.Fatal(err)
 		}
@@ -123,5 +123,29 @@ func TestRepoRm_NeedsConfirmation(t *testing.T) {
 	}
 	if !strings.Contains(out, "result\tremoved") {
 		t.Errorf("output: %q", out)
+	}
+}
+
+// A base outside the workspaces must still print the repo just made.
+func TestRepoAdd_CustomBase(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	remote := filepath.Join(t.TempDir(), "proj")
+	if err := os.MkdirAll(remote, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"init", "-q", "--initial-branch=main"},
+		{"-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "a"}} {
+		if out, err := exec.Command("git", append([]string{"-C", remote}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	base := filepath.Join(home, "elsewhere")
+	got, err := runCmd(repoAddCmd(), remote, base)
+	if err != nil {
+		t.Fatalf("repo add: %v", err)
+	}
+	if want := "path\t" + filepath.Join(base, "proj") + "\n"; !strings.Contains(got, want) {
+		t.Errorf("output must show the created container %q, got:\n%s", want, got)
 	}
 }

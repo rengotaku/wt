@@ -79,11 +79,11 @@ func resolveMain(container string) (path, name string) {
 }
 
 // Sync runs git pull --ff-only on the main/master worktree of every container
-// in parallel, or only on repo when it is not empty. A repo named explicitly is
-// synced even when it is in the sync-skip list. Progress goes to progress; the
+// in parallel, or only on the container at path only when it is not empty. A
+// container named explicitly is synced even when it is in the sync-skip list. Progress goes to progress; the
 // per-repo outcome is returned sorted by repo name. Failures are reported in
 // the results, not as an error: the caller decides the exit code.
-func Sync(progress io.Writer, repo string) ([]SyncResult, error) {
+func Sync(progress io.Writer, only string) ([]SyncResult, error) {
 	home := os.Getenv("HOME")
 	skipSet := loadSyncSkipList(home)
 
@@ -103,22 +103,22 @@ func Sync(progress io.Writer, repo string) ([]SyncResult, error) {
 				continue
 			}
 			name := filepath.Base(container)
-			if repo != "" && name != repo {
+			if only != "" && filepath.Clean(container) != filepath.Clean(only) {
 				continue
 			}
 			mainPath, mainName := resolveMain(container)
 			if mainPath == "" {
 				continue
 			}
-			if _, ok := skipSet[name]; ok && repo == "" {
+			if _, ok := skipSet[name]; ok && only == "" {
 				results = append(results, SyncResult{Repo: name, Branch: mainName, Result: SyncSkipped, Detail: "sync-skip に載っている"})
 				continue
 			}
 			targets = append(targets, target{name: name, branch: mainBranchLabel(container, mainName), path: mainPath})
 		}
 	}
-	if repo != "" && len(targets) == 0 {
-		return nil, fmt.Errorf("リポジトリが見つかりません: %s", repo)
+	if only != "" && len(targets) == 0 {
+		return nil, fmt.Errorf("main / master が見つかりません: %s", only)
 	}
 
 	_, _ = fmt.Fprintf(progress, "⏳ %d リポを同期中...\n", len(targets))

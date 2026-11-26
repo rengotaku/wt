@@ -63,11 +63,17 @@ func repoAddCmd() *cobra.Command {
 		if len(args) == 2 {
 			opts.Base = args[1]
 		}
-		name, err := repo.Add(stderr, opts)
+		container, err := repo.Add(stderr, opts)
 		if err != nil {
 			return clierr.Preconditionf("%v", err)
 		}
-		return printRepo(cmd, o, name)
+		// Read the container just made: the base may be outside the
+		// workspaces that name lookup searches.
+		d, err := view.LoadRepoAt(container)
+		if err != nil {
+			return err
+		}
+		return writeRepoShow(cmd.OutOrStdout(), o, &d)
 	}
 	return c
 }
@@ -136,7 +142,7 @@ func repoRmCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		if err := repo.Rm(stderr, args[0], repo.RmOptions{}); err != nil {
+		if err := repo.RmAt(stderr, container, repo.RmOptions{}); err != nil {
 			return clierr.Preconditionf("%v", err)
 		}
 		result := "dry-run"
@@ -144,7 +150,7 @@ func repoRmCmd() *cobra.Command {
 			if err := confirm(yes, args[0]+" を丸ごと消しますか"); err != nil {
 				return err
 			}
-			if err := repo.Rm(stderr, args[0], repo.RmOptions{Force: true}); err != nil {
+			if err := repo.RmAt(stderr, container, repo.RmOptions{Force: true}); err != nil {
 				return clierr.Preconditionf("%v", err)
 			}
 			if _, err := os.Lstat(container); err == nil {
@@ -172,14 +178,15 @@ func repoSyncCmd() *cobra.Command {
 		if err := o.Validate(); err != nil {
 			return err
 		}
-		name := ""
+		only := ""
 		if len(args) == 1 {
-			if _, err := findRepo(args[0]); err != nil {
+			container, err := findRepo(args[0])
+			if err != nil {
 				return err
 			}
-			name = args[0]
+			only = container
 		}
-		results, err := repo.Sync(stderr, name)
+		results, err := repo.Sync(stderr, only)
 		if err != nil {
 			return clierr.NotFoundf("%v", err)
 		}
