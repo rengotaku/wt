@@ -11,6 +11,14 @@ import (
 // branch_pattern is absent entirely (existing containers must keep working).
 const DefaultBranchPattern = ".*"
 
+// ValidateBranchPattern reports whether pattern compiles as a branch_pattern.
+func ValidateBranchPattern(pattern string) error {
+	if _, err := compileBranchPattern(pattern); err != nil {
+		return fmt.Errorf("branch_pattern が正規表現として不正です: %w", err)
+	}
+	return nil
+}
+
 // compileBranchPattern anchors the configured pattern to the whole branch name.
 // Validation regexes that match substrings surprise their authors: a pattern
 // like `issue[0-9]+_dsc[0-9]+` would otherwise accept `feat/issue1_dsc2-wip`.

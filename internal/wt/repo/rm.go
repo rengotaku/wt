@@ -1,7 +1,6 @@
 package repo
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -47,19 +46,17 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 		_, _ = fmt.Fprintf(out, "  symlink: %s → %s\n", masterLink, dst)
 	}
 
-	if !opts.Force {
-		_, _ = fmt.Fprintln(out, "")
-		_, _ = fmt.Fprintln(out, "実行するには --force を指定してください")
-		return nil
-	}
-
-	// Every check runs before the first destructive step. #180
+	// Every check runs before the first destructive step (#180), and before
+	// the preview returns so a dry run already reports a refusal.
 	linked, err := checkRemovable(container, mainDir)
 	if err != nil {
 		return err
 	}
+	if !opts.Force {
+		return nil
+	}
 	for _, wt := range linked {
-		_ = core.GitRun(mainDir, "worktree", "remove", wt, "--force")
+		_ = core.GitRunTo(out, mainDir, "worktree", "remove", wt, "--force")
 	}
 
 	if err := os.RemoveAll(container); err != nil {
@@ -77,9 +74,6 @@ func Rm(out io.Writer, repoName string, opts RmOptions) error {
 	_, _ = fmt.Fprintf(out, "✅ 完了: %s\n", repoName)
 	return nil
 }
-
-// ErrUsage indicates incorrect arguments to repo rm.
-var ErrUsage = errors.New("Usage: wt repo rm <repo-name> [--force]") //nolint:staticcheck // user-facing usage string
 
 // checkRemovable verifies container is a wt-managed container that is a real
 // directory directly under a workspace dir, and that every linked worktree

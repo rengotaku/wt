@@ -14,6 +14,8 @@ wt (cobra CLI)
 ├── proxy                        ドメインルーティング (:8088、`wt daemon` に内蔵。単独起動も可)
 ├── repo ls / show、worktree ls / show、daemon status   見る系（名詞 → 動詞の新しい構成。#188）
 ├── worktree add / rm / gc / set / update、service up / down / logs、daemon run   変える系（#188。旧コマンドは別名）
+├── repo add / init / rm / sync / config                     リポジトリの変える系と設定（#188）
+├── doctor                       リポジトリ・worktree・ポートをまたぐ不整合の検出と修復（--fix）
 ├── status                       状態の一覧（既定は AI 向けのタブ区切り、--json、--rich で人向け）
 └── daemon                       常駐: 内蔵 proxy + AutoStart 自動 serve + idle / port / health reaper
 ```
@@ -26,7 +28,9 @@ wt (cobra CLI)
 | `internal/wt/core/` | コンテナ（`<base>/<repo>/`）と `.worktrees.json` の読み書き。リポジトリ名は `ValidateRepoName` で 1 階層の名前に限る（#180） |
 | `internal/wt/tree/` | worktree の add / rm / update / list / AutoStart 切替（`SetAutoStart`） |
 | `internal/wt/devserver/` | dev サービスの serve / down / logs / 実行状態（`running.json`） |
-| `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（Linux は `ss`、無ければ `lsof`。macOS は `lsof`）・doctor |
+| `internal/wt/ports/` | ポートブロック割当・LISTEN/ESTABLISHED 検出（Linux は `ss`、無ければ `lsof`。macOS は `lsof`）・`ports --all` の一覧 |
+| `internal/wt/repo/` | リポジトリの add / init / rm / sync / rescue-main と設定（`config.go`: branch_pattern・symlink 候補）。`Sync` は結果を返し、終了コードは呼び出し側が決める |
+| `internal/wt/doctor/` | `wt doctor` の検査（main_branch / stale_port / unallocated_port / service_config / metadata）と `--fix` の修復。修復は `repo.RescueMain`・`core.DeleteEntry`・`ports.EnsureBase` を呼ぶ |
 | `internal/wt/autostart/` | AutoStart 自動 serve（`ServeAutoStart`）/ idle reaper（`Reaper`）/ 幽霊ポート reaper（`PortReaper`）/ クラッシュ検知＆自動復帰 reaper（`HealthReaper`） |
 | `internal/cli/out/` | 見る系の出力の共通部品（既定のタブ区切り・`--json`・`--rich`） |
 | `internal/cli/clierr/` | エラーの種類と終了コード（0 成功 / 1 予期しない / 2 使い方 / 3 対象が無い / 4 前提を満たさない / 5 外部コマンド）。`main.go` が出力と終了コードを決める |

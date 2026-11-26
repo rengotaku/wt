@@ -92,15 +92,26 @@ func repoShowCmd() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		t := kvTable([][2]string{
-			{"repo", d.Repo}, {"path", d.Path}, {"main", d.Main}, {"default_branch", d.DefaultBranch},
-			{"branch_pattern", d.BranchPattern}, {"symlink_candidates", strings.Join(d.SymlinkCandidates, ",")},
-			{"dev_services", strings.Join(d.DevServices, ",")}, {"ai_policy", d.AIPolicy},
-			{"worktrees", fmt.Sprint(d.Worktrees)},
-		})
-		return out.Render(cmd.OutOrStdout(), o, t, d, "")
+		return writeRepoShow(cmd.OutOrStdout(), o, &d)
 	}
 	return c
+}
+
+// writeRepoShow prints a repository in the `repo show` form. Write commands on
+// a repository print this as their result.
+func writeRepoShow(w io.Writer, o *out.Opts, d *view.RepoDetail) error {
+	kv := [][2]string{
+		{"repo", d.Repo}, {"path", d.Path}, {"main", d.Main}, {"default_branch", d.DefaultBranch},
+		{"branch_pattern", d.BranchPattern}, {"symlink_candidates", strings.Join(d.SymlinkCandidates, ",")},
+		{"dev_services", strings.Join(d.DevServices, ",")}, {"ai_policy", d.AIPolicy},
+		{"worktrees", fmt.Sprint(d.Worktrees)},
+	}
+	for _, s := range d.Services {
+		p := "service." + s.Name + "."
+		kv = append(kv, [2]string{p + "cmd", s.Cmd}, [2]string{p + "domain", out.OnOff(s.Domain)},
+			[2]string{p + "headless", out.OnOff(s.Headless)})
+	}
+	return out.Render(w, o, kvTable(kv), d, "")
 }
 
 func registerWorktreeCmd(parent *cobra.Command) {

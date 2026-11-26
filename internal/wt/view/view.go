@@ -79,6 +79,8 @@ type RepoDetail struct {
 	DevServices       []string `json:"dev_services"`
 	AIPolicy          string   `json:"ai_policy"`
 	Worktrees         int      `json:"worktrees"`
+	// Services are the repo-wide default dev services in full.
+	Services []core.DevService `json:"services"`
 }
 
 // LoadRepo reads the repository's configuration.
@@ -109,9 +111,11 @@ func LoadRepo(repo string) (RepoDetail, error) {
 		DevServices:       []string{},
 		AIPolicy:          cfg.AIPolicy,
 		Worktrees:         len(entries),
+		Services:          []core.DevService{},
 	}
 	for _, s := range cfg.DevServices {
 		d.DevServices = append(d.DevServices, s.Name)
+		d.Services = append(d.Services, s)
 	}
 	return d, nil
 }

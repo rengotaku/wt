@@ -35,9 +35,9 @@ type AddOptions struct {
 }
 
 // Add clones a remote repository into the wt container layout.
-func Add(out io.Writer, opts AddOptions) error {
+func Add(out io.Writer, opts AddOptions) (string, error) {
 	if opts.URL == "" {
-		return errors.New("Usage: wt add <url> [container_base]") //nolint:staticcheck // user-facing usage string
+		return "", errors.New("Usage: wt repo add <url> [container_base]") //nolint:staticcheck // user-facing usage string
 	}
 	url := httpsToSSH(opts.URL)
 	targetBase := opts.Base
@@ -50,7 +50,7 @@ func Add(out io.Writer, opts AddOptions) error {
 	repoName := strings.TrimSuffix(filepath.Base(url), ".git")
 	container := filepath.Join(targetBase, repoName)
 	if _, err := os.Stat(container); err == nil {
-		return fmt.Errorf("コンテナが既に存在します: %s", container)
+		return "", fmt.Errorf("コンテナが既に存在します: %s", container)
 	}
 
 	_, _ = fmt.Fprintln(out, "ℹ️  デフォルトブランチを確認中...")
@@ -66,18 +66,18 @@ func Add(out io.Writer, opts AddOptions) error {
 	cloneDir := filepath.Join(container, defaultB)
 	_, _ = fmt.Fprintf(out, "📦 clone: %s → %s\n", url, cloneDir)
 	if err := os.MkdirAll(container, 0o755); err != nil {
-		return err
+		return "", err
 	}
 	cmd := exec.Command("git", "clone", url, cloneDir)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(container)
-		return errors.New("clone に失敗しました")
+		return "", errors.New("clone に失敗しました")
 	}
 
 	if err := initEmptyRepo(out, cloneDir, repoName, defaultB); err != nil {
-		return err
+		return "", err
 	}
 
 	if err := core.PutEntry(container, defaultB, &core.Entry{
@@ -86,11 +86,11 @@ func Add(out io.Writer, opts AddOptions) error {
 		Branch:      defaultB,
 		Description: "main worktree",
 	}); err != nil {
-		return err
+		return "", err
 	}
 	cfg := core.EntryConfig{SymlinkCandidates: []string{}, GitCryptKey: opts.GitCryptKey, BranchPattern: core.DefaultBranchPattern}
 	if err := core.SaveConfig(container, &cfg); err != nil {
-		return err
+		return "", err
 	}
 	if opts.GitCryptKey != "" {
 		_, _ = fmt.Fprintf(out, "🔐 git-crypt key: %s\n", opts.GitCryptKey)
@@ -101,12 +101,12 @@ func Add(out io.Writer, opts AddOptions) error {
 	_ = os.MkdirAll(masterDir, 0o755)
 	link := filepath.Join(masterDir, repoName)
 	if err := ensureSymlink(out, link, cloneDir); err != nil {
-		return err
+		return "", err
 	}
 
 	_, _ = fmt.Fprintln(out, "")
 	_, _ = fmt.Fprintf(out, "✅ 完了: %s\n", cloneDir)
-	return nil
+	return repoName, nil
 }
 
 // lsRemoteDefault asks `git ls-remote --symref <url> HEAD` for the default branch.

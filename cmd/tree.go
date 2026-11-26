@@ -23,7 +23,7 @@ func registerTreeCmd(parent *cobra.Command) {
 	treeCmd.AddCommand(deprecate(treeAddCmd(), "wt worktree add"))
 	treeCmd.AddCommand(deprecate(treeRmCmd(), "wt worktree rm"))
 	treeCmd.AddCommand(deprecate(treeGcCmd(), "wt worktree gc"))
-	treeCmd.AddCommand(treeFixCmd())
+	treeCmd.AddCommand(deprecate(treeFixCmd(), "wt doctor --fix"))
 	treeCmd.AddCommand(deprecate(treeAutoStartCmd(), "wt worktree set <ref> autostart=on|off"))
 
 	parent.AddCommand(treeCmd)

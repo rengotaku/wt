@@ -14,7 +14,7 @@ func registerSymlinkCmd(parent *cobra.Command) {
 		Short: "worktree 作成時の symlink 候補を編集",
 	}
 
-	c.AddCommand(&cobra.Command{
+	c.AddCommand(deprecate(&cobra.Command{
 		Use:   "ls <repo>",
 		Short: "symlink 候補一覧",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -23,9 +23,9 @@ func registerSymlinkCmd(parent *cobra.Command) {
 			}
 			return symlink.Ls(cmd.OutOrStdout(), args[0])
 		},
-	})
+	}, "wt repo show <repo>"))
 
-	c.AddCommand(&cobra.Command{
+	c.AddCommand(deprecate(&cobra.Command{
 		Use:   "add <repo> <sub-path>",
 		Short: "symlink 候補を追加",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -34,9 +34,9 @@ func registerSymlinkCmd(parent *cobra.Command) {
 			}
 			return symlink.Add(cmd.OutOrStdout(), args[0], args[1])
 		},
-	})
+	}, "wt repo config add <repo> symlink <path>"))
 
-	c.AddCommand(&cobra.Command{
+	c.AddCommand(deprecate(&cobra.Command{
 		Use:   "rm <repo> <sub-path>",
 		Short: "symlink 候補を削除",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -45,7 +45,7 @@ func registerSymlinkCmd(parent *cobra.Command) {
 			}
 			return symlink.Rm(cmd.OutOrStdout(), args[0], args[1])
 		},
-	})
+	}, "wt repo config rm <repo> symlink <path>"))
 
 	parent.AddCommand(c)
 }
