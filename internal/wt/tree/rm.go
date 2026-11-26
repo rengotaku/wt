@@ -160,7 +160,7 @@ func performDelete(out io.Writer, opts RmOptions, t *RmEntry) error {
 
 	// Stop before touching the registry if git refuses (locked worktree etc.):
 	// otherwise the directory stays but wt forgets it.
-	if err := core.GitRun(t.MainDir, "worktree", "remove", t.WtPath, "--force"); err != nil {
+	if err := core.GitRunTo(out, t.MainDir, "worktree", "remove", t.WtPath, "--force"); err != nil {
 		return fmt.Errorf("worktree を削除できませんでした: %s: %w", t.WtPath, err)
 	}
 

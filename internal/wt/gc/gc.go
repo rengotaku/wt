@@ -176,19 +176,21 @@ type deps struct {
 	deleteBranch func(mainDir, branch string) error
 }
 
-func realDeps() deps {
+// realDeps wires the real implementations. git's output goes to out, the
+// caller's writer (stdout for the old `tree gc`, stderr for `worktree gc`).
+func realDeps(out io.Writer) deps {
 	return deps{
 		rmEntries:    tree.RmEntries,
 		repos:        listRepos,
 		prStates:     fetchPRStates,
 		issueState:   fetchIssueState,
 		probe:        gitBranchProbe,
-		deleteBranch: func(mainDir, branch string) error { return core.GitRun(mainDir, "branch", "-D", branch) },
+		deleteBranch: func(mainDir, branch string) error { return core.GitRunTo(out, mainDir, "branch", "-D", branch) },
 	}
 }
 
 // Run executes the cross-repo GC workflow.
-func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps()) }
+func Run(out io.Writer, opts Options) error { return run(out, opts, realDeps(out)) }
 
 func run(out io.Writer, opts Options, d deps) error {
 	olderSecs, err := parseOlderThan(opts.OlderThan)
