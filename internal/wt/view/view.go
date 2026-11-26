@@ -134,6 +134,7 @@ type ServiceDetail struct {
 	PID       int    `json:"pid,omitempty"`
 	Proc      string `json:"proc,omitempty"`
 	Headless  bool   `json:"headless"`
+	Domain    bool   `json:"domain"` // reachable by name through the proxy
 	Log       string `json:"log"`
 	Listening bool   `json:"listening"`
 }
@@ -186,6 +187,7 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 		}
 		if sd.Name != "" {
 			sd.Log = devserver.LogPath(r.Path, sd.Name)
+			sd.Domain = domainOf(cfg.Services, sd.Name)
 		}
 		switch {
 		case s.Unhealthy:
@@ -197,7 +199,29 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 		}
 		d.Services = append(d.Services, sd)
 	}
+	// Configured services without a port yet (the worktree has no port block,
+	// as main until its first `service up`) are still part of the worktree.
+	listed := map[string]bool{}
+	for _, sd := range d.Services {
+		listed[sd.Name] = true
+	}
+	for _, c := range cfg.Services {
+		if listed[c.Name] {
+			continue
+		}
+		d.Services = append(d.Services, ServiceDetail{Name: c.Name, State: "stopped", Headless: c.Headless,
+			Domain: c.Domain, Log: devserver.LogPath(r.Path, c.Name)})
+	}
 	return d, nil
+}
+
+func domainOf(svcs []devserver.Service, name string) bool {
+	for _, s := range svcs {
+		if s.Name == name {
+			return s.Domain
+		}
+	}
+	return false
 }
 
 // defaultBranch reads origin/HEAD ("" when unknown). The main dir's name

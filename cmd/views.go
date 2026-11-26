@@ -256,14 +256,15 @@ func writeWorktreeShow(w io.Writer, o *out.Opts, d *view.WorktreeDetail) error {
 		}
 		st := &out.Table{Header: serviceHeader}
 		for _, s := range d.Services {
-			st.Rows = append(st.Rows, []string{s.Name, fmt.Sprint(s.Port), s.State, out.Itoa(s.PID), s.Proc, s.Log})
+			st.Rows = append(st.Rows, []string{s.Name, out.Itoa(s.Port), s.State, out.Itoa(s.PID), s.Proc, s.Log})
 		}
 		return out.WriteRich(w, st, "\nservices", color)
 	default:
 		for _, s := range d.Services {
 			p := "service." + out.Cell(s.Name) + "."
-			kv = append(kv, [2]string{p + "port", fmt.Sprint(s.Port)}, [2]string{p + "state", s.State},
-				[2]string{p + "pid", out.Itoa(s.PID)}, [2]string{p + "proc", s.Proc}, [2]string{p + "log", s.Log})
+			kv = append(kv, [2]string{p + "port", out.Itoa(s.Port)}, [2]string{p + "state", s.State},
+				[2]string{p + "pid", out.Itoa(s.PID)}, [2]string{p + "proc", s.Proc}, [2]string{p + "log", s.Log},
+				[2]string{p + "domain", out.OnOff(s.Domain)})
 		}
 		return out.WriteTSV(w, kvTable(kv))
 	}
