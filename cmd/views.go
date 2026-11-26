@@ -52,9 +52,28 @@ func repoLsCmd() *cobra.Command {
 			t.Rows = append(t.Rows, []string{s.Repo, s.Path, fmt.Sprint(s.Worktrees), fmt.Sprint(s.Running),
 				fmt.Sprint(s.Unhealthy), fmt.Sprint(s.Idle), fmt.Sprint(s.Stale), fmt.Sprint(s.AutoStart)})
 		}
-		return out.Render(cmd.OutOrStdout(), o, t, sums, "")
+		if err := out.Render(cmd.OutOrStdout(), o, t, sums, ""); err != nil {
+			return err
+		}
+		return unreadableMeta(containers)
 	}
 	return c
+}
+
+// unreadableMeta reports containers whose .worktrees.json cannot be read.
+// The listing is still printed (they show as 0 worktrees); this error comes
+// after it so a script can tell "empty" from "could not read" (exit 4).
+func unreadableMeta(containers []string) error {
+	var bad []string
+	for _, c := range containers {
+		if _, err := core.LoadEntries(c); err != nil {
+			bad = append(bad, core.MetaFile(c)+" ("+err.Error()+")")
+		}
+	}
+	if len(bad) > 0 {
+		return clierr.Preconditionf("読めない .worktrees.json があります（一覧では 0 件として出しています）: %s", strings.Join(bad, ", "))
+	}
+	return nil
 }
 
 func repoShowCmd() *cobra.Command {
@@ -123,7 +142,13 @@ func worktreeLsCmd() *cobra.Command {
 			w := &wts[i]
 			t.Rows = append(t.Rows, []string{w.Repo, w.Worktree, w.Branch, w.State, w.Ports, out.OnOff(w.AutoStart), w.URL})
 		}
-		return out.Render(cmd.OutOrStdout(), o, t, wts, "")
+		if err := out.Render(cmd.OutOrStdout(), o, t, wts, ""); err != nil {
+			return err
+		}
+		if container == "" {
+			return unreadableMeta(core.ListContainers())
+		}
+		return unreadableMeta([]string{container})
 	}
 	return c
 }
@@ -244,17 +269,21 @@ func daemonStatusCmd() *cobra.Command {
 		if err := o.Validate(); err != nil {
 			return err
 		}
-		running, pid, err := daemon.Probe(daemon.LockPath())
+		info, err := daemon.Probe(daemon.LockPath())
 		if err != nil {
 			return err
 		}
-		rep := status.Build(&status.Input{Daemon: status.Daemon{Running: running, PID: pid}, Proxy: settings.Load().Proxy})
+		rep := status.Build(&status.Input{
+			Daemon:      status.Daemon{Running: info.Running, PID: info.PID},
+			Proxy:       settings.Load().Proxy,
+			DaemonProxy: info.Proxy, DaemonProxyKnown: info.ProxyKnown,
+		})
 		state := "stopped"
-		if running {
+		if info.Running {
 			state = "running"
 		}
 		t := kvTable([][2]string{
-			{"daemon", state}, {"pid", out.Itoa(pid)},
+			{"daemon", state}, {"pid", out.Itoa(info.PID)},
 			{"proxy", map[bool]string{true: "enabled", false: "disabled"}[rep.Proxy.Enabled]}, {"proxy_addr", rep.Proxy.Addr},
 		})
 		data := map[string]any{"daemon": rep.Daemon, "proxy": rep.Proxy}

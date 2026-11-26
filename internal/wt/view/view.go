@@ -6,6 +6,7 @@ package view
 import (
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"wt/internal/cli/clierr"
 	"wt/internal/wt/core"
@@ -97,12 +98,12 @@ func LoadRepo(repo string) (RepoDetail, error) {
 	if err != nil {
 		return RepoDetail{}, err
 	}
-	mainDir, mainName := core.ResolveMain(container)
+	mainDir, _ := core.ResolveMain(container)
 	d := RepoDetail{
 		Repo:              repo,
 		Path:              container,
 		Main:              mainDir,
-		DefaultBranch:     mainName,
+		DefaultBranch:     defaultBranch(mainDir),
 		BranchPattern:     cfg.BranchPattern,
 		SymlinkCandidates: nonNil(cfg.SymlinkCandidates),
 		DevServices:       []string{},
@@ -155,6 +156,12 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 	e := entries[r.Worktree]
 	d := WorktreeDetail{Worktree: *w, Issue: e.Issue, Created: e.Created, Services: []ServiceDetail{}}
 	cfg, _, _ := devserver.EffectiveConfig(r.Path)
+	// Names recorded when the services were started win over the current
+	// config: the config may have been reordered since. #189
+	recorded := map[int]string{}
+	for _, rs := range devserver.Recorded(r.Path) {
+		recorded[rs.Port] = rs.Name
+	}
 	for i, s := range w.Services {
 		// A port block is wider than the configured services; skip the
 		// unused slots unless something is actually on them.
@@ -162,8 +169,12 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 			continue
 		}
 		sd := ServiceDetail{Port: s.Port, PID: s.PID, Proc: s.Proc, Headless: s.Headless, Listening: s.Listening}
-		if i < len(cfg.Services) {
+		if name, ok := recorded[s.Port]; ok {
+			sd.Name = name
+		} else if i < len(cfg.Services) {
 			sd.Name = cfg.Services[i].Name
+		}
+		if sd.Name != "" {
 			sd.Log = devserver.LogPath(r.Path, sd.Name)
 		}
 		switch {
@@ -177,6 +188,19 @@ func LoadWorktree(r ref.Ref, rep *status.Report) (WorktreeDetail, error) {
 		d.Services = append(d.Services, sd)
 	}
 	return d, nil
+}
+
+// defaultBranch reads origin/HEAD ("" when unknown). The main dir's name
+// (main / master) is only where it is checked out, not the branch name.
+func defaultBranch(mainDir string) string {
+	if mainDir == "" {
+		return ""
+	}
+	v, err := core.GitOutput(mainDir, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimPrefix(strings.TrimSpace(v), "origin/")
 }
 
 func nonNil(s []string) []string {

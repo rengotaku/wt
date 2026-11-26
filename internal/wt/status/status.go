@@ -76,6 +76,11 @@ type Input struct {
 	Routes    []proxy.Route
 	Daemon    Daemon
 	Proxy     settings.Proxy
+	// DaemonProxy is the proxy the running daemon actually listens on. When
+	// known it overrides the settings (the daemon may run with --no-proxy or
+	// --proxy-port, or settings may have changed since it started).
+	DaemonProxy      string
+	DaemonProxyKnown bool
 }
 
 // Collect gathers the current machine state.
@@ -86,9 +91,9 @@ func Collect() (Report, error) {
 	}
 	in := Input{Rows: rows, AutoStart: autoStartFlags(rows), Proxy: settings.Load().Proxy}
 	in.Routes, _ = proxy.Routes() // routes are best effort: no URL column on error
-	running, pid, err := daemon.Probe(daemon.LockPath())
-	if err == nil {
-		in.Daemon = Daemon{Running: running, PID: pid}
+	if info, err := daemon.Probe(daemon.LockPath()); err == nil {
+		in.Daemon = Daemon{Running: info.Running, PID: info.PID}
+		in.DaemonProxy, in.DaemonProxyKnown = info.Proxy, info.ProxyKnown
 	}
 	return Build(&in), nil
 }
@@ -122,11 +127,18 @@ func Build(in *Input) Report {
 		Proxy:     Proxy{Enabled: in.Proxy.Enabled, Addr: net.JoinHostPort(bind, strconv.Itoa(in.Proxy.Port))},
 		Worktrees: make([]Worktree, 0, len(in.Rows)),
 	}
+	if in.Daemon.Running && in.DaemonProxyKnown {
+		rep.Proxy = Proxy{Enabled: in.DaemonProxy != "", Addr: in.DaemonProxy}
+	}
+	proxyPort := in.Proxy.Port
+	if _, p, err := net.SplitHostPort(rep.Proxy.Addr); err == nil {
+		proxyPort, _ = strconv.Atoi(p)
+	}
 
 	urls := map[string]string{}
-	if in.Proxy.Enabled {
+	if rep.Proxy.Enabled {
 		for _, rt := range in.Routes {
-			urls[rt.Repo+"/"+rt.WtName] = "http://" + net.JoinHostPort(rt.Domain(), strconv.Itoa(in.Proxy.Port))
+			urls[rt.Repo+"/"+rt.WtName] = "http://" + net.JoinHostPort(rt.Domain(), strconv.Itoa(proxyPort))
 		}
 	}
 

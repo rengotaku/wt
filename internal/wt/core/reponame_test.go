@@ -53,3 +53,23 @@ func TestIsWorkspaceChild(t *testing.T) {
 		}
 	}
 }
+
+// A plain directory in an earlier workspace must not hide a wt-managed
+// container of the same name in a later one.
+func TestFindContainer_PrefersManaged(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	plain := filepath.Join(home, "Workspace", "app")
+	managed := filepath.Join(home, "MyWorkspace", "app")
+	for _, d := range []string{plain, managed} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(managed, ".worktrees.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := FindContainer("app"); err != nil || got != managed {
+		t.Errorf("got %q, %v; want %q", got, err, managed)
+	}
+}

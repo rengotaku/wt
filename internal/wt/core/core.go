@@ -73,11 +73,24 @@ func FindContainer(repo string) (string, error) {
 	if err := ValidateRepoName(repo); err != nil {
 		return "", err
 	}
+	// Prefer a wt-managed container (with .worktrees.json): a plain directory
+	// of the same name in an earlier workspace must not hide it.
+	var plain string
 	for _, base := range WorkspaceDirs() {
 		p := filepath.Join(base, repo)
-		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+		fi, err := os.Stat(p)
+		if err != nil || !fi.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(MetaFile(p)); err == nil {
 			return p, nil
 		}
+		if plain == "" {
+			plain = p
+		}
+	}
+	if plain != "" {
+		return plain, nil
 	}
 	return "", fmt.Errorf("リポジトリが見つかりません: %s", repo)
 }

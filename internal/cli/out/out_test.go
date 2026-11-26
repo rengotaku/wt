@@ -81,3 +81,9 @@ func TestRender(t *testing.T) {
 		t.Error("--json with --rich: want error")
 	}
 }
+
+func TestCell_DropsControlCharacters(t *testing.T) {
+	if got := Cell("api\x1b[2J\x07x\x7f"); got != "api[2Jx" {
+		t.Errorf("got %q", got)
+	}
+}

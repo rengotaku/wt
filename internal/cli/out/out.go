@@ -78,9 +78,19 @@ func WriteTSV(w io.Writer, t *Table) error {
 	return err
 }
 
-// Cell keeps a value on one cell: no tabs or newlines, "-" when empty.
+// Cell keeps a value on one cell: tabs and newlines become spaces, other
+// control characters (ESC etc., which could rewrite the terminal) are
+// dropped, and an empty value is "-".
 func Cell(s string) string {
-	s = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ").Replace(s)
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case r == '\t' || r == '\n' || r == '\r':
+			return ' '
+		case r < 0x20 || (r >= 0x7f && r < 0xa0):
+			return -1
+		}
+		return r
+	}, s)
 	if s == "" {
 		return "-"
 	}

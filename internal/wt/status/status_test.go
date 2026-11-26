@@ -177,3 +177,20 @@ func TestDisplayWidth(t *testing.T) {
 		t.Errorf("widths: %d %d %d", displayWidth("abc"), displayWidth("日本"), displayWidth("● run"))
 	}
 }
+
+// A running daemon's recorded proxy wins over settings (it may have started
+// with --proxy-port or --no-proxy).
+func TestBuild_DaemonProxyOverridesSettings(t *testing.T) {
+	in := sampleInput()
+	in.DaemonProxy, in.DaemonProxyKnown = "127.0.0.1:18088", true
+	rep := Build(in)
+	if rep.Proxy.Addr != "127.0.0.1:18088" || rep.Worktrees[0].URL != "http://feat.app.wt.localhost:18088" {
+		t.Errorf("proxy=%+v url=%q", rep.Proxy, rep.Worktrees[0].URL)
+	}
+
+	in.DaemonProxy = "" // daemon runs with --no-proxy
+	rep = Build(in)
+	if rep.Proxy.Enabled || rep.Worktrees[0].URL != "" {
+		t.Errorf("--no-proxy daemon: proxy=%+v url=%q", rep.Proxy, rep.Worktrees[0].URL)
+	}
+}
