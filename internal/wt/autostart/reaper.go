@@ -25,6 +25,7 @@ type Reaper struct {
 
 func NewReaper(ttl, interval time.Duration) *Reaper {
 	var lastEst map[int]bool
+	var lastEstErr error
 	var lastEstTime time.Time
 
 	return &Reaper{
@@ -36,8 +37,16 @@ func NewReaper(ttl, interval time.Duration) *Reaper {
 			// once per sweep (Tick).
 			if time.Since(lastEstTime) > time.Second {
 				s := settings.Load()
-				lastEst, _ = ports.Established(s.DevPorts.Start, s.DevPorts.End)
+				lastEst, lastEstErr = ports.Established(s.DevPorts.Start, s.DevPorts.End)
 				lastEstTime = time.Now()
+				if lastEstErr != nil {
+					slog.Warn("idle reaper: connection check failed; treating worktrees as active", "err", lastEstErr)
+				}
+			}
+			// Could not look → assume active. Stopping an in-use service on a
+			// failed check is worse than keeping an idle one up. #185
+			if lastEstErr != nil {
+				return true
 			}
 			for _, p := range ports.PortsForBase(base) {
 				if lastEst[p] {

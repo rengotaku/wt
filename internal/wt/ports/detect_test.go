@@ -1,6 +1,12 @@
 package ports
 
-import "testing"
+import (
+	"net"
+	"os/exec"
+	"path/filepath"
+	"testing"
+	"time"
+)
 
 func TestPortFromLocalAddr(t *testing.T) {
 	tests := []struct {
@@ -90,5 +96,72 @@ func TestParseLsof(t *testing.T) {
 	}
 	if _, ok := got[8088]; ok {
 		t.Error("8088 is outside the band")
+	}
+}
+
+func TestParseLsofEstablished(t *testing.T) {
+	out := "p1\nf5\nn127.0.0.1:9000->127.0.0.1:54321\nf6\nn127.0.0.1:54400->127.0.0.1:9003\n" +
+		"p2\nf7\nn[::1]:9002->[::1]:60000\nf8\nn192.168.1.2:55314->52.198.188.161:443\nf9\nn*:9004\n"
+	got := parseLsofEstablished(out, 9000, 9004)
+	for _, p := range []int{9000, 9002, 9003} {
+		if !got[p] {
+			t.Errorf("port %d: want established", p)
+		}
+	}
+	if got[9004] {
+		t.Error("9004 is a LISTEN-style line without a peer, not established")
+	}
+	if len(got) != 3 {
+		t.Errorf("got %v, want exactly 9000/9002/9003", got)
+	}
+}
+
+// End to end on the real machine: an open TCP connection to a port must show
+// up as established (ss on Linux, lsof on macOS). #185
+func TestEstablished_RealConnection(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		c, err := ln.Accept()
+		if err == nil {
+			defer func() { _ = c.Close() }()
+			_, _ = c.Read(make([]byte, 1)) // hold the connection open
+		}
+	}()
+	conn, err := net.Dial("tcp", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	port := ln.Addr().(*net.TCPAddr).Port
+	if _, err := exec.LookPath("ss"); err != nil {
+		if _, err := exec.LookPath("lsof"); err != nil {
+			t.Skip("neither ss nor lsof is available")
+		}
+	}
+	var got map[int]bool
+	for i := 0; i < 20 && !got[port]; i++ {
+		got, _ = Established(port, port)
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !got[port] {
+		t.Errorf("port %d has an open connection but was not reported as established", port)
+	}
+}
+
+// When neither ss nor lsof can run, Established must report an error rather
+// than "no connections": the idle reaper stops services on "no connections".
+func TestEstablished_ErrorWhenNoTool(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	orig := lsofFallback
+	lsofFallback = filepath.Join(t.TempDir(), "no-lsof")
+	defer func() { lsofFallback = orig }()
+
+	if got, err := Established(9000, 9004); err == nil {
+		t.Fatalf("got %v, nil; want an error", got)
 	}
 }
