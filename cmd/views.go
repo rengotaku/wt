@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -25,15 +26,23 @@ const formatHelp = `
 
 var repoLsHeader = []string{"REPO", "PATH", "WORKTREES", "RUNNING", "UNHEALTHY", "IDLE", "STALE", "AUTOSTART"}
 
+// repoLsCacheMaxAge is how old a cached LISTEN socket scan `wt repo ls` still
+// uses. `wt daemon` refreshes it every listenCacheInterval, so this only
+// matters when the daemon is not running. #205
+const repoLsCacheMaxAge = 5 * time.Minute
+
 func repoLsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "ls",
 		Short: "リポジトリごとに 1 行の要約（worktree 数・状態ごとの件数・AutoStart 数）",
 		Long: "リポジトリごとに 1 行の要約を出す。列: " + strings.Join(repoLsHeader, " ") + "\n" +
-			"1 リポジトリの worktree は wt worktree ls <repo>、設定は wt repo show <repo>。" + formatHelp,
+			"1 リポジトリの worktree は wt worktree ls <repo>、設定は wt repo show <repo>。\n" +
+			"RUNNING / UNHEALTHY / IDLE / STALE は、ポートの待ち受け状態を 5 分以内のキャッシュから求める（wt daemon が 1 分ごとに更新）。" +
+			"--fresh で調べ直す。" + formatHelp,
 		Args: noArgs,
 	}
 	o := out.AddFlags(c)
+	fresh := c.Flags().Bool("fresh", false, "キャッシュを使わずにポートの待ち受け状態を調べ直す（キャッシュも更新する）")
 	c.RunE = func(cmd *cobra.Command, _ []string) error {
 		if err := o.Validate(); err != nil {
 			return err
@@ -42,7 +51,11 @@ func repoLsCmd() *cobra.Command {
 		if len(containers) == 0 {
 			return clierr.NotFoundf("登録リポジトリがありません（wt repo add で追加してください）")
 		}
-		rep, err := status.Collect()
+		collect := func() (status.Report, error) { return status.CollectCached(repoLsCacheMaxAge) }
+		if *fresh {
+			collect = status.Collect
+		}
+		rep, err := collect()
 		if err != nil {
 			return err
 		}

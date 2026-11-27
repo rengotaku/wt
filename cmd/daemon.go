@@ -19,6 +19,7 @@ import (
 	"wt/internal/cli/clierr"
 	"wt/internal/wt/autostart"
 	"wt/internal/wt/daemon"
+	"wt/internal/wt/ports"
 	"wt/internal/wt/proxy"
 	"wt/internal/wt/settings"
 )
@@ -147,9 +148,31 @@ func runDaemon(ctx context.Context, out io.Writer, s *settings.Settings, lock *o
 		)
 		go hr.Run(ctx, out)
 	}
+	go refreshListenCache(ctx, listenCacheInterval)
 
 	<-ctx.Done()
 	return nil
+}
+
+// listenCacheInterval is how often the daemon rescans LISTEN sockets for
+// `wt repo ls`, so that command can skip the slow scan. #205
+const listenCacheInterval = time.Minute
+
+// refreshListenCache rescans the dev band's LISTEN sockets now and then every
+// interval until ctx is cancelled. The band is re-read each time so a
+// settings change is picked up without restarting the daemon.
+func refreshListenCache(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		band := settings.Load().DevPorts
+		ports.RefreshListenerCache(band.Start, band.End)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // startProxy binds the proxy synchronously so a bind failure is reported, then

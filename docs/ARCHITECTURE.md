@@ -8,7 +8,7 @@ git worktree 管理 CLI。単一 Go バイナリで動く。Web UI と HTTP API 
 
 ```
 wt (cobra CLI。名詞 → 動詞。#188)
-├── repo      ls / show / add / init / rm / sync / config（set・add・rm）   リポジトリ
+├── repo      ls [--fresh] / show / add / init / rm / sync / config（set・add・rm）   リポジトリ
 ├── worktree  ls / show / add / rm / gc / set / update                    worktree
 ├── service   up / down / logs                                            worktree の dev サービス
 ├── daemon    run [--proxy-only] / status                                 常駐: 内蔵 proxy + AutoStart 自動起動 + idle / port / health reaper
@@ -36,6 +36,7 @@ wt (cobra CLI。名詞 → 動詞。#188)
 | `internal/wt/view/` | 見る系（`repo ls` / `show`、`worktree ls` / `show`）が出す中身の組み立て |
 | `internal/wt/status/` | worktree の稼働・ポート・AutoStart・proxy URL の集計（`Collect` / `Build`）。`worktree ls` の列順 `TSVHeader` |
 | `internal/wt/daemon/` | `wt daemon` の二重起動防止の lock（PID を書く）と、動いているかの確認（`Probe`） |
+| `internal/wt/listencache/` | LISTEN ソケットの走査結果のキャッシュ（`listeners.json`）の読み書きと無効化（#205） |
 | `internal/wt/proxy/` | `<label>.<repo>.wt.localhost` → 割当ポートへの逆プロキシ |
 | `internal/wt/settings/` | `settings.toml`（`$WT_CONFIG_DIR/wt/`、未指定ならユーザー設定ディレクトリの `wt/`。macOS は `~/Library/Application Support/wt/`）の読み書き |
 
@@ -49,6 +50,7 @@ wt (cobra CLI。名詞 → 動詞。#188)
 | `<base>/<repo>/.worktrees.json::_config.ai_policy（core.EntryConfig.AIPolicy）` | リポジトリの AI 作業方針ファイル（コンテナ相対、既定は `.wt/ai-policy.md`）。`wt policy` が解決する。リポジトリには置かない |
 | `<設定ディレクトリ>/wt/settings.toml` | `[dev_ports]`（既定 9000-9999）/ `[idle_reaper]` / `[port_reaper]`（既定 1440分=1日）/ `[health_reaper]`（既定 interval=2分 / cooldown=10分 / max_retries=3）/ `[process_stats]` / `[proxy]`（`enabled` 既定 true / `port` 既定 8088） |
 | `<キャッシュディレクトリ>/wt/daemon.lock` | `wt daemon` の二重起動を防ぐ flock。中身は daemon の PID と proxy の待ち受け先の JSON（`wt daemon status` が読む） |
+| `<キャッシュディレクトリ>/wt/listeners.json` | dev ポート帯の LISTEN ソケットを最後に調べた結果（取得時刻・帯・port / pid / proc）。`wt repo ls` が 5 分以内なら使い、`lsof` を呼ばない（#205）。`ports.Status` が調べるたびと `wt daemon` が 1 分ごとに書き、`devserver.Serve` / `Down` が消す |
 | `<キャッシュディレクトリ>/wt/run/<worktree_key>/running.json` | serve 済みサービスの記録（name / pid / port / cmd） |
 | `<キャッシュディレクトリ>/wt/run/<worktree_key>/<svc>.log` | サービスごとの stdout+stderr |
 
@@ -122,6 +124,7 @@ PR が merged で、HEAD がその PR の head と一致する（または祖先
 | 見る系のコマンド定義 | `cmd/views.go` |
 | 変えるコマンドの定義・確認の出し方 | `cmd/actions.go`（`confirm`）、`cmd/repo.go`、`cmd/repo_config.go` |
 | 不整合の検査と修復 | `internal/wt/doctor/` + `cmd/doctor.go` |
+| `wt repo ls` がキャッシュを使う期限・daemon の更新間隔 | `cmd/views.go::repoLsCacheMaxAge` / `cmd/daemon.go::listenCacheInterval`。キャッシュの中身は `internal/wt/listencache/` |
 | `worktree ls` の列・状態の判定 | `internal/wt/status/status.go`（`stateOf`）。列順は `TSVHeader` で、スクリプトが依存してよい |
 
 ## 検証ゲート

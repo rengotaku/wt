@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
+
+	"wt/internal/wt/listencache"
 )
 
 // RunningService records a started process.
@@ -146,6 +149,8 @@ var startupGrace = 600 * time.Millisecond
 // failed with the tail of its log, and is NOT recorded as running. This is why
 // Serve never claims success for a process that died on startup.
 func Serve(out io.Writer, worktree string, base int) error {
+	// What listens changes; drop the cached socket scan (#205).
+	defer invalidateListenCache()
 	cfg, source, err := EffectiveConfig(worktree)
 	if err != nil {
 		return fmt.Errorf("dev 設定が読み込めません: %w", err)
@@ -270,6 +275,7 @@ type ServiceLog struct {
 // Down stops all services recorded for the worktree (killing the process group)
 // and clears the state. It is a no-op when nothing is recorded.
 func Down(out io.Writer, worktree string) error {
+	defer invalidateListenCache()
 	r, err := loadRunning(worktree)
 	if err != nil {
 		return nil //nolint:nilerr // no state → nothing to stop
@@ -283,4 +289,12 @@ func Down(out io.Writer, worktree string) error {
 		_, _ = fmt.Fprintf(out, "■ %s (pid %d) を停止\n", s.Name, s.PID)
 	}
 	return os.Remove(statePath(worktree))
+}
+
+// invalidateListenCache drops the cached LISTEN socket scan, so the next
+// `wt repo ls` scans again instead of showing the state before Serve / Down.
+func invalidateListenCache() {
+	if err := listencache.Invalidate(); err != nil {
+		slog.Debug("listener cache not invalidated", "err", err)
+	}
 }

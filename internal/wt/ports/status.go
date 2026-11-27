@@ -1,7 +1,11 @@
 package ports
 
 import (
+	"log/slog"
+	"time"
+
 	"wt/internal/wt/devserver"
+	"wt/internal/wt/listencache"
 	"wt/internal/wt/settings"
 )
 
@@ -46,13 +50,51 @@ type Row struct {
 // filled in for each allocated port: Listening from the machine's LISTEN
 // sockets, and Running from wt's recorded service PIDs (so a headless service
 // that binds no port still shows as up).
+//
+// Each call scans the sockets and saves the result for StatusCached.
 func Status() ([]Row, error) {
+	band := settings.Load().DevPorts
+	return statusWith(RefreshListenerCache(band.Start, band.End))
+}
+
+// StatusCached is Status, but takes the LISTEN sockets from the cache when it
+// is younger than maxAge, and scans (and saves) only otherwise. Everything
+// else (worktrees, recorded PIDs, dev config) is read live. #205
+func StatusCached(maxAge time.Duration) ([]Row, error) {
+	band := settings.Load().DevPorts
+	if entries, ok := listencache.Load(band.Start, band.End, maxAge, time.Now()); ok {
+		listeners := make(map[int]Listener, len(entries))
+		for _, e := range entries {
+			listeners[e.Port] = Listener(e)
+		}
+		return statusWith(listeners)
+	}
+	return statusWith(RefreshListenerCache(band.Start, band.End))
+}
+
+// RefreshListenerCache scans the LISTEN sockets in [start, end], saves them
+// for StatusCached and returns them. A failed save is logged, not returned:
+// the scan itself is still good.
+func RefreshListenerCache(start, end int) map[int]Listener {
+	listeners, _ := scanListeners(start, end)
+	entries := make([]listencache.Entry, 0, len(listeners))
+	for _, l := range listeners {
+		entries = append(entries, listencache.Entry(l))
+	}
+	if err := listencache.Save(start, end, entries, time.Now()); err != nil {
+		slog.Debug("listener cache not saved", "err", err)
+	}
+	return listeners
+}
+
+// scanListeners is a var so tests can stand in for the socket scan.
+var scanListeners = Listeners
+
+func statusWith(listeners map[int]Listener) ([]Row, error) {
 	allocs, err := Allocations()
 	if err != nil {
 		return nil, err
 	}
-	band := settings.Load().DevPorts
-	listeners, _ := Listeners(band.Start, band.End)
 
 	rows := make([]Row, 0, len(allocs))
 	for _, a := range allocs {
