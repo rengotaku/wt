@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"wt/internal/wt/core"
 	"wt/internal/wt/daemon"
@@ -85,7 +86,16 @@ type Input struct {
 
 // Collect gathers the current machine state.
 func Collect() (Report, error) {
-	rows, err := ports.Status()
+	return collect(ports.Status())
+}
+
+// CollectCached is Collect, but takes the LISTEN sockets from the cache when
+// it is younger than maxAge (see ports.StatusCached). For `wt repo ls`. #205
+func CollectCached(maxAge time.Duration) (Report, error) {
+	return collect(ports.StatusCached(maxAge))
+}
+
+func collect(rows []ports.Row, err error) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
