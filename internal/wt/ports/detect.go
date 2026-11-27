@@ -30,13 +30,21 @@ func Listeners(start, end int) (map[int]Listener, error) {
 }
 
 func listeners(start, end int) map[int]Listener {
+	l, _ := scanSockets(start, end)
+	return l
+}
+
+// scanSockets is listeners that also reports whether a tool ran. ok is false
+// when neither ss nor lsof worked; the empty map then means "unknown", not
+// "nothing listens", and must not be cached (#205).
+func scanSockets(start, end int) (l map[int]Listener, ok bool) {
 	if out, err := exec.Command("ss", "-tlnpH").Output(); err == nil {
-		return parseSS(string(out), start, end)
+		return parseSS(string(out), start, end), true
 	}
 	if out, err := exec.Command(lsofPath(), "-nP", "-iTCP", "-sTCP:LISTEN", "-Fpcn").Output(); err == nil {
-		return parseLsof(string(out), start, end)
+		return parseLsof(string(out), start, end), true
 	}
-	return map[int]Listener{}
+	return map[int]Listener{}, false
 }
 
 // parseLsof parses `lsof -Fpcn` field output: a "p<pid>" line starts a

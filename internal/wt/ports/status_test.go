@@ -54,9 +54,9 @@ func stubScan(t *testing.T, found map[int]Listener) *int {
 	t.Helper()
 	calls := 0
 	prev := scanListeners
-	scanListeners = func(int, int) (map[int]Listener, error) {
+	scanListeners = func(int, int) (map[int]Listener, bool) {
 		calls++
-		return found, nil
+		return found, true
 	}
 	t.Cleanup(func() { scanListeners = prev })
 	return &calls
@@ -122,5 +122,24 @@ func TestStatusCached(t *testing.T) {
 	}
 	if *calls != 3 {
 		t.Fatalf("stale + missing cache: scans=%d; want 3", *calls)
+	}
+}
+
+// #205: a failed scan (neither ss nor lsof ran) is "unknown", not "nothing
+// listens": it must drop the cache rather than save an empty result.
+func TestRefreshListenerCacheScanFailure(t *testing.T) {
+	restore := listencache.SetPathForTest(filepath.Join(t.TempDir(), "listeners.json"))
+	t.Cleanup(restore)
+	if err := listencache.Save(9000, 9999, []listencache.Entry{{Port: 9000}}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	prev := scanListeners
+	scanListeners = func(int, int) (map[int]Listener, bool) { return map[int]Listener{}, false }
+	t.Cleanup(func() { scanListeners = prev })
+
+	RefreshListenerCache(9000, 9999)
+
+	if got, ok := listencache.Load(9000, 9999, time.Hour, time.Now()); ok {
+		t.Fatalf("failed scan left a usable cache: %v", got)
 	}
 }

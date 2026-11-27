@@ -74,9 +74,17 @@ func StatusCached(maxAge time.Duration) ([]Row, error) {
 
 // RefreshListenerCache scans the LISTEN sockets in [start, end], saves them
 // for StatusCached and returns them. A failed save is logged, not returned:
-// the scan itself is still good.
+// the scan itself is still good. When the scan itself fails (neither ss nor
+// lsof ran) the old cache is dropped instead, so a failing scan in one
+// environment (e.g. the daemon's) never stands in for a real result.
 func RefreshListenerCache(start, end int) map[int]Listener {
-	listeners, _ := scanListeners(start, end)
+	listeners, ok := scanListeners(start, end)
+	if !ok {
+		if err := listencache.Invalidate(); err != nil {
+			slog.Debug("listener cache not invalidated", "err", err)
+		}
+		return listeners
+	}
 	entries := make([]listencache.Entry, 0, len(listeners))
 	for _, l := range listeners {
 		entries = append(entries, listencache.Entry(l))
@@ -88,7 +96,7 @@ func RefreshListenerCache(start, end int) map[int]Listener {
 }
 
 // scanListeners is a var so tests can stand in for the socket scan.
-var scanListeners = Listeners
+var scanListeners = scanSockets
 
 func statusWith(listeners map[int]Listener) ([]Row, error) {
 	allocs, err := Allocations()
